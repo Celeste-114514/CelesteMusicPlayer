@@ -28,9 +28,8 @@ namespace CelesteMusicPlayer
         private bool _dspPowerSyncing;
 
         // 各「开关关掉再打开」要恢复的上次值（0/关闭 = 电源断开，记忆的是断开前的档位）
-        // ReplayGain 不在其中：它的「断开前档位」由 DspRgParameters.MemoryIndex 自己持有。
+        // ReplayGain / SRC 不在其中：它们的「断开前档位」由各自的参数模型自己持有。
         private double _dspHeadroomMemory { get => ExtraParameters.HeadroomMemory; set => ExtraParameters.HeadroomMemory = value; }
-        private int _dspSrcMemoryIndex = 4;   // 96 kHz
         private double _dspXfeedMemory { get => ExtraParameters.CrossfeedMemory; set => ExtraParameters.CrossfeedMemory = value; } // 耳机 Crossfeed 的强度百分比
 
         private sealed class DspPowerEntry
@@ -95,33 +94,18 @@ namespace CelesteMusicPlayer
                     ApplyReplayGainToEngine();
                 });
 
-            // ③ SRC 升频：开关 = 目标采样率不是「关闭（原采样率）」；记忆上次目标
+            // ③ SRC 升频：开关 = 目标采样率不是「关闭（原采样率）」；记忆上次目标（记忆由参数模型持有）
             AddPower(DspPowerSrc, DspPowerSrcHint,
-                () => SrcRateCombo != null && SrcRateCombo.SelectedIndex > 0
-                    && SrcRateCombo.SelectedIndex < SrcRateOptions.Length,
+                () => SrcParameters.Enabled,
                 on =>
                 {
-                    if (SrcRateCombo == null)
+                    if (!SetModelControl("DspPowerSrc", SwitchMessage(on)))
                     {
                         return;
                     }
 
-                    if (on)
-                    {
-                        int remember = _dspSrcMemoryIndex >= 1 && _dspSrcMemoryIndex < SrcRateOptions.Length
-                            ? _dspSrcMemoryIndex
-                            : 4;
-                        SrcRateCombo.SelectedIndex = remember;
-                    }
-                    else
-                    {
-                        if (SrcRateCombo.SelectedIndex > 0)
-                        {
-                            _dspSrcMemoryIndex = SrcRateCombo.SelectedIndex;
-                        }
-
-                        SrcRateCombo.SelectedIndex = 0;
-                    }
+                    ProjectExtraParameters();
+                    ApplySrcSettings();
                 });
 
             // ④ 参数 EQ：直接镜像页内 EQ 总开关（它自己会 ApplyDspToEngine + 刷新指示）
@@ -363,11 +347,7 @@ namespace CelesteMusicPlayer
                     _dspHeadroomMemory = AudioFxSafetyHeadroomSlider.Value;
                 }
 
-                if (SrcRateCombo != null && SrcRateCombo.SelectedIndex > 0)
-                {
-                    _dspSrcMemoryIndex = SrcRateCombo.SelectedIndex;
-                }
-                // ReplayGain 的「断开前档位」由参数模型自己维护（Set 时更新 MemoryIndex），此处不再从控件回填。
+                // ReplayGain / SRC 的「断开前档位」由各自的参数模型维护（Set 时更新 MemoryIndex），此处不再从控件回填。
             }
             finally
             {

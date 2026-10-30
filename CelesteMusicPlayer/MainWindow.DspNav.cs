@@ -419,11 +419,7 @@ namespace CelesteMusicPlayer
             // （2026-09-22 用户实测"限幅没开却显示开了"的同类口径问题，已对齐）。
             bool headroom = Math.Abs(ExtraParameters.Safety.HeadroomDb) > 0.01;
 
-            int srcHz = 0;
-            if (SrcRateCombo != null && SrcRateCombo.SelectedIndex >= 0 && SrcRateCombo.SelectedIndex < SrcRateOptions.Length)
-            {
-                srcHz = SrcRateOptions[SrcRateCombo.SelectedIndex].Hz;
-            }
+            int srcHz = SrcParameters.TargetHz;
 
             bool eq = EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
             bool fir = RoomCorrectionStore.Load().Enabled;

@@ -1,4 +1,4 @@
-// MainWindow.SrcView.cs
+﻿// MainWindow.SrcView.cs
 // SRC 页的可视化：用法卡片 / 信号链路图 / 重采样滤波器示意曲线。
 //
 // ⚠ 诚实性红线：这张滤波器曲线是「示意图」，不是实测。
@@ -65,7 +65,7 @@ namespace CelesteMusicPlayer
                         break;
 
                     case "fixed96":
-                        targetIndex = IndexOfHz(96000);
+                        targetIndex = DspSrcParameters.IndexOfHz(96000);
                         note = "已设为 96 kHz。注意只升不降：源本身高于 96k 时不会降下来，会直接按原采样率走。";
                         break;
 
@@ -83,14 +83,14 @@ namespace CelesteMusicPlayer
                         }
 
                         int want = srcHz * 2;
-                        targetIndex = IndexOfHz(want);
+                        targetIndex = DspSrcParameters.IndexOfHz(want);
                         if (targetIndex <= 0)
                         {
                             // 没有精确的 2 倍档位（比如源是 96k），退到比源高的最低一档
                             targetIndex = 0;
-                            for (int i = 1; i < SrcRateOptions.Length; i++)
+                            for (int i = 1; i < DspSrcParameters.Rates.Length; i++)
                             {
-                                if (SrcRateOptions[i].Hz > srcHz)
+                                if (DspSrcParameters.Rates[i].Hz > srcHz)
                                 {
                                     targetIndex = i;
                                     break;
@@ -99,11 +99,11 @@ namespace CelesteMusicPlayer
 
                             note = targetIndex <= 0
                                 ? $"源是 {srcHz / 1000.0:0.#} kHz，已经没有更高的档位可升了，保持原采样率。"
-                                : $"列表里没有正好两倍的档位，退到高一档 {SrcRateOptions[targetIndex].Label}。";
+                                : $"列表里没有正好两倍的档位，退到高一档 {DspSrcParameters.Rates[targetIndex].Label}。";
                         }
                         else
                         {
-                            note = $"源是 {srcHz / 1000.0:0.#} kHz，已设为正好两倍的 {SrcRateOptions[targetIndex].Label}。";
+                            note = $"源是 {srcHz / 1000.0:0.#} kHz，已设为正好两倍的 {DspSrcParameters.Rates[targetIndex].Label}。";
                         }
 
                         break;
@@ -171,10 +171,7 @@ namespace CelesteMusicPlayer
                     accent = ph;
                 }
 
-                int targetHz = SrcRateCombo != null && SrcRateCombo.SelectedIndex > 0
-                    && SrcRateCombo.SelectedIndex < SrcRateOptions.Length
-                    ? SrcRateOptions[SrcRateCombo.SelectedIndex].Hz
-                    : 0;
+                int targetHz = SrcParameters.TargetHz;
 
                 bool parsed = TryParseSrcRates(out int srcHz, out int actualOutHz);
                 string srcLabel = parsed && srcHz > 0 ? (srcHz / 1000.0).ToString("0.#") + " kHz" : "未知";
@@ -182,9 +179,7 @@ namespace CelesteMusicPlayer
                     ? (targetHz / 1000.0).ToString("0.#") + " kHz"
                     : (parsed && actualOutHz > 0 ? (actualOutHz / 1000.0).ToString("0.#") + " kHz" : "原采样率");
 
-                string quality = SrcQualityCombo != null && SrcQualityCombo.SelectedIndex >= 0
-                    ? SrcQualityCombo.SelectedValue as string ?? SrcQualityCombo.SelectedItem as string ?? "均衡"
-                    : "均衡";
+                string quality = SrcParameters.QualityChoice.Label;
 
                 var children = canvas.Children;
                 children.Clear();
@@ -317,9 +312,8 @@ namespace CelesteMusicPlayer
                 }
 
                 double knee = 0.88;
-                if (SrcQualityCombo != null && SrcQualityCombo.SelectedIndex >= 0)
                 {
-                    string key = SelectedKey(SrcQualityCombo, SrcQualityOptions, ResamplingSourceProvider.QualityBalanced);
+                    string key = SrcParameters.Quality;
                     foreach (var (k, start) in SrcFilterKnees)
                     {
                         if (string.Equals(k, key, StringComparison.Ordinal))

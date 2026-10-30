@@ -6,73 +6,31 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 采样率升频（SRC）的 UI 部分：音频设置面板里的目标采样率 / 质量档位 / 量化抖动下拉，
     /// 以及最近一次播放的实际 SRC 状态显示。
+    /// 业务参数真值在 <see cref="DspSrcParameters"/>，本文件只做「装载 → 投影到控件 → 改动后应用」。
     /// 真正的重采样在 <see cref="ResamplingSourceProvider"/>（WDL 高质量重采样 + 可选 Dither），
     /// 由 <see cref="HiFiOutputBackend.BuildSrcChain"/> 在 WASAPI 独占模式下挂入链路。
     /// </summary>
     public sealed partial class MainWindow
     {
-        private const int SrcRateOff = 0;
-
-        /// <summary>可选的升频目标采样率（Hz）。首项为「关闭」。</summary>
-        private static readonly (string Label, int Hz)[] SrcRateOptions =
-        {
-            ("关闭（原采样率）", 0),
-            ("44.1 kHz", 44100),
-            ("48 kHz", 48000),
-            ("88.2 kHz", 88200),
-            ("96 kHz", 96000),
-            ("176.4 kHz", 176400),
-            ("192 kHz", 192000),
-        };
-
-        private static readonly (string Label, string Key, string Hint)[] SrcQualityOptions =
-        {
-            ("低延迟（省 CPU）", ResamplingSourceProvider.QualityLowLatency, "低延迟"),
-            ("均衡（推荐）", ResamplingSourceProvider.QualityBalanced, "均衡"),
-            ("透明（最高质量）", ResamplingSourceProvider.QualityTransparent, "透明"),
-        };
-
-        private static readonly (string Label, string Key, string Hint)[] SrcDitherOptions =
-        {
-            ("关闭", ResamplingSourceProvider.DitherOff, "关闭"),
-            ("TPDF 抖动", ResamplingSourceProvider.DitherTpdf, "TPDF"),
-            ("高通 TPDF", ResamplingSourceProvider.DitherHighpass, "高通"),
-            ("NS-5 噪声整形", ResamplingSourceProvider.DitherNs5, "NS-5"),
-        };
-
         /// <summary>在构造函数里调用：回填已保存的升频设置并填充下拉选项。</summary>
         private void InitializeSrcUi()
         {
             try
             {
                 AppSettingsState saved = AppSettingsStore.Load();
+                SrcParameters.Load(saved.SrcTargetHz, saved.SrcQuality, saved.SrcDither);
 
-                SrcRateCombo.Items.Clear();
-                foreach (var opt in SrcRateOptions)
-                {
-                    SrcRateCombo.Items.Add(opt.Label);
-                }
+                FillLabelCombo(SrcRateCombo, DspSrcParameters.RateLabels);
+                SrcRateCombo.SelectedIndex = SrcParameters.RateIndex;
+                UpdateSrcStateText(SrcParameters.TargetHz);
 
-                SrcRateCombo.SelectedIndex = IndexOfHz(saved.SrcTargetHz);
-                UpdateSrcStateText(SrcRateOptions[SrcRateCombo.SelectedIndex].Hz);
+                FillLabelCombo(SrcQualityCombo, DspSrcParameters.QualityLabels);
+                SrcQualityCombo.SelectedIndex = SrcParameters.QualityIndex;
+                SrcQualityHintText.Text = SrcParameters.QualityChoice.Hint;
 
-                SrcQualityCombo.Items.Clear();
-                foreach (var opt in SrcQualityOptions)
-                {
-                    SrcQualityCombo.Items.Add(opt.Label);
-                }
-
-                SrcQualityCombo.SelectedIndex = IndexOfKey(SrcQualityOptions, saved.SrcQuality, 1);
-                SrcQualityHintText.Text = SrcQualityOptions[SrcQualityCombo.SelectedIndex].Hint;
-
-                SrcDitherCombo.Items.Clear();
-                foreach (var opt in SrcDitherOptions)
-                {
-                    SrcDitherCombo.Items.Add(opt.Label);
-                }
-
-                SrcDitherCombo.SelectedIndex = IndexOfKey(SrcDitherOptions, saved.SrcDither, 0);
-                SrcDitherHintText.Text = SrcDitherOptions[SrcDitherCombo.SelectedIndex].Hint;
+                FillLabelCombo(SrcDitherCombo, DspSrcParameters.DitherLabels);
+                SrcDitherCombo.SelectedIndex = SrcParameters.DitherIndex;
+                SrcDitherHintText.Text = SrcParameters.DitherChoice.Hint;
 
                 RefreshSrcSessionState();
             }
@@ -82,11 +40,23 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>下拉框选项只是模型的投影：清空重填文案，值仍由 SelectedIndex 指向模型下标。</summary>
+        private static void FillLabelCombo(ComboBox? combo, string[] labels)
+        {
+            if (combo == null) return;
+            combo.Items.Clear();
+            foreach (string label in labels)
+            {
+                combo.Items.Add(label);
+            }
+        }
+
         private void SrcRateCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             try
             {
-                int hz = SelectedHz();
+                ImportExtraParameterInput(sender);
+                int hz = SrcParameters.TargetHz;
                 UpdateSrcStateText(hz);
 
                 AppSettingsState s = AppSettingsStore.Load();
@@ -112,8 +82,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                string key = SelectedKey(SrcQualityCombo, SrcQualityOptions, "balanced");
-                SrcQualityHintText.Text = SelectedHint(SrcQualityCombo, SrcQualityOptions, "均衡");
+                ImportExtraParameterInput(sender);
+                string key = SrcParameters.Quality;
+                SrcQualityHintText.Text = SrcParameters.QualityChoice.Hint;
 
                 AppSettingsState s = AppSettingsStore.Load();
                 if (s.SrcQuality != key)
@@ -135,8 +106,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                string key = SelectedKey(SrcDitherCombo, SrcDitherOptions, "off");
-                SrcDitherHintText.Text = SelectedHint(SrcDitherCombo, SrcDitherOptions, "关闭");
+                ImportExtraParameterInput(sender);
+                string key = SrcParameters.Dither;
+                SrcDitherHintText.Text = SrcParameters.DitherChoice.Hint;
 
                 AppSettingsState s = AppSettingsStore.Load();
                 if (s.SrcDither != key)
@@ -151,6 +123,32 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
             }
+        }
+
+        /// <summary>把模型里的升频参数落盘并下发引擎。网页命令与页头电源开关走这一条（含全部三项）。</summary>
+        private void ApplySrcSettings()
+        {
+            DspSrcParameters.State src = SrcParameters.Snapshot();
+
+            AppSettingsState s = AppSettingsStore.Load();
+            if (s.SrcTargetHz != src.TargetHz
+                || !string.Equals(s.SrcQuality, src.Quality, StringComparison.Ordinal)
+                || !string.Equals(s.SrcDither, src.Dither, StringComparison.Ordinal))
+            {
+                s.SrcTargetHz = src.TargetHz;
+                s.SrcQuality = src.Quality;
+                s.SrcDither = src.Dither;
+                AppSettingsStore.Save(s);
+            }
+
+            _audioEngine?.SetResampleTargetRate(src.TargetHz);
+            _audioEngine?.SetSrcQuality(src.Quality);
+            _audioEngine?.SetSrcDither(src.Dither);
+            UpdateSrcStateText(src.TargetHz);
+            SrcQualityHintText.Text = SrcParameters.QualityChoice.Hint;
+            SrcDitherHintText.Text = SrcParameters.DitherChoice.Hint;
+            RefreshSrcSessionState();
+            RedrawSrcCanvas();
         }
 
         /// <summary>刷新「当前会话 SRC 实际状态」：显示最近一次播放的真实升频结果（含自动退回原因）。
@@ -171,65 +169,6 @@ namespace CelesteMusicPlayer
         {
             if (SrcStateText == null) return;
             SrcStateText.Text = hz <= 0 ? "关闭" : (hz / 1000.0).ToString("0.#") + " kHz";
-        }
-
-        private int SelectedHz()
-        {
-            int idx = SrcRateCombo.SelectedIndex;
-            if (idx < 0 || idx >= SrcRateOptions.Length)
-            {
-                return SrcRateOff;
-            }
-
-            return SrcRateOptions[idx].Hz;
-        }
-
-        private static int IndexOfHz(int hz)
-        {
-            for (int i = 0; i < SrcRateOptions.Length; i++)
-            {
-                if (SrcRateOptions[i].Hz == hz)
-                {
-                    return i;
-                }
-            }
-
-            return 0; // 未知值 → 关闭
-        }
-
-        private static int IndexOfKey((string Label, string Key, string Hint)[] options, string key, int fallback)
-        {
-            for (int i = 0; i < options.Length; i++)
-            {
-                if (string.Equals(options[i].Key, key, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-            }
-
-            return fallback;
-        }
-
-        private static string SelectedKey(ComboBox combo, (string Label, string Key, string Hint)[] options, string fallback)
-        {
-            int idx = combo?.SelectedIndex ?? -1;
-            if (idx < 0 || idx >= options.Length)
-            {
-                return fallback;
-            }
-
-            return options[idx].Key;
-        }
-
-        private static string SelectedHint(ComboBox combo, (string Label, string Key, string Hint)[] options, string fallback)
-        {
-            int idx = combo?.SelectedIndex ?? -1;
-            if (idx < 0 || idx >= options.Length)
-            {
-                return fallback;
-            }
-
-            return options[idx].Hint;
         }
 
         #region 输出缓冲区（抗卡顿 / 低延迟）

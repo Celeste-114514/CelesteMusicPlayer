@@ -386,14 +386,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (SrcRateCombo != null && SrcRateCombo.SelectedIndex >= 0
-                    && SrcRateCombo.SelectedIndex < SrcRateOptions.Length)
+                int hz = SrcParameters.TargetHz;
+                if (hz > 0)
                 {
-                    int hz = SrcRateOptions[SrcRateCombo.SelectedIndex].Hz;
-                    if (hz > 0)
-                    {
-                        return hz;
-                    }
+                    return hz;
                 }
             }
             catch (Exception caught)

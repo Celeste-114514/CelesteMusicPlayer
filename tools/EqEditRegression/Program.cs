@@ -101,6 +101,37 @@ Check(rgCombo.GetProperty("items").GetArrayLength()==3,"rg model owns mode label
 Check(System.Text.Json.JsonSerializer.SerializeToElement(rgp.Describe("DspPowerRg")).GetProperty("value").GetBoolean(),"rg power mirrors mode");
 rgp.Load(new ReplayGainState{Mode=ReplayGainMode.Off,PreampDb=30});
 Check(rgp.Current.Mode==ReplayGainMode.Off && rgp.Current.PreampDb==12,"rg reload replaces model and clamps");
+
+// ---- SRC model ----
+var srcp=new DspSrcParameters();
+srcp.Load(96000,"transparent","ns5");
+Check(srcp.TargetHz==96000 && srcp.Quality=="transparent" && srcp.Dither=="ns5","src load keeps valid values");
+var srcSnap=srcp.Snapshot();
+Check(srcSnap.TargetHz==96000 && srcp.Enabled,"src snapshot mirrors state");
+srcp.Load(12345,"bogus","bogus");
+Check(srcp.TargetHz==0 && srcp.Quality=="balanced" && srcp.Dither=="off","src load falls back on unknown values");
+bool SrcIndex(string name,int index) => srcp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {index}));
+bool SrcPower(bool on) => srcp.Set("DspPowerSrc",System.Text.Json.JsonSerializer.SerializeToElement(new {value=on}));
+Check(SrcPower(true) && srcp.TargetHz==96000,"src power default restores 96 kHz");
+Check(!SrcPower(true),"src power same value no mutation");
+SrcIndex("SrcRateCombo",6);Check(srcp.TargetHz==192000 && srcp.MemoryIndex==6,"src rate change remembers index");
+SrcPower(false);Check(srcp.TargetHz==0 && srcp.MemoryIndex==6,"src power off keeps memory");
+SrcPower(true);Check(srcp.TargetHz==192000,"src power restores memory");
+SrcIndex("SrcRateCombo",0);Check(srcp.TargetHz==0 && srcp.MemoryIndex==6,"src rate off keeps memory");
+SrcPower(true);Check(srcp.TargetHz==192000,"src power after rate-off restores memory");
+Check(!SrcIndex("SrcRateCombo",999) && !SrcIndex("SrcRateCombo",-1),"src invalid rate indices ignored");
+Check(!SrcIndex("SrcQualityCombo",9) && !SrcIndex("SrcDitherCombo",-3),"src invalid option indices ignored");
+SrcIndex("SrcQualityCombo",0);Check(srcp.Quality=="lowlatency","src quality key follows index");
+Check(!SrcIndex("SrcQualityCombo",0),"src quality same index no mutation");
+SrcIndex("SrcDitherCombo",2);Check(srcp.Dither=="highpass" && !SrcIndex("SrcDitherCombo",2),"src dither key follows index once");
+var srcRateDesc=System.Text.Json.JsonSerializer.SerializeToElement(srcp.Describe("SrcRateCombo"));
+Check(srcRateDesc.GetProperty("items").GetArrayLength()==7 && srcRateDesc.GetProperty("index").GetInt32()==6,"src model owns rate labels");
+var srcQualDesc=System.Text.Json.JsonSerializer.SerializeToElement(srcp.Describe("SrcQualityCombo"));
+Check(srcQualDesc.GetProperty("items").GetArrayLength()==3,"src model owns quality labels");
+var srcDithDesc=System.Text.Json.JsonSerializer.SerializeToElement(srcp.Describe("SrcDitherCombo"));
+Check(srcDithDesc.GetProperty("items").GetArrayLength()==4,"src model owns dither labels");
+Check(System.Text.Json.JsonSerializer.SerializeToElement(srcp.Describe("DspPowerSrc")).GetProperty("value").GetBoolean(),"src power mirrors rate");
+Check(DspSrcParameters.IndexOfHz(96000)==4 && DspSrcParameters.IndexOfHz(44100)==1,"src rate index lookup");
 Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {
