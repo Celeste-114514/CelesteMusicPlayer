@@ -1704,13 +1704,8 @@ namespace CelesteMusicPlayer
 
         private void AudioFxRgPreventClipping_Toggled(object sender, RoutedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyReplayGainToEngine();
-        }
-
-
-        private ReplayGainMode CurrentAudioFxRgMode()
-        {
-            return AudioFxRgModeCombo.SelectedItem is ComboBoxItem { Tag: ReplayGainMode m } ? m : ReplayGainMode.Off;
         }
 
 
@@ -1723,12 +1718,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            var rg = new ReplayGainState
-            {
-                Mode = CurrentAudioFxRgMode(),
-                PreampDb = AudioFxRgPreampSlider.Value,
-                PreventClipping = AudioFxRgPreventClippingToggle.IsOn
-            };
+            // 参数来自模型；曲目标签增益/peak 是每首文件的事实，不属于用户设置。
+            ReplayGainState rg = RgParameters.Snapshot();
             ReplayGainStore.Save(rg);
 
             double tg = _currentRgData?.TrackGainDb ?? 0;

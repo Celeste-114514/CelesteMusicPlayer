@@ -585,7 +585,7 @@ namespace CelesteMusicPlayer
                 case DspCoreInterop.RackConvolution:
                     return RoomCorrectionStore.Load().Enabled;
                 case DspCoreInterop.RackReplayGain:
-                    return ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+                    return RgParameters.Current.Mode != ReplayGainMode.Off;
                 case DspCoreInterop.RackCompressor:
                     return DspCompActive();
                 case DspCoreInterop.RackCrossfeed:

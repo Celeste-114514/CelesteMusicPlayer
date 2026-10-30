@@ -28,9 +28,9 @@ namespace CelesteMusicPlayer
         private bool _dspPowerSyncing;
 
         // 各「开关关掉再打开」要恢复的上次值（0/关闭 = 电源断开，记忆的是断开前的档位）
+        // ReplayGain 不在其中：它的「断开前档位」由 DspRgParameters.MemoryIndex 自己持有。
         private double _dspHeadroomMemory { get => ExtraParameters.HeadroomMemory; set => ExtraParameters.HeadroomMemory = value; }
         private int _dspSrcMemoryIndex = 4;   // 96 kHz
-        private int _dspRgMemoryIndex = 1;    // 单曲 (Track)
         private double _dspXfeedMemory { get => ExtraParameters.CrossfeedMemory; set => ExtraParameters.CrossfeedMemory = value; } // 耳机 Crossfeed 的强度百分比
 
         private sealed class DspPowerEntry
@@ -81,32 +81,18 @@ namespace CelesteMusicPlayer
                     }
                 });
 
-            // ② ReplayGain：开关 = 模式不是「关闭」；记忆上次的单曲/专辑模式
+            // ② ReplayGain：开关 = 模式不是「关闭」；记忆上次的单曲/专辑模式（记忆由参数模型持有）
             AddPower(DspPowerRg, DspPowerRgHint,
-                () => AudioFxRgModeCombo != null && AudioFxRgModeCombo.SelectedIndex > 0,
+                () => RgParameters.Current.Mode != ReplayGainMode.Off,
                 on =>
                 {
-                    if (AudioFxRgModeCombo == null)
+                    if (!SetModelControl("DspPowerRg", SwitchMessage(on)))
                     {
                         return;
                     }
 
-                    if (on)
-                    {
-                        int remember = _dspRgMemoryIndex >= 1 && _dspRgMemoryIndex < AudioFxRgModeCombo.Items.Count
-                            ? _dspRgMemoryIndex
-                            : 1;
-                        AudioFxRgModeCombo.SelectedIndex = remember;
-                    }
-                    else
-                    {
-                        if (AudioFxRgModeCombo.SelectedIndex > 0)
-                        {
-                            _dspRgMemoryIndex = AudioFxRgModeCombo.SelectedIndex;
-                        }
-
-                        AudioFxRgModeCombo.SelectedIndex = 0;
-                    }
+                    ProjectExtraParameters();
+                    ApplyReplayGainToEngine();
                 });
 
             // ③ SRC 升频：开关 = 目标采样率不是「关闭（原采样率）」；记忆上次目标
@@ -381,11 +367,7 @@ namespace CelesteMusicPlayer
                 {
                     _dspSrcMemoryIndex = SrcRateCombo.SelectedIndex;
                 }
-
-                if (AudioFxRgModeCombo != null && AudioFxRgModeCombo.SelectedIndex > 0)
-                {
-                    _dspRgMemoryIndex = AudioFxRgModeCombo.SelectedIndex;
-                }
+                // ReplayGain 的「断开前档位」由参数模型自己维护（Set 时更新 MemoryIndex），此处不再从控件回填。
             }
             finally
             {

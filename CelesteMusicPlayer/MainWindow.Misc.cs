@@ -1125,12 +1125,12 @@ namespace CelesteMusicPlayer
                 AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(safety.HeadroomDb);
                 AudioFxSafetyLimiterToggle.IsOn = safety.EnableLimiter;
 
-                // ReplayGain
-                ReplayGainState rg = ReplayGainStore.Load();
-                SelectAudioFxRgMode(rg.Mode);
-                AudioFxRgPreampSlider.Value = rg.PreampDb;
-                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(rg.PreampDb);
-                AudioFxRgPreventClippingToggle.IsOn = rg.PreventClipping;
+                // ReplayGain：先装载模型，再让控件照模型投影（模型是唯一参数来源）
+                RgParameters.Load(ReplayGainStore.Load());
+                SelectAudioFxRgMode(RgParameters.Current.Mode);
+                AudioFxRgPreampSlider.Value = RgParameters.Current.PreampDb;
+                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(RgParameters.Current.PreampDb);
+                AudioFxRgPreventClippingToggle.IsOn = RgParameters.Current.PreventClipping;
                 RefreshAudioFxRgInfo();
             }
             finally
@@ -1273,6 +1273,7 @@ namespace CelesteMusicPlayer
 
         private void AudioFxRgMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (_audioFxLoading) return;
             ApplyReplayGainToEngine();
         }

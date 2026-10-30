@@ -73,6 +73,34 @@ var description=System.Text.Json.JsonSerializer.SerializeToElement(parameters.De
 Check(description.GetProperty("min").GetDouble()==-1 && description.GetProperty("step").GetDouble()==0.05,"model owns slider metadata");
 parameters.Load(new());Check(parameters.Channel.Balance==0 && !parameters.Safety.EnableLimiter,"profile reload replaces model");
 Check(!System.Text.Json.JsonSerializer.SerializeToElement(parameters.Describe("DspPowerXfeed")).GetProperty("enabled").GetBoolean(),"crossfeed power presentation gated by parent");
+
+// ---- ReplayGain model ----
+var rgp=new DspRgParameters();
+var rgSaved=new ReplayGainState{Mode=ReplayGainMode.Album,PreampDb=3.5,PreventClipping=false};
+rgp.Load(rgSaved);rgSaved.PreampDb=99;
+Check(rgp.Current.PreampDb==3.5,"rg load isolates input");
+var rgSnap=rgp.Snapshot();rgSnap.Mode=ReplayGainMode.Off;
+Check(rgp.Current.Mode==ReplayGainMode.Album,"rg snapshot isolates output");
+bool RgSet(string name,object value) => rgp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+bool RgIndex(int index) => rgp.Set("AudioFxRgModeCombo",System.Text.Json.JsonSerializer.SerializeToElement(new {index}));
+Check(RgSet("AudioFxRgPreampSlider",100) && rgp.Current.PreampDb==12,"rg preamp upper clamp");
+Check(RgSet("AudioFxRgPreampSlider",-100) && rgp.Current.PreampDb==-12,"rg preamp lower clamp");
+Check(!RgIndex(999),"rg invalid mode index ignored");
+Check(!RgIndex(3),"rg out of range ignored");
+RgIndex(1);Check(rgp.Current.Mode==ReplayGainMode.Track && rgp.MemoryIndex==1,"rg mode track");
+RgIndex(2);Check(rgp.MemoryIndex==2,"rg mode remembers album");
+RgSet("DspPowerRg",false);Check(rgp.Current.Mode==ReplayGainMode.Off && rgp.MemoryIndex==2,"rg power off keeps memory");
+RgSet("DspPowerRg",true);Check(rgp.Current.Mode==ReplayGainMode.Album,"rg power restores memory");
+Check(RgSet("AudioFxRgPreventClippingToggle",true) && rgp.Current.PreventClipping,"rg clipping on");
+Check(!RgSet("AudioFxRgPreventClippingToggle",true),"rg clipping same value no mutation");
+RgSet("AudioFxRgPreventClippingToggle",false);Check(!rgp.Current.PreventClipping,"rg clipping off");
+var rgDesc=System.Text.Json.JsonSerializer.SerializeToElement(rgp.Describe("AudioFxRgPreampSlider"));
+Check(rgDesc.GetProperty("min").GetDouble()==-12 && rgDesc.GetProperty("max").GetDouble()==12 && rgDesc.GetProperty("step").GetDouble()==0.5,"rg model owns slider metadata");
+var rgCombo=System.Text.Json.JsonSerializer.SerializeToElement(rgp.Describe("AudioFxRgModeCombo"));
+Check(rgCombo.GetProperty("items").GetArrayLength()==3,"rg model owns mode labels");
+Check(System.Text.Json.JsonSerializer.SerializeToElement(rgp.Describe("DspPowerRg")).GetProperty("value").GetBoolean(),"rg power mirrors mode");
+rgp.Load(new ReplayGainState{Mode=ReplayGainMode.Off,PreampDb=30});
+Check(rgp.Current.Mode==ReplayGainMode.Off && rgp.Current.PreampDb==12,"rg reload replaces model and clamps");
 Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {

@@ -428,7 +428,7 @@ namespace CelesteMusicPlayer
             bool eq = EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
             bool fir = RoomCorrectionStore.Load().Enabled;
             bool ch = ExtraParameters.Channel.Enabled;
-            bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+            bool rg = RgParameters.Current.Mode != ReplayGainMode.Off;
 
             // 顺序与 BuildDspNav 元数据表一致（具名下标见 DspActive* 常量）：
             // 听音方案 / 机架编排 / 余量 / RG / SRC / EQ / 压缩 / 声道 / 声场 / 矩阵 / FIR / 监控

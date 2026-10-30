@@ -1865,6 +1865,7 @@ namespace CelesteMusicPlayer
 
         private void AudioFxRgPreamp_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (_audioFxLoading) return;
             AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(e.NewValue);
             ApplyReplayGainToEngine();

@@ -11,9 +11,9 @@ namespace CelesteMusicPlayer
     {
         // Web bridge for the DSP rack.
         //
-        // EQ editing state and channel/safety parameters are authoritative model objects.
-        // Web channel/safety reads and writes do not route through control events. Other DSP
-        // modules still use the legacy control adapter pending their individual migrations.
+        // EQ editing state, channel/safety and ReplayGain parameters are authoritative model
+        // objects. Web reads and writes for those do not route through control events. The
+        // remaining DSP modules still use the legacy control adapter pending their migrations.
         internal object WebDsp(JsonElement msg)
         {
             string operation = "get";
@@ -490,9 +490,9 @@ namespace CelesteMusicPlayer
 
         private IEnumerable<object> WebDspDescribeControl(string name)
         {
-            if (ExtraParameters.Owns(name))
+            if (ModelOwns(name))
             {
-                yield return ExtraParameters.Describe(name);
+                yield return DescribeModelControl(name);
                 yield break;
             }
 
@@ -550,12 +550,13 @@ namespace CelesteMusicPlayer
 
         private void WebDspApplyControl(string name, JsonElement msg)
         {
-            if (ExtraParameters.Owns(name))
+            if (ModelOwns(name))
             {
-                if (ExtraParameters.Set(name, msg))
+                if (SetModelControl(name, msg))
                 {
                     ProjectExtraParameters();
-                    ApplyDspToEngine();
+                    if (RgParameters.Owns(name)) ApplyReplayGainToEngine();
+                    else ApplyDspToEngine();
                 }
                 return;
             }

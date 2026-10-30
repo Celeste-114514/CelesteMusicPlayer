@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using Microsoft.UI.Xaml.Controls;
@@ -11,6 +12,21 @@ public sealed partial class MainWindow
     private readonly EqEditSession EqState = new();
     private readonly DspApplyService DspApply = new();
     private readonly DspExtraParameters ExtraParameters = new();
+    private readonly DspRgParameters RgParameters = new();
+
+    /// <summary>Modules whose business values already live in a model instead of their controls.</summary>
+    private IEnumerable<string> ProjectedControls => WebDspModuleControls["channel"]
+        .Concat(WebDspModuleControls["headroom"]).Concat(WebDspModuleControls["rg"]);
+
+    private bool ModelOwns(string name) => ExtraParameters.Owns(name) || RgParameters.Owns(name);
+
+    private object DescribeModelControl(string name) =>
+        ExtraParameters.Owns(name) ? ExtraParameters.Describe(name) : RgParameters.Describe(name);
+
+    private bool SetModelControl(string name, JsonElement message) =>
+        ExtraParameters.Owns(name) ? ExtraParameters.Set(name, message) : RgParameters.Set(name, message);
+
+    private static JsonElement SwitchMessage(bool value) => JsonSerializer.SerializeToElement(new { value });
 
     // Presentation adapter only. Guarded writes cannot feed back into the parameter model.
     private void ProjectExtraParameters()
@@ -19,9 +35,10 @@ public sealed partial class MainWindow
         _audioFxLoading = true; _dspPowerSyncing = true;
         try
         {
-            foreach (string name in WebDspModuleControls["channel"].Concat(WebDspModuleControls["headroom"]))
+            foreach (string name in ProjectedControls)
             {
-                var descriptor = JsonSerializer.SerializeToElement(ExtraParameters.Describe(name));
+                if (!ModelOwns(name)) continue;
+                var descriptor = JsonSerializer.SerializeToElement(DescribeModelControl(name));
                 switch (WebDspControl(name))
                 {
                     case Slider slider: slider.Value = descriptor.GetProperty("value").GetDouble(); break;
@@ -33,6 +50,8 @@ public sealed partial class MainWindow
         finally { _audioFxLoading = loading; _dspPowerSyncing = syncing; }
         AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(ExtraParameters.Safety.HeadroomDb);
         RefreshCrossfeedCutoffReadout(); RefreshDspXfeedLevelReadout(); RedrawDspXfeedCurve(); UpdateDspChannelBars();
+        AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(RgParameters.Current.PreampDb);
+        RefreshAudioFxRgInfo();
     }
 
     // Legacy editors may still raise input events. Import only the field that changed,
@@ -40,9 +59,10 @@ public sealed partial class MainWindow
     private void ImportExtraParameterInput(object sender)
     {
         if (_audioFxLoading || !_audioFxPanelReady) return;
-        foreach (string name in WebDspModuleControls["channel"].Concat(WebDspModuleControls["headroom"]))
+        foreach (string name in ProjectedControls)
         {
-            if (name.StartsWith("DspPower",StringComparison.Ordinal) || !ReferenceEquals(WebDspControl(name), sender)) continue;
+            if (name.StartsWith("DspPower", StringComparison.Ordinal) || !ModelOwns(name)) continue;
+            if (!ReferenceEquals(WebDspControl(name), sender)) continue;
             var message = sender switch
             {
                 Slider slider => JsonSerializer.SerializeToElement(new { value = slider.Value }),
@@ -50,7 +70,7 @@ public sealed partial class MainWindow
                 ComboBox combo => JsonSerializer.SerializeToElement(new { index = combo.SelectedIndex }),
                 _ => default
             };
-            if (message.ValueKind == JsonValueKind.Object) ExtraParameters.Set(name, message);
+            if (message.ValueKind == JsonValueKind.Object) SetModelControl(name, message);
             return;
         }
     }
