@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -16,7 +16,6 @@ namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-        private readonly SemaphoreSlim _webTagWriteGate = new(1, 1);
         private IReadOnlyList<OnlineTagCandidate> _webTagCandidates = Array.Empty<OnlineTagCandidate>();
         private IReadOnlyList<LyricCandidate> _webLyricCandidates = Array.Empty<LyricCandidate>();
         private readonly Dictionary<int, OnlineTagCandidate> _webOnlineDetails = new();
@@ -29,60 +28,13 @@ namespace CelesteMusicPlayer
         private string _webLyricBatchError = "";
         private bool _webLyricBatchRunning;
 
-        // The native panel also snapshots tags before a group write and rolls the group back on
-        // failure. Snapshot only the writable metadata; do not replace or truncate audio files.
-        private static WebTagWriteResult[] WebTagWriteTransaction(
-            List<(string Id, string? Path, Dictionary<string, string> Fields)> jobs)
-        {
-            var snapshots = new Dictionary<string, TagEditModel>(StringComparer.OrdinalIgnoreCase);
-            var attempted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var results = new List<WebTagWriteResult>();
-            try
-            {
-                foreach (var job in jobs)
-                {
-                    if (job.Path == null || !File.Exists(job.Path))
-                        throw new IOException("文件不存在或为网络曲目：" + job.Id);
-                    if (!snapshots.ContainsKey(job.Path)) snapshots[job.Path] = TagEditorService.ReadTagRaw(job.Path);
-                    // Validate all numeric fields before writing the first file.
-                    ApplyWebTagFields(TagEditorService.ReadTagRaw(job.Path), job.Fields);
-                }
-                foreach (var job in jobs)
-                {
-                    attempted.Add(job.Path!);
-                    var result = WebTagWriteOne(job.Id, job.Path!, job.Fields);
-                    results.Add(result);
-                    if (!result.Ok) throw new IOException(result.Error);
-                }
-                return results.ToArray();
-            }
-            catch (Exception error)
-            {
-                var rollbackErrors = new List<string>();
-                foreach (string path in attempted)
-                {
-                    try
-                    {
-                        var original = snapshots[path];
-                        original.MarkAllDirty();
-                        var restored = TagEditorService.TrySaveTag(path, original);
-                        if (!restored.Ok) rollbackErrors.Add(Path.GetFileName(path) + ": " + restored.Error);
-                    }
-                    catch (Exception restoreError) { rollbackErrors.Add(Path.GetFileName(path) + ": " + restoreError.Message); }
-                }
-                string message = error.Message + (rollbackErrors.Count == 0
-                    ? "；本次已写入的标签已还原。" : "；部分标签还原失败：" + string.Join("；", rollbackErrors));
-                return jobs.Select(job => new WebTagWriteResult { Id = job.Id, Error = message }).ToArray();
-            }
-        }
-
         private static List<(string Id, string Path)> WebTagTargets(JsonElement msg, IReadOnlyDictionary<string, PlaylistItem> tracks)
         {
             if (!msg.TryGetProperty("ids", out var ids) || ids.ValueKind != JsonValueKind.Array)
                 throw new ArgumentException("请先选择文件。");
             if (ids.GetArrayLength() > 2000) throw new ArgumentException("每次最多处理 2000 个文件。");
             var result = ids.EnumerateArray().Select(value => value.GetString() ?? "").Distinct()
-                .Select(id => (Id: id, Path: ResolveTagPath(tracks, id) ?? throw new ArgumentException("网络曲目或失效曲目不能编辑标签。"))).ToList();
+                .Select(id => (Id: id, Path: WebTagFileService.ResolvePath(tracks, id) ?? throw new ArgumentException("网络曲目或失效曲目不能编辑标签。"))).ToList();
             if (result.Count == 0) throw new ArgumentException("请先选择文件。");
             return result;
         }
@@ -145,7 +97,7 @@ namespace CelesteMusicPlayer
                 if (!songFolder && string.IsNullOrWhiteSpace(settings.LyricFolder)) throw new ArgumentException("请先在设置中配置歌词文件夹。");
                 var target = OnlineLyricDownload.ParseWriteTarget(ReadString(msg, "target"));
                 var results = new List<object>();
-                await _webTagWriteGate.WaitAsync();
+                await WebTagFileService.WaitWriteGateAsync();
                 try
                 {
                     foreach (var item in targets)
@@ -155,7 +107,7 @@ namespace CelesteMusicPlayer
                         if (saved.Ok) OnTagsSaved(item.Path);
                     }
                 }
-                finally { _webTagWriteGate.Release(); }
+                finally { WebTagFileService.ReleaseWriteGate(); }
                 return new { results };
             }
             if (operation == "lyricBatchStatus") return new { running = _webLyricBatchRunning, progress = _webLyricBatchProgress, summary = _webLyricBatchSummary, error = _webLyricBatchError };
@@ -285,7 +237,7 @@ namespace CelesteMusicPlayer
             var jobs = rows.Select(row =>
             {
                 string id = ReadString(row, "id");
-                string oldPath = ResolveTagPath(tracks, id) ?? throw new ArgumentException("曲目已失效。");
+                string oldPath = WebTagFileService.ResolvePath(tracks, id) ?? throw new ArgumentException("曲目已失效。");
                 string name = ReadString(row, "file").Trim();
                 if (name.Length == 0 || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name != Path.GetFileName(name)) throw new ArgumentException("文件名无效。" );
                 if (!name.EndsWith(Path.GetExtension(oldPath), StringComparison.OrdinalIgnoreCase)) name += Path.GetExtension(oldPath);
@@ -293,7 +245,7 @@ namespace CelesteMusicPlayer
             }).Distinct().Where(j => !string.Equals(j.Old, j.New, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (jobs.Select(j => j.New).Distinct(StringComparer.OrdinalIgnoreCase).Count() != jobs.Length) throw new ArgumentException("多个文件的新名称重复。");
             if (jobs.Any(j => string.Equals(j.Old, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("请先切换到其他曲目，再重命名当前播放文件。");
-            await _webTagWriteGate.WaitAsync();
+            await WebTagFileService.WaitWriteGateAsync();
             try
             {
                 await Task.Run(() =>
@@ -329,7 +281,7 @@ namespace CelesteMusicPlayer
                 SavePlayQueue();
                 return new { ok = true, count = jobs.Length, remap = tracks.Where(pair => pair.Key != WebTrackIdentity.Of(pair.Value)).ToDictionary(pair => pair.Key, pair => WebTrackIdentity.Of(pair.Value)) };
             }
-            finally { _webTagWriteGate.Release(); }
+            finally { WebTagFileService.ReleaseWriteGate(); }
         }
 
         private async Task<object> WebTagCoverAsync(string operation, JsonElement msg, IReadOnlyDictionary<string, PlaylistItem> tracks)
@@ -389,7 +341,7 @@ namespace CelesteMusicPlayer
 
             if (bytes != null) { if (bytes.Length > 25_000_000) throw new ArgumentException("封面图片过大。"); using var stream = new MemoryStream(bytes); using var image = System.Drawing.Image.FromStream(stream); }
 
-            await _webTagWriteGate.WaitAsync();
+            await WebTagFileService.WaitWriteGateAsync();
             try
             {
                 await Task.Run(() =>
@@ -422,7 +374,7 @@ namespace CelesteMusicPlayer
                 });
                 foreach (var t in targets) { InvalidateCoverCache(t.Path); OnTagsSaved(t.Path); }
             }
-            finally { _webTagWriteGate.Release(); }
+            finally { WebTagFileService.ReleaseWriteGate(); }
             return new { ok = true, count = targets.Count };
         }
     }

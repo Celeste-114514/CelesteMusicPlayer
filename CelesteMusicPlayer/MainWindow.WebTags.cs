@@ -72,7 +72,7 @@ namespace CelesteMusicPlayer
             }
 
             var filtered = items.ToArray();
-            var rows = WebTagSortRules.Sort(filtered, msg, (id, path) => WebTagReadOne(id, path, false))
+            var rows = WebTagSortRules.Sort(filtered, msg, (id, path) => WebTagFileService.ReadOne(id, path, false))
                 .Skip(offset)
                 .Take(limit)
                 .Select(pair => new
@@ -125,73 +125,13 @@ namespace CelesteMusicPlayer
             var rows = await Task.Run(() => jobs
                 .Select(job => job.Path == null
                     ? (object)new { id = job.Id, ok = false, error = "网络曲目暂不支持标签编辑。" }
-                    : WebTagReadOne(job.Id, job.Path, job.Cover))
+                    : WebTagFileService.ReadOne(job.Id, job.Path, job.Cover))
                 .ToArray()).ConfigureAwait(true);
 
             return new { tracks = rows };
         }
 
-        private static object WebTagReadOne(string id, string path, bool withCover)
-        {
-            try
-            {
-                var model = TagEditorService.ReadTag(path);
-                int bitDepth = 0, sampleRate = 0, bitrate = 0;
-                try { using var file = TagLib.File.Create(path); bitDepth = file.Properties.BitsPerSample; sampleRate = file.Properties.AudioSampleRate; bitrate = file.Properties.AudioBitrate; } catch { }
-                string cover = "";
-                if (withCover)
-                {
-                    byte[]? bytes = TagEditorService.ReadCoverBytes(path);
-                    if (bytes != null && bytes.Length > 0)
-                        cover = "data:" + WebCoverMime(bytes) + ";base64," + Convert.ToBase64String(bytes);
-                }
-
-                return new
-                {
-                    id,
-                    ok = true,
-                    title = model.Title,
-                    artist = model.Artist,
-                    album = model.Album,
-                    albumArtist = model.AlbumArtist,
-                    year = model.Year == 0 ? "" : model.Year.ToString(CultureInfo.InvariantCulture),
-                    track = model.Track == 0 ? "" : model.Track.ToString(CultureInfo.InvariantCulture),
-                    trackCount = model.TrackCount == 0 ? "" : model.TrackCount.ToString(CultureInfo.InvariantCulture),
-                    disc = model.Disc == 0 ? "" : model.Disc.ToString(CultureInfo.InvariantCulture),
-                    discCount = model.DiscCount == 0 ? "" : model.DiscCount.ToString(CultureInfo.InvariantCulture),
-                    bpm = model.Bpm,
-                    genre = model.Genre,
-                    composer = model.Composer,
-                    comment = model.Comment,
-                    lyrics = model.Lyrics,
-                    syncedLyrics = model.SyncedLyrics,
-                    bitDepth = bitDepth > 0 ? bitDepth + " bit" : "",
-                    sampleRate = sampleRate > 0 ? (sampleRate / 1000.0).ToString("0.###", CultureInfo.InvariantCulture) + " kHz" : "",
-                    bitrate = bitrate > 0 ? bitrate + " kbps" : "",
-                    fileSize = Math.Round(new FileInfo(path).Length / 1024.0 / 1024.0, 2),
-                    cover
-                };
-            }
-            catch (Exception error)
-            {
-                return new { id, ok = false, error = error.Message };
-            }
-        }
-
-        private static string WebCoverMime(byte[] bytes)
-            => TagEditorService.SniffImageMime(bytes);
-
         // ---- write --------------------------------------------------------------------------
-
-        /// <summary>One file's write result, kept as a class so the caller can still read the fields afterwards.</summary>
-        private sealed class WebTagWriteResult
-        {
-            public string Id = "";
-            public bool Ok;
-            public bool Skipped;
-            public string Error = "";
-            public Dictionary<string, string>? Fields;
-        }
 
         private async Task<object> WebTagsWriteAsync(JsonElement msg, IReadOnlyDictionary<string, PlaylistItem> tracks)
         {
@@ -205,14 +145,14 @@ namespace CelesteMusicPlayer
                 foreach (var rowElement in rowsElement.EnumerateArray().Take(2000))
                 {
                     string id = ReadString(rowElement, "id");
-                    var fields = ReadFieldMap(rowElement);
+                    var fields = WebTagFileService.ReadFieldMap(rowElement);
                     if (id.Length > 0 && fields.Count > 0)
-                        jobs.Add((id, ResolveTagPath(tracks, id), fields));
+                        jobs.Add((id, WebTagFileService.ResolvePath(tracks, id), fields));
                 }
             }
             else
             {
-                var fields = ReadFieldMap(msg);
+                var fields = WebTagFileService.ReadFieldMap(msg);
                 if (fields.Count == 0)
                     throw new ArgumentException("缺少要写入的字段。");
                 if (!msg.TryGetProperty("ids", out var idsElement) || idsElement.ValueKind != JsonValueKind.Array)
@@ -223,20 +163,14 @@ namespace CelesteMusicPlayer
                 {
                     string id = idElement.GetString() ?? "";
                     if (id.Length > 0)
-                        jobs.Add((id, ResolveTagPath(tracks, id), fields));
+                        jobs.Add((id, WebTagFileService.ResolvePath(tracks, id), fields));
                 }
             }
 
             if (jobs.Count == 0)
                 return new { results = Array.Empty<object>() };
 
-            await _webTagWriteGate.WaitAsync();
-            WebTagWriteResult[] results;
-            try
-            {
-                results = await Task.Run(() => WebTagWriteTransaction(jobs));
-            }
-            finally { _webTagWriteGate.Release(); }
+            WebTagWriteResult[] results = await WebTagFileService.WriteAsync(jobs).ConfigureAwait(true);
 
             // Keep the library rows in step, otherwise the table keeps showing the old text.
             foreach (var result in results)
@@ -266,65 +200,6 @@ namespace CelesteMusicPlayer
 
             return new { results = payload };
         }
-
-        private static string? ResolveTagPath(IReadOnlyDictionary<string, PlaylistItem> tracks, string id)
-        {
-            if (!tracks.TryGetValue(id, out var item) || item.IsRemote)
-                return null;
-            return item.FilePath;
-        }
-
-        /// <summary>Flattens { "title": "x", "year": "1999" } into a plain dictionary — JSON elements must not cross threads.</summary>
-        private static Dictionary<string, string> ReadFieldMap(JsonElement container)
-        {
-            var map = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (!container.TryGetProperty("fields", out var fields) || fields.ValueKind != JsonValueKind.Object)
-                return map;
-
-            foreach (var property in fields.EnumerateObject())
-            {
-                map[property.Name] = property.Value.ValueKind switch
-                {
-                    JsonValueKind.String => property.Value.GetString() ?? "",
-                    JsonValueKind.Number => property.Value.ToString(),
-                    JsonValueKind.Null => "",
-                    _ => throw new ArgumentException("标签值必须是文字或数字：" + property.Name)
-                };
-            }
-
-            return map;
-        }
-
-        private static WebTagWriteResult WebTagWriteOne(string id, string path, Dictionary<string, string> fields)
-        {
-            var result = new WebTagWriteResult { Id = id, Fields = fields };
-            try
-            {
-                var model = TagEditorService.ReadTag(path);
-                if (!ApplyWebTagFields(model, fields))
-                {
-                    result.Ok = true;
-                    result.Skipped = true;
-                    return result;
-                }
-
-                var save = TagEditorService.TrySaveTag(path, model);
-                result.Ok = save.Ok;
-                result.Skipped = save.Skipped;
-                result.Error = save.Error ?? "";
-            }
-            catch (Exception error)
-            {
-                result.Ok = false;
-                result.Error = error.Message;
-            }
-
-            return result;
-        }
-
-        /// <summary>Copies only the fields present in the payload; anything missing is left untouched.</summary>
-        private static bool ApplyWebTagFields(TagEditModel model, Dictionary<string, string> fields)
-            => WebTagEditRules.Apply(model, fields);
 
         private static int ReadInt(JsonElement msg, string property, int fallback)
         {

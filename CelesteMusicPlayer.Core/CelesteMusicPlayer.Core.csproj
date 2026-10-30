@@ -79,6 +79,7 @@
     <Compile Include="../CelesteMusicPlayer/WebDavLocation.cs" Link="WebDavLocation.cs" />
     <Compile Include="../CelesteMusicPlayer/WebSettingsSchema.cs" Link="WebSettingsSchema.cs" />
     <Compile Include="../CelesteMusicPlayer/WebTagEditRules.cs" Link="WebTagEditRules.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebTagFileService.cs" Link="WebTagFileService.cs" />
     <Compile Include="../CelesteMusicPlayer/WebTagSortRules.cs" Link="WebTagSortRules.cs" />
     <Compile Include="../CelesteMusicPlayer/Widen24To32Provider.cs" Link="Widen24To32Provider.cs" />
     <Compile Include="../CelesteMusicPlayer/UpdateVersioning.cs" Link="UpdateVersioning.cs" />
@@ -109,7 +110,7 @@
     <Compile Include="../CelesteMusicPlayer/NetworkSourceProvider.cs" Link="NetworkSourceProvider.cs" />
     <Compile Include="../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="BaiduSourceProvider.cs" />
     <Compile Include="../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="MediaServerSourceProvider.cs" />
-    <Compile Include="../CelesteMusicPlayer/PlaybackSession.cs" Link="PlaybackSession.cs" />
+    <!-- PlaybackSession（W13 正式会话）依赖 OutputModeService/AudioPlaybackEngine，不进 Core 测试链；没有任何测试引用它 -->
     <Compile Include="../CelesteMusicPlayer/EqualizerState.cs" Link="EqualizerState.cs" />
     <Compile Include="../CelesteMusicPlayer/QuickStartupIntent.cs" Link="QuickStartupIntent.cs" />
     <Compile Include="../CelesteMusicPlayer/QuickTrackLoader.cs" Link="QuickTrackLoader.cs" />
