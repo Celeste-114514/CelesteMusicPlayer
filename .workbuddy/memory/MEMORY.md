@@ -61,11 +61,42 @@
   铁律：**别往 `ISettingsHost` 加 MainWindow 现成属性** —— 服务能顺手读宿主状态就会长回去。
   句柄类操作（三个选择器、导入导出）不需要宿主传句柄：`NativeMainWebWindow.HandleOf(window)` 是静态的。
 - DSD：用户确认 **DoP 已完成**，只剩 Native DSD 接入。
+- **参数模型化（方案 A，2026-10-31 进度）**：RG → SRC → 压缩器 → 声场+矩阵 → **FIR/房间校正** 已全部搬进模型
+  （`DspRgParameters`/`DspSrcParameters`/`DspCompParameters`/`DspFieldParameters`/`DspMatrixParameters`/`DspFirParameters`），
+  契约是 `IDspParameterModel`（`Owns/Describe/Set`）；宿主侧定位只走 `ModelOf(name)`，**加新模块只加一行**。
+  铁律：① 新模块先问「进不进 `dsp-rack.json`」—— 不进的（FIR 走 `room-correction.json`）必须在
+  `ReloadDspPanelFromStores()` 里补一次装载，否则切听音方案后模型停在旧值；
+  ② 「加载后回写」的元数据（IR taps/采样率）要**照旧在落盘时才写**，提前写会让探针多出字段差异；
+  ③ 滑杆事件只导入被改动的那个字段，保存/下发交给模块自己的 `ApplyXxxParameters()`。
+  ④ 回退目录纪律：**提交后立刻把当前出货 DLL 存进 `dist/web-ui-20261028-pre-w13-<下一段>-<日期>/`**（已在执行）。
+- ✅ **方案 A 已于 2026-10-31 收官**（`259aeaa`）：六个模块 + 两个链路级模型全部离开控件。
+  链路级两个模型（`DspRackParameters` 顺序+旁路 / `DspProfileCoordinator` 方案归属判定）
+  **故意不走 `IDspParameterModel`** —— 它们没有"按控件名读写"的语义。
+  遗留：`setBypass` 仍借道原生开关触发下发（模型已是唯一真值，写入路径没完全脱开控件）。
+  方案指纹**不含** IR taps/采样率/声道数（播放会回写，放进来刚应用完就被误判"已改动"）。
+- ✅ **目录浏览已搬出**（`aae15cc`）：`LibraryFolderScan`（扩展名表 + 两个递归走法 + 列一层 + 碟号/轨道排序）
+  与 `WebFolderBrowseService`（roots/children/songs）是**唯一真相源**，原生曲库树和网页命令共用。
+  `MainWindow.WebFolders.cs` 只剩分发 + `FolderPicker` + play/queue。
+  铁律：① 加新音频格式只改 `LibraryFolderScan.AudioExtensions`；
+  ② **删 partial 类的私有静态字段/方法前必须全项目 grep** —— 只搜本文件会漏（`AudioExtensions` 就在
+  `Misc.cs`/`WebDav.cs`/`WebTagTools.cs` 被用，删了直接 4 个 CS0103）；
+  ③ 目录相关探针要先给 `app-settings.json` 配测试目录（files 模式下 `LibraryWatchFolders` 是空的，
+  不配就是空跑，照样"0 差异"），**跑完必须清 `library.db` tracks 表里的测试行**。
 
 ## 构建 / 发布
 - publish 目录 `CelesteMusicPlayer\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish`；同步 dist 必须用 publish 目录（`_sync_webshell_dist.py`，禁从 bin\x64 拷）。
+- ⚠ **`_sync_webshell_dist.py` 默认目标是 `dist/web-shell-dsp-tags-complete`**（早期交付目录）。
+  同步当前运行目录**必须显式传参**：`python _sync_webshell_dist.py dist/web-ui-20261028`（2026-10-31 误跑过一次默认目标）。
 - ⚠ Roslyn/XamlCompiler 偶发崩溃=环境噪音，原样重试即成，别改代码找原因。
 - ✅ publish 崩溃解法：`python _publish_retry_clean.py 8`（每轮关构建服务+清 obj/bin+重试）。
+- ⚠⚠ **publish 成功 ≠ 产物正常**（2026-10-30 实测、2026-10-31 又中一次）：exit=0、`error CS`=0，
+  DLL 却少了约 106 KB（3,076,096 → 2,970,112），少的是 CsWinRT 生成的 `WinRT.*GenericHelpers/*VtableClasses`。
+  同一份源码重编一次即恢复。**同步 dist 之前必须先看体积**（正常 3.0–3.1 MB，突变就重编，别信 exit=0），
+  必要时用 `System.Reflection.Metadata` 比两版类型表（异步状态机 `d__NNNN` 编号位移属正常）。
+  坏产物通常"能启动也能跑"，靠跑功能测试发现不了，只有体积能一刀见血。
+- ⚠ **Edit 工具会整文件改换行**：CRLF 文件被写成全 LF 时 diff 会从 1 行炸成上千行。
+  改这类文件后必看 `git diff --stat`（不加 `--ignore-cr-at-eol`）；要恢复就用 `git show HEAD:<path>` 取原字节、
+  只替换目标片段、写临时文件再 `os.replace`。
 - ⚠ 只改网页不必等 publish；**改了 C# 必须等 publish 成功**。
 - ⚠ 仓库根 `global.json` 未跟踪锁 SDK 9.0.317；net10 实测可行无需换包。
 - ⚠ 验产物新鲜度对 `CelesteMusicPlayer.dll` 做 md5/搜字符串：字段/方法名是 **UTF-8**（#Strings 堆），字面量才是 UTF-16LE（#US 堆）——搜错堆会误判"没编进去"。
