@@ -1487,35 +1487,6 @@ namespace CelesteMusicPlayer
         private ObservableCollection<AlbumEntry> GetAlbumCollectionForGrid(GridView grid)
             => ReferenceEquals(grid, AlbumGridView) ? _albums : _artistAlbums;
 
-        private ListView? ResolveMultiSelectTargetList()
-        {
-            if (PlaylistDetailBorder.Visibility == Visibility.Visible
-                && PlaylistDetailListView != null)
-            {
-                return PlaylistDetailListView;
-            }
-
-            if (AlbumDetailPanel.Visibility == Visibility.Visible
-                && AlbumTrackListView != null)
-            {
-                return AlbumTrackListView;
-            }
-
-            if (ArtistDetailPanel.Visibility == Visibility.Visible
-                && ArtistTrackListView != null)
-            {
-                return ArtistTrackListView;
-            }
-
-            if (PlaylistListBorder.Visibility == Visibility.Visible)
-            {
-                return PlaylistView;
-            }
-
-            return null;
-        }
-
-
         // 频谱带缓存与音效面板构建（2026-10-31 误切归还）。
 
         private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];

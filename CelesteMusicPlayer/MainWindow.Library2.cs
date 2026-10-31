@@ -1039,48 +1039,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ExitAlbumMultiSelectUiOnly()
-        {
-            if (_multiSelectAlbumGrid == null)
-            {
-                return;
-            }
-
-            GridView grid = _multiSelectAlbumGrid;
-            SetGridSelectionMode(grid, ListViewSelectionMode.Single);
-            grid.IsItemClickEnabled = true;
-            if (ReferenceEquals(grid, ArtistAlbumGridView) && _artistAlbumItemDefaultStyle != null)
-            {
-                ArtistAlbumGridView.ItemContainerStyle = _artistAlbumItemDefaultStyle;
-            }
-            else if (ReferenceEquals(grid, AlbumGridView) && _libraryAlbumItemDefaultStyle != null)
-            {
-                AlbumGridView.ItemContainerStyle = _libraryAlbumItemDefaultStyle;
-            }
-
-            ApplyAccentSelectionResources(grid);
-            _multiSelectAlbumGrid = null;
-        }
-
-
-        private void ExitFolderMultiSelectUiOnly()
-        {
-            if (_multiSelectFolderList == null)
-            {
-                return;
-            }
-
-            SetListSelectionMode(FolderBrowserView, ListViewSelectionMode.Single);
-            if (_folderItemDefaultStyle != null)
-            {
-                FolderBrowserView.ItemContainerStyle = _folderItemDefaultStyle;
-            }
-
-            ApplyAccentSelectionResources(FolderBrowserView);
-            _multiSelectFolderList = null;
-        }
-
-
         private void MultiSelectEditTagsButton_Click(object sender, RoutedEventArgs e)
         {
             var items = GetSelectedMultiSelectSongs();
@@ -1279,19 +1237,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void RefreshFolderBrowserSelectionChrome()
-        {
-            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(FolderBrowserView);
-            foreach (ListViewItem container in EnumerateRealizedListViewItems(FolderBrowserView))
-            {
-                if (FolderBrowserView.ItemFromContainer(container) is FolderBrowserItem item)
-                {
-                    ApplyFolderBrowserItemSelectionChrome(container, item, selectedSet);
-                }
-            }
-        }
-
-
         private void RefreshArtistAlbumSelectionChrome()
             => RefreshAlbumWallSelectionChrome(ArtistAlbumGridView, _artistAlbums);
 
@@ -1407,44 +1352,5 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>根据 TextBlock.Tag 取出对应字段的完整文案</summary>
-        private static string? ResolveCellDetailText(FrameworkElement element)
-        {
-            PlaylistItem? item = VisualTreeWalker.FindPlaylistItem(element);
-            if (item == null || element.Tag is not string field)
-            {
-                return null;
-            }
-
-            string label;
-            string value;
-            switch (field)
-            {
-                case "Title":
-                    label = "标题";
-                    value = item.Title;
-                    break;
-                case "Artist":
-                    label = "艺术家";
-                    value = item.Artist;
-                    break;
-                case "Album":
-                    label = "专辑";
-                    value = item.Album;
-                    break;
-                case "Year":
-                    label = "年份";
-                    value = item.YearText;
-                    break;
-                case "Duration":
-                    label = "时长";
-                    value = item.DurationText;
-                    break;
-                default:
-                    return null;
-            }
-
-            return $"{label}：{value}\n文件：{Path.GetFileName(item.FilePath)}";
-        }
     }
 }

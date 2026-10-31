@@ -1325,21 +1325,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static bool IsSupportedAudioFile(string path)
-        {
-            string ext = Path.GetExtension(path);
-            foreach (string supported in AudioExtensions)
-            {
-                if (string.Equals(ext, supported, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-
         /// <summary>右键详情区歌曲：非多选态弹歌曲菜单；多选态进入多选。</summary>
         private void MediaDetailsList_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
@@ -1734,66 +1719,8 @@ namespace CelesteMusicPlayer
         private void ExitMultiSelectButton_Click(object sender, RoutedEventArgs e)
             => ExitMultiSelectMode();
 
-        /// <summary>列表当前是否处于「可多选」的选择模式（Multiple / Extended 均算）。
-        /// 旧代码里散落的「== ListViewSelectionMode.Multiple」判断统一走这里，避免漏改。</summary>
-        internal static bool IsMultiSelectSelection(ListViewBase? list)
-            => RangeMultiSelect.IsMultiSelectMode(list);
-
-        /// <summary>
-        /// 通过 None 中转切换选择模式，安全清空选中项，避免 SelectedItems.Clear 崩溃。
-        /// </summary>
-        private void SetListSelectionMode(ListView list, ListViewSelectionMode mode)
-        {
-            try
-            {
-                list.SelectionMode = ListViewSelectionMode.None;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                list.SelectionMode = mode;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            // 本应用用主题色圆角底表示选中，关闭 Multiple 模式左侧系统复选框（否则会显示小黑块）
-            list.IsMultiSelectCheckBoxEnabled = false;
-
-            try
-            {
-                list.SelectedItem = null;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            AttachRangeMultiSelect(list);
-        }
-
-
-        private void SetGridSelectionMode(GridView grid, ListViewSelectionMode mode)
-        {
-            try
-            {
-                grid.SelectionMode = ListViewSelectionMode.None;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                grid.SelectionMode = mode;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            grid.IsMultiSelectCheckBoxEnabled = false;
-
-            try
-            {
-                grid.SelectedItem = null;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            AttachRangeMultiSelect(grid);
-        }
-
+        // IsMultiSelectSelection / SetListSelectionMode / SetGridSelectionMode 已搬到
+        // MainWindow.MultiSelectHost.cs（W13 第二十三刀）。
 
         private void MultiSelectFavoriteButton_Click(object sender, RoutedEventArgs e)
         {
