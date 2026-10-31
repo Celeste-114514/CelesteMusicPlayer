@@ -128,3 +128,16 @@ RestoreLastLibraryAsync→Library.cs。
 python heredoc 里 `b'...中文...'` 直接 SyntaxError——若删除源已执行而插入目标未执行，**代码块就丢了**。
 本轮 GeekShell 丢过一次（git checkout 秒回）。修复：搬家脚本一律全程 str + UTF-8，杜绝 bytes 中文。
 另：`&&` 链上脚本失败会静默跳过后续（上一轮教训），本轮已两次靠探针残账兜底。
+
+### 第十二刀（提交 `fef47a1`，2026-10-31）：导航域开局——导航历史族离壳
+新建 `MainWindow.NavHistory.cs`：CaptureLibraryNavState（Library.cs）、
+LibraryNavStatesEqual + CommitLibraryNavigation（EqDsp.cs）。状态类/栈/快照字段都在 xaml.cs（活），
+三方法是纯栈操作，零行为变化。NavigateLibraryHistoryBack/Forward 留壳（调用者全在壳内）。
+**456 → 454 错 / 170 → 168 成员**。四道验证全过。回退件 `pre-w13-navhistory-20261031`。
+
+### 导航域剩余（下一大仗）
+- **ApplyCategoryView（290 行混合体）**：case "Songs" 强制重置排序+ApplySort（活，影响网页曲库顺序）、
+  case "UserPlaylist" RenumberCollection、RefreshAlbumViewAsync（活数据刷新）+ 大量占位控件操作（死）。
+  打法：整族（含 ApplySort/SetSongSortUiForCategory/CloseXxxDetailUi 等伴生）评估后决定
+  「整族搬 NavFlow 文件」或「逐 case 等价重写」。**需要网页曲库顺序的实测验证配合。**
+- LoadAndAddFiles(6)、RefreshAlbumViewAsync/RefreshFolderViewAsync 等数据刷新族。
