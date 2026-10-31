@@ -475,15 +475,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistAlbumGridView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
-            {
-                ApplyAlbumGridItemSelectionChrome(ArtistAlbumGridView, container, album);
-            }
-        }
-
-
         /// <summary>
         /// 从曲库汇总唯一专辑；封面优先取该专辑音轨号为 1 的文件。
         /// </summary>
@@ -676,15 +667,6 @@ namespace CelesteMusicPlayer
 
             RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
             UpdateSelectAllMultiSelectButtonState();
-        }
-
-
-        private void AlbumGridView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
-            {
-                ApplyAlbumGridItemSelectionChrome(AlbumGridView, container, album);
-            }
         }
 
 

@@ -1286,15 +1286,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void FolderBrowserView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is FolderBrowserItem item && args.ItemContainer is ListViewItem container)
-            {
-                ApplyFolderBrowserItemSelectionChrome(container, item);
-            }
-        }
-
-
         private void FolderBrowserView_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
             FolderBrowserItem? item = FindFolderBrowserItem(e.OriginalSource as DependencyObject);
