@@ -1447,7 +1447,6 @@ namespace CelesteMusicPlayer
             UpdateLibrarySearchUi();
             if (target == PlaylistView)
             {
-                ApplyCapsuleSortButtonStyle(accent: true);
             }
 
             if (preselect != null)

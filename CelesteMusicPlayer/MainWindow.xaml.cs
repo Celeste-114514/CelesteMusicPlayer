@@ -664,7 +664,6 @@ namespace CelesteMusicPlayer
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
             AppWindow.Closing += AppWindow_Closing;
-            ApplyCapsuleSortButtonStyle(accent: true);
             ApplyPlaylistHeaderChipStyle();
             // 2026-10-16 删除：这里原来有 10 个 ApplyCapsuleToControl(..., ResolveCapsuleFillBrush(), ...)
             // 调用（专辑详情/播放列表操作栏/艺术家详情那批按钮）。E 组给这些按钮换上
