@@ -3207,11 +3207,10 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>44100 → 44.1kHz；48000 → 48kHz；2822400 → 2.82MHz。</summary>
         /// <summary>
         /// TTA 专用建行（2026-10-14 方案 1）：TagLib 打不开 TTA 容器，所以
         ///  · 标签 → TtaTagAccess.Read（读文件头 ID3v2 / 文件尾 APEv2）；
-        ///  · 时长 → TTA 文件头里就有（数据长度 ÷ 每秒字节数，精确到样本级）；
+        ///  · 时长 → TTA 文件头里就有（TtaTagAccess.ReadDuration，精确到样本级，不解码）；
         ///  · 采样率 / 位深 / 码率 → AudioInfoFormatter 完整探测（含 ffmpeg）。
         /// 读不到标签不算失败：按「未知艺术家/未知专辑」建行，跟其它格式一个口径。
         /// </summary>
@@ -3249,7 +3248,7 @@ namespace CelesteMusicPlayer
                 Track = tag.Track,
                 Year = tag.Year,
                 Genre = genre,
-                Duration = ReadTtaDuration(path),
+                Duration = TtaTagAccess.ReadDuration(path),
                 FilePath = path,
                 FormatName = "TTA",
                 BitDepthText = bits > 0 ? bits + "bit" : "-",
@@ -3298,48 +3297,6 @@ namespace CelesteMusicPlayer
             }
 
             return item;
-        }
-
-        /// <summary>
-        /// 从 TTA 文件头算时长（精确，不用 ffmpeg）。头 22 字节（大端）：
-        /// "TTA1" + 音频格式(2) + 声道(2) + 位深(2) + 采样率(4) + 数据长度(4) + CRC(4)。
-        /// 读不出来返回 Zero（显示 00:00，不编）。
-        /// </summary>
-        private static TimeSpan ReadTtaDuration(string path)
-        {
-            try
-            {
-                using FileStream stream = File.OpenRead(path);
-                byte[] head = new byte[22];
-                if (stream.Read(head, 0, 22) != 22)
-                {
-                    return TimeSpan.Zero;
-                }
-
-                if (head[0] != 'T' || head[1] != 'T' || head[2] != 'A' || head[3] != '1')
-                {
-                    return TimeSpan.Zero;
-                }
-
-                ushort channels = (ushort)((head[6] << 8) | head[7]);
-                ushort bits = (ushort)((head[8] << 8) | head[9]);
-                uint rate = ((uint)head[10] << 24) | ((uint)head[11] << 16) | ((uint)head[12] << 8) | head[13];
-                uint dataLength = ((uint)head[14] << 24) | ((uint)head[15] << 16) | ((uint)head[16] << 8) | head[17];
-
-                if (rate == 0 || channels == 0 || bits == 0 || dataLength == 0)
-                {
-                    return TimeSpan.Zero;
-                }
-
-                double seconds = dataLength * 8.0 / ((double)rate * channels * bits);
-                return seconds > 0 && seconds < TimeSpan.MaxValue.TotalSeconds
-                    ? TimeSpan.FromSeconds(seconds)
-                    : TimeSpan.Zero;
-            }
-            catch
-            {
-                return TimeSpan.Zero;
-            }
         }
 
         /// <summary>44100 → 44.1kHz；48000 → 48kHz；2822400 → 2.82MHz。</summary>

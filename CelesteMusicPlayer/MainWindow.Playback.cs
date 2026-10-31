@@ -1562,10 +1562,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>TagLib 读取标题 / 艺术家 / 专辑 / 音轨号 / 年份 / 时长</summary>
+        /// <summary>TagLib 读取标题 / 艺术家 / 专辑 / 音轨号 / 年份 / 时长。
+        /// TTA 例外：TagLib 没有 TTA 容器解析器，走 <see cref="CreatePlaylistItemFromTta"/>。</summary>
         internal static PlaylistItem CreatePlaylistItemFromPath(string path)
         {
             if (SourceFromReference(path) is PlaylistItem referenced) return referenced;
+            if (TtaTagAccess.IsTtaPath(path)) return CreatePlaylistItemFromTta(path);
             string fileName = Path.GetFileNameWithoutExtension(path);
             string title = fileName;
             string artist = "未知艺术家";
@@ -1637,6 +1639,51 @@ namespace CelesteMusicPlayer
                 Year = year,
                 Genre = genre,
                 Duration = duration,
+                FilePath = path,
+                Rating = TrackStatsStore.Get(path)?.Rating ?? 0
+            };
+        }
+
+
+        /// <summary>
+        /// TTA 专用建条目（2026-10-31 补）：TagLib 没有 TTA 容器解析器，
+        /// <c>File.Create("xxx.tta")</c> 直接抛 UnsupportedFormatException，以前这条路
+        /// 一抛就被调用方 catch 掉 → 曲库扫描时 TTA 文件**整首丢掉**（实测 100 首素材只进 90 首）。
+        /// 现在：标签走 <see cref="TtaTagAccess.Read"/>（文件头 ID3v2 / 文件尾 APEv2），
+        /// 时长读 TTA 文件头（不解码）。缺省值口径与非 TTA 分支严格一致。
+        /// </summary>
+        private static PlaylistItem CreatePlaylistItemFromTta(string path)
+        {
+            TagEditModel tag = TtaTagAccess.Read(path);
+            string fileName = Path.GetFileNameWithoutExtension(path);
+
+            string title = string.IsNullOrWhiteSpace(tag.Title) ? fileName : tag.Title.Trim();
+
+            // 主曲库取 FirstPerformer；多值模型里就是第一个值
+            string artist = tag.Performers.Length > 0 && !string.IsNullOrWhiteSpace(tag.Performers[0])
+                ? tag.Performers[0].Trim()
+                : "未知艺术家";
+
+            string albumArtist = tag.AlbumArtists.Length > 0 && !string.IsNullOrWhiteSpace(tag.AlbumArtists[0])
+                ? tag.AlbumArtists[0].Trim()
+                : artist;
+
+            string album = string.IsNullOrWhiteSpace(tag.Album) ? "未知专辑" : tag.Album.Trim();
+            string genre = tag.Genres.Length > 0 && !string.IsNullOrWhiteSpace(tag.Genres[0])
+                ? tag.Genres[0].Trim()
+                : "未知流派";
+
+            return new PlaylistItem
+            {
+                Title = title,
+                Artist = artist,
+                AlbumArtist = albumArtist,
+                Album = album,
+                Track = tag.Track,
+                Disc = tag.Disc,
+                Year = tag.Year,
+                Genre = genre,
+                Duration = TtaTagAccess.ReadDuration(path),
                 FilePath = path,
                 Rating = TrackStatsStore.Get(path)?.Rating ?? 0
             };

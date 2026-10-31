@@ -72,6 +72,60 @@ namespace CelesteMusicPlayer
             return model;
         }
 
+        /// <summary>
+        /// 读 TTA 的时长 —— 靠文件头算，不用解码。
+        ///
+        /// TTA 头固定 22 字节，**所有多字节字段都是小端**（TTA 规范）：
+        ///   [0..3] "TTA1" | [4..5] format | [6..7] 声道 | [8..9] 位深
+        ///   [10..13] 采样率 | [14..17] 数据字节数 | [18..21] CRC32
+        /// 时长 = 数据字节数 × 8 ÷ (采样率 × 声道 × 位深)。
+        ///
+        /// ⚠ 这里以前写成大端（`head[6]<<8 | head[7]`），算出来的采样率是 5 亿多、
+        /// 声道 256，时长恒等于 0 秒 —— 2026-10-31 用 _tagfixtures 的 10 个 TTA 实测确认。
+        /// 另外 TTA 规范允许文件最前面贴一个 ID3v2 标签，所以要先跳过它再找 "TTA1"。
+        /// 读不到一律返回 TimeSpan.Zero（上层显示"-"，不算失败）。
+        /// </summary>
+        public static TimeSpan ReadDuration(string path)
+        {
+            try
+            {
+                using FileStream stream = IOFile.OpenRead(path);
+                int start = HeadId3v2Length(stream);
+                stream.Seek(start, SeekOrigin.Begin);
+
+                byte[] head = new byte[22];
+                if (stream.Read(head, 0, 22) != 22)
+                {
+                    return TimeSpan.Zero;
+                }
+
+                if (head[0] != 'T' || head[1] != 'T' || head[2] != 'A' || head[3] != '1')
+                {
+                    return TimeSpan.Zero;
+                }
+
+                int channels = head[6] | (head[7] << 8);
+                int bits = head[8] | (head[9] << 8);
+                uint rate = (uint)(head[10] | (head[11] << 8) | (head[12] << 16) | (head[13] << 24));
+                uint dataLength = (uint)(head[14] | (head[15] << 8) | (head[16] << 16) | (head[17] << 24));
+
+                if (rate == 0 || channels == 0 || bits == 0 || dataLength == 0)
+                {
+                    return TimeSpan.Zero;
+                }
+
+                double seconds = dataLength * 8.0 / ((double)rate * channels * bits);
+                return seconds > 0 && seconds < TimeSpan.MaxValue.TotalSeconds
+                    ? TimeSpan.FromSeconds(seconds)
+                    : TimeSpan.Zero;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TtaTagAccess.ReadDuration", caught);
+                return TimeSpan.Zero;
+            }
+        }
+
         /// <summary>把 TagLib 的标准标签属性映射进编辑模型（ID3v2 和 APEv2 都是 TagLib.Tag，同一套写法）。</summary>
         private static void ApplyToModel(TagEditModel model, TagLib.Tag tag)
         {
