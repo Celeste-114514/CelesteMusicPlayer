@@ -158,14 +158,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (PlayerElement == null)
-            {
-                _ = ShowErrorAsync("初始化失败", "PlayerElement 未生成，请检查 MainWindow.xaml 中的 x:Name。");
-                return;
-            }
-
             _mediaPlayer = new MediaPlayer();
-            PlayerElement.SetMediaPlayer(_mediaPlayer);
             _mediaPlayer.CommandManager.IsEnabled = false;
 
             _mediaPlayer.MediaOpened += Player_MediaOpened;
@@ -181,38 +174,6 @@ namespace CelesteMusicPlayer
             UpdateDesktopLyricsBadge();
             InitializeMusicPlayer2Features();
 
-            ProgressSlider.AddHandler(
-                UIElement.PointerPressedEvent,
-                new PointerEventHandler(ProgressSlider_PointerPressed),
-                handledEventsToo: true);
-            ProgressSlider.AddHandler(
-                UIElement.PointerReleasedEvent,
-                new PointerEventHandler(ProgressSlider_PointerReleased),
-                handledEventsToo: true);
-            ProgressSlider.AddHandler(
-                UIElement.PointerCaptureLostEvent,
-                new PointerEventHandler(ProgressSlider_PointerCaptureLost),
-                handledEventsToo: true);
-
-            // 页内播放条上的进度条（NowPlayingProgressSlider）必须做同样的事：
-            // Slider 内部会把 PointerPressed/Released 标成 Handled，XAML 里挂（或在代码里用 +=）都收不到，
-            // 结果是 _isUserSeeking 永远是 false —— 拖动时播放位置镜像会把滑块每秒改回去
-            // （表现为"不跟手、松手后跳回原进度"），松手也不会真正 seek。
-            if (NowPlayingProgressSlider != null)
-            {
-                NowPlayingProgressSlider.AddHandler(
-                    UIElement.PointerPressedEvent,
-                    new PointerEventHandler(NowPlayingProgressSlider_PointerPressed),
-                    handledEventsToo: true);
-                NowPlayingProgressSlider.AddHandler(
-                    UIElement.PointerReleasedEvent,
-                    new PointerEventHandler(NowPlayingProgressSlider_PointerReleased),
-                    handledEventsToo: true);
-                NowPlayingProgressSlider.AddHandler(
-                    UIElement.PointerCaptureLostEvent,
-                    new PointerEventHandler(NowPlayingProgressSlider_PointerCaptureLost),
-                    handledEventsToo: true);
-            }
 
             _positionTimer = DispatcherQueue.CreateTimer();
             _positionTimer.Interval = TimeSpan.FromMilliseconds(200);
