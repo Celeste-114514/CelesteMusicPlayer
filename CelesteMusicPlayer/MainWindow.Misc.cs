@@ -44,23 +44,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        /// <summary>当前设置是否处于 HiFi 独占输出模式（WASAPI 独占 / ASIO）。</summary>
-        /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>
-        private static bool IsDsdFile(string path)
-        {
-            string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
-            return ext is ".dsf" or ".dff";
-        }
-
-
-        /// <summary>返回 DSD 容器扩展名大写（"DSF"/"DFF"），非 DSD 返回 null。</summary>
-        private static string? DsdExtOf(string path)
-        {
-            string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
-            return ext switch { ".dsf" => "DSF", ".dff" => "DFF", _ => null };
-        }
-
-
         // 2026-10-31：IsHiFiModeSelected / IsHiFiSoftVolumeUiUnlocked 已搬到 MainWindow.Utilities.cs
         // （纯状态查询，18 + 10 处调用点全在活代码里，定义留在壳里等于壳被拴住）。
 
@@ -2239,32 +2222,6 @@ namespace CelesteMusicPlayer
             }
 
             return new SolidColorBrush(Color.FromArgb(60, 128, 128, 128));
-        }
-
-
-        private Brush ResolveCapsuleFillBrush()
-        {
-            // 同上：经典界面下按经典主题给一套明确的中性底色
-            if (FrostedGlass.ClassicMode != null)
-            {
-                return new SolidColorBrush(FrostedGlass.ClassicMode == "Light"
-                    ? Color.FromArgb(16, 0, 0, 0)
-                    : Color.FromArgb(26, 255, 255, 255));
-            }
-
-            if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out object? brushObj)
-                && brushObj is Brush brush)
-            {
-                return brush;
-            }
-
-            if (Application.Current.Resources.TryGetValue("ControlFillColorDefaultBrush", out object? controlBrush)
-                && controlBrush is Brush c)
-            {
-                return c;
-            }
-
-            return new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
         }
 
 

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using Color = Windows.UI.Color;
 using Windows.Storage.Streams;
@@ -747,5 +748,131 @@ namespace CelesteMusicPlayer
                 return null;
             }
         }
+        // DSD 判断与胶囊底色（2026-10-31 从 MainWindow.Misc.cs 搬来）：纯函数，只读扩展名 / FrostedGlass 经典模式 / 应用资源。
+
+        /// <summary>当前设置是否处于 HiFi 独占输出模式（WASAPI 独占 / ASIO）。</summary>
+        /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>
+        private static bool IsDsdFile(string path)
+        {
+            string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+            return ext is ".dsf" or ".dff";
+        }
+
+        /// <summary>返回 DSD 容器扩展名大写（"DSF"/"DFF"），非 DSD 返回 null。</summary>
+        private static string? DsdExtOf(string path)
+        {
+            string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+            return ext switch { ".dsf" => "DSF", ".dff" => "DFF", _ => null };
+        }
+
+        private Brush ResolveCapsuleFillBrush()
+        {
+            // 同上：经典界面下按经典主题给一套明确的中性底色
+            if (FrostedGlass.ClassicMode != null)
+            {
+                return new SolidColorBrush(FrostedGlass.ClassicMode == "Light"
+                    ? Color.FromArgb(16, 0, 0, 0)
+                    : Color.FromArgb(26, 255, 255, 255));
+            }
+
+            if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out object? brushObj)
+                && brushObj is Brush brush)
+            {
+                return brush;
+            }
+
+            if (Application.Current.Resources.TryGetValue("ControlFillColorDefaultBrush", out object? controlBrush)
+                && controlBrush is Brush c)
+            {
+                return c;
+            }
+
+            return new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+        }
+        // 强调色/界面基色/风格判断（2026-10-31 从 MainWindow.UiTheme.cs 搬来）：依赖 ResolveAccentBrush 与 ColorHelper（活），IsClassicUiStyleActive 是纯读设置。
+
+        private Color ResolveAccentColor()
+        {
+            if (ResolveAccentBrush() is SolidColorBrush scb && scb.Color.A > 0)
+            {
+                return scb.Color;
+            }
+
+            return Color.FromArgb(255, 0, 120, 212);
+        }
+
+        /// <summary>
+        /// 静态版的 ResolveAccentColor：给没有窗口实例的上下文（ColorHelper 的弹窗强调、
+        internal static Color ResolveAccentColorStatic()
+            => Instance?.ResolveAccentColor() ?? Color.FromArgb(255, 0, 120, 212);
+
+        private Brush ResolveAccentForegroundBrush()
+            => ColorHelper.ResolveContrastingForeground(ResolveAccentBrush());
+
+        internal static bool IsClassicUiStyleActive()
+        {
+            string mode;
+            try
+            {
+                mode = AppSettingsStore.Load().UiStyleMode;
+            }
+            catch
+            {
+                return false;
+            }
+
+            return mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
+        }
+
+        /// <summary>当前是否处于「不透明风格」（经典或极客）：这两类模式下背景图层 / 封面背景 / 预设渐变一律不显示。</summary>
+        internal static bool IsOpaqueUiStyleActive() => IsClassicUiStyleActive() || IsGeekUiStyleActive();
+
+        private Color ResolveUiBaseTintColor()
+        {
+            // 经典界面：直接给出经典底色（浅 = 浅灰、深 = 炭灰）。
+            // 不能走下面的候选色：浅色主题下那几个键取到的都是"接近白"被跳过，
+            // 最后落到深灰回退色，浅色界面里的描边/胶囊/多选底色就会发黑。
+            if (FrostedGlass.ClassicMode != null)
+            {
+                return FrostedGlass.ClassicMode == "Light"
+                    ? Color.FromArgb(255, 243, 243, 243)
+                    : Color.FromArgb(255, 32, 32, 32);
+            }
+
+            // 优先取右侧面板实际底色（用户看到的整体 UI 区域色）
+            if (ColorHelper.TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
+                && paneColor.A > 0
+                && !ColorHelper.IsNearWhite(paneColor))
+            {
+                return Color.FromArgb(255, paneColor.R, paneColor.G, paneColor.B);
+            }
+
+            FrameworkElement? anchor = Content as FrameworkElement ?? NowPlayingPaneContent;
+            string[] keys =
+            {
+                "CardBackgroundFillColorDefault",
+                "CardBackgroundFillColorDefaultBrush",
+                "SolidBackgroundFillColorBase",
+                "SolidBackgroundFillColorBaseBrush",
+                "ApplicationPageBackgroundThemeBrush"
+            };
+
+            foreach (string key in keys)
+            {
+                if (ColorHelper.TryGetThemeColor(anchor, key, out Color themeColor)
+                    && themeColor.A > 0
+                    && !ColorHelper.IsNearWhite(themeColor))
+                {
+                    return Color.FromArgb(255, themeColor.R, themeColor.G, themeColor.B);
+                }
+            }
+
+            // 深色 Mica / 深灰 UI 回退（勿用浅灰，否则矩形发白）
+            return Color.FromArgb(255, 42, 42, 42);
+        }
+        // 主窗口单例（2026-10-31 从 MainWindow.UiTheme.cs 搬来）：全项目都在用的核心静态属性，声明搬家零行为变化；随行的 ResolveAccentColorStatic 依赖它。
+
+        /// <summary>设置页等子窗口用来回写主窗口状态。</summary>
+        internal static MainWindow? Instance { get; private set; }
     }
 }

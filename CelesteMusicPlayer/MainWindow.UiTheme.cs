@@ -43,10 +43,6 @@ namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-        /// <summary>设置页等子窗口用来回写主窗口状态。</summary>
-        internal static MainWindow? Instance { get; private set; }
-
-
         private void MainWindow_Loaded(dynamic sender, dynamic e)
         {
             StartupLog.Write("MainWindow_Loaded begin");
@@ -377,26 +373,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        internal static bool IsClassicUiStyleActive()
-        {
-            string mode;
-            try
-            {
-                mode = AppSettingsStore.Load().UiStyleMode;
-            }
-            catch
-            {
-                return false;
-            }
-
-            return mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
-        }
-
         /// <summary>极客界面模式的设置值（设置项「界面风格」下拉里的「极客」）。</summary>
         // UiStyleGeek 常量 2026-10-31 随 IsGeekUiStyleActive 一起搬到 MainWindow.Utilities.cs。
-
-        /// <summary>当前是否处于「不透明风格」（经典或极客）：这两类模式下背景图层 / 封面背景 / 预设渐变一律不显示。</summary>
-        internal static bool IsOpaqueUiStyleActive() => IsClassicUiStyleActive() || IsGeekUiStyleActive();
 
         /// <summary>
         /// 极客模式的进程内缓存（第一次问的时候读一次设置，之后沿用）。
@@ -1687,51 +1665,6 @@ namespace CelesteMusicPlayer
 
         // 左侧音乐库面板的收起/展开功能已按用户要求移除（面板固定展开）。
 
-        private Color ResolveUiBaseTintColor()
-        {
-            // 经典界面：直接给出经典底色（浅 = 浅灰、深 = 炭灰）。
-            // 不能走下面的候选色：浅色主题下那几个键取到的都是"接近白"被跳过，
-            // 最后落到深灰回退色，浅色界面里的描边/胶囊/多选底色就会发黑。
-            if (FrostedGlass.ClassicMode != null)
-            {
-                return FrostedGlass.ClassicMode == "Light"
-                    ? Color.FromArgb(255, 243, 243, 243)
-                    : Color.FromArgb(255, 32, 32, 32);
-            }
-
-            // 优先取右侧面板实际底色（用户看到的整体 UI 区域色）
-            if (ColorHelper.TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
-                && paneColor.A > 0
-                && !ColorHelper.IsNearWhite(paneColor))
-            {
-                return Color.FromArgb(255, paneColor.R, paneColor.G, paneColor.B);
-            }
-
-            FrameworkElement? anchor = Content as FrameworkElement ?? NowPlayingPaneContent;
-            string[] keys =
-            {
-                "CardBackgroundFillColorDefault",
-                "CardBackgroundFillColorDefaultBrush",
-                "SolidBackgroundFillColorBase",
-                "SolidBackgroundFillColorBaseBrush",
-                "ApplicationPageBackgroundThemeBrush"
-            };
-
-            foreach (string key in keys)
-            {
-                if (ColorHelper.TryGetThemeColor(anchor, key, out Color themeColor)
-                    && themeColor.A > 0
-                    && !ColorHelper.IsNearWhite(themeColor))
-                {
-                    return Color.FromArgb(255, themeColor.R, themeColor.G, themeColor.B);
-                }
-            }
-
-            // 深色 Mica / 深灰 UI 回退（勿用浅灰，否则矩形发白）
-            return Color.FromArgb(255, 42, 42, 42);
-        }
-
-
         /// <summary>把无边框窗口的 DWM 边框/标题栏描边色设为当前 UI 底色，
         /// 消除任务栏缩略图/窗口四周跟随系统强调色的"主题色框"。</summary>
         private void ApplyBorderColorFromUiTint()
@@ -1883,9 +1816,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-        private Brush ResolveAccentForegroundBrush()
-            => ColorHelper.ResolveContrastingForeground(ResolveAccentBrush());
 
         private void MainWindow_Closed(dynamic sender, dynamic e)
         {
@@ -2131,22 +2061,6 @@ namespace CelesteMusicPlayer
                 lyrics.ClosedByUser -= OnDesktopLyricsClosedByUser; lyrics.Dispose();
             }
         }
-
-
-        private Color ResolveAccentColor()
-        {
-            if (ResolveAccentBrush() is SolidColorBrush scb && scb.Color.A > 0)
-            {
-                return scb.Color;
-            }
-
-            return Color.FromArgb(255, 0, 120, 212);
-        }
-
-        /// <summary>
-        /// 静态版的 ResolveAccentColor：给没有窗口实例的上下文（ColorHelper 的弹窗强调、
-        internal static Color ResolveAccentColorStatic()
-            => Instance?.ResolveAccentColor() ?? Color.FromArgb(255, 0, 120, 212);
 
 
         /// <summary>
