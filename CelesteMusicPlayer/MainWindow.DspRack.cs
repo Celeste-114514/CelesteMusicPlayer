@@ -188,7 +188,6 @@ namespace CelesteMusicPlayer
         {
             if (!_dspRackLoading)
             {
-                ImportExtraParameterInput(sender);
             }
 
             if (_dspRackLoading)
@@ -223,7 +222,6 @@ namespace CelesteMusicPlayer
             // 只把被拖动的这一条导入模型（LoadDspRackUi 期间由它自己装载，别回写）。
             if (!_dspRackLoading)
             {
-                ImportExtraParameterInput(sender);
             }
             RefreshDspCompReadouts();
 
@@ -277,7 +275,6 @@ namespace CelesteMusicPlayer
         {
             if (!_dspRackLoading)
             {
-                ImportExtraParameterInput(sender);
             }
 
             if (_dspRackLoading)
@@ -308,7 +305,6 @@ namespace CelesteMusicPlayer
 
             if (!_dspRackLoading)
             {
-                ImportExtraParameterInput(sender);
             }
             RefreshDspFieldReadouts();
 
@@ -332,7 +328,6 @@ namespace CelesteMusicPlayer
         {
             if (!_dspRackLoading)
             {
-                ImportExtraParameterInput(sender);
             }
 
             if (_dspRackLoading)
@@ -363,7 +358,6 @@ namespace CelesteMusicPlayer
 
             if (!_dspRackLoading)
             {
-                ImportExtraParameterInput(sender);
             }
             RefreshDspMatrixReadouts();
 

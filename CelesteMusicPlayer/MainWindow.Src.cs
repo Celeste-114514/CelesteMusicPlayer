@@ -51,7 +51,6 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                ImportExtraParameterInput(sender);
                 int hz = SrcParameters.TargetHz;
                 UpdateSrcStateText(hz);
 
@@ -78,7 +77,6 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                ImportExtraParameterInput(sender);
                 string key = SrcParameters.Quality;
 
                 AppSettingsState s = AppSettingsStore.Load();
@@ -101,7 +99,6 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                ImportExtraParameterInput(sender);
                 string key = SrcParameters.Dither;
 
                 AppSettingsState s = AppSettingsStore.Load();

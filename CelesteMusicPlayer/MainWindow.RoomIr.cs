@@ -74,16 +74,6 @@ namespace CelesteMusicPlayer
             UpdateRoomTrimLabel();
         }
 
-        /// <summary>投影之后补一次：路径框与两条读数（滑杆/开关由通用投影负责）。</summary>
-        private void RefreshFirReadouts()
-        {
-            if (RoomIrPathBox != null)
-            {
-            }
-
-            UpdateRoomIrGainText();
-            UpdateRoomTrimLabel();
-        }
 
         /// <summary>把模型里的房间校正参数落盘并实时下发（网页命令 / 页头电源开关 / 面板「应用」共用）。</summary>
         private void ApplyFirParameters()
@@ -144,7 +134,6 @@ namespace CelesteMusicPlayer
         private void RoomIrGainSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
             // 增益只进模型与读数，落盘要按「应用」（与旧面板一致）
-            ImportExtraParameterInput(sender);
             UpdateRoomIrGainText();
         }
 

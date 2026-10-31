@@ -470,7 +470,6 @@ namespace CelesteMusicPlayer
 
             if (SetModelControl("RoomTrimSlider", NumberMessage(db)))
             {
-                ProjectExtraParameters();
                 ApplyFirParameters();
             }
         }
@@ -497,7 +496,6 @@ namespace CelesteMusicPlayer
             double trim = Math.Min(Math.Round(FirParameters.Current.TrimDb, 1), -6.0);
             SetModelControl("RoomTrimSlider", NumberMessage(trim));
             SetModelControl("RoomIrEnabledToggle", SwitchMessage(true));
-            ProjectExtraParameters();
             ApplyFirParameters();
 
             RefreshRoomCorrectionInfo();
@@ -606,7 +604,6 @@ namespace CelesteMusicPlayer
             }
 
             // trim 是「实时生效」的那一个：拖动即进模型并落盘下发（与旧行为一致）
-            ImportExtraParameterInput(sender);
             UpdateRoomTrimLabel();
             ApplyFirParameters();
             UpdateDspBitPerfectUi();

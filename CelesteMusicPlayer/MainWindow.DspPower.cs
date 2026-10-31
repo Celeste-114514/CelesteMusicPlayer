@@ -68,7 +68,6 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    ProjectExtraParameters();
                     ApplyReplayGainToEngine();
                 });
 
@@ -82,7 +81,6 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    ProjectExtraParameters();
                     ApplySrcSettings();
                 });
 
@@ -120,7 +118,6 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    ProjectExtraParameters();
                     ApplyCompParameters();
                 });
 
@@ -191,7 +188,6 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    ProjectExtraParameters();
                     ApplyFieldParameters();
                 });
 
@@ -204,7 +200,6 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    ProjectExtraParameters();
                     ApplyMatrixParameters();
                 });
 
@@ -218,7 +213,6 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    ProjectExtraParameters();
                     ApplyFirParameters();
                 },
                 () => FirParameters.HasIr ? null : "先导入脉冲响应 (IR)");

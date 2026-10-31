@@ -1225,7 +1225,6 @@ namespace CelesteMusicPlayer
 
         private void AudioFxRgPreventClipping_Toggled(object sender, RoutedEventArgs e)
         {
-            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyReplayGainToEngine();
         }
 

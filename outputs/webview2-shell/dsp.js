@@ -193,7 +193,7 @@
   const VISUAL_OWNED = {
     headroom: ['AudioFxSafetyHeadroomSlider', 'AudioFxSafetyLimiterToggle'],
     fir: ['RoomTrimSlider', 'RoomIrGainSlider', 'RoomIrEnabledToggle'],
-    comp: ['DspCompToggle', 'DspCompPeakToggle'],
+    comp: ['DspCompToggle'],
     rg: ['AudioFxRgModeCombo'],
     channel: ['AudioFxChannelMonoCombo', 'AudioFxChannelSwapToggle', 'AudioFxChannelInvertLToggle', 'AudioFxChannelInvertRToggle']
   };
@@ -229,7 +229,6 @@
     DspCompKneeSlider: { label: '拐点', unit: ' dB' },
     DspCompMakeupSlider: { label: '补偿增益', unit: ' dB' },
     DspCompMixSlider: { label: '干湿比', unit: ' %' },
-    DspCompPeakToggle: { label: '峰值检测' },
 
     DspPowerChannel: { label: '模块开关' },
     AudioFxChannelToggle: { label: '声道处理' },

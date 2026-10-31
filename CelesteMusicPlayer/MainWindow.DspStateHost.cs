@@ -57,53 +57,6 @@ public sealed partial class MainWindow
 
     private static JsonElement NumberMessage(double value) => JsonSerializer.SerializeToElement(new { value });
 
-    // Presentation adapter only. Guarded writes cannot feed back into the parameter model.
-    private void ProjectExtraParameters()
-    {
-        bool loading = _audioFxLoading, syncing = _dspPowerSyncing;
-        _audioFxLoading = true; _dspPowerSyncing = true;
-        try
-        {
-            foreach (string name in ProjectedControls)
-            {
-                if (!ModelOwns(name)) continue;
-                var descriptor = JsonSerializer.SerializeToElement(DescribeModelControl(name));
-                switch (WebDspControl(name))
-                {
-                    case Slider slider: slider.Value = descriptor.GetProperty("value").GetDouble(); break;
-                    case ToggleSwitch toggle: toggle.IsOn = descriptor.GetProperty("value").GetBoolean(); break;
-                    case ComboBox combo: combo.SelectedIndex = descriptor.GetProperty("index").GetInt32(); break;
-                }
-            }
-        }
-        finally { _audioFxLoading = loading; _dspPowerSyncing = syncing; }
-        RefreshCrossfeedCutoffReadout(); RefreshDspXfeedLevelReadout(); RedrawDspXfeedCurve(); UpdateDspChannelBars();
-        RefreshAudioFxRgInfo();
-        RefreshFirReadouts();
-    }
-
-    // Legacy editors may still raise input events. Import only the field that changed,
-    // rather than reconstructing all business parameters from controls on every EQ edit.
-    private void ImportExtraParameterInput(object sender)
-    {
-        if (_audioFxLoading || !_audioFxPanelReady) return;
-        foreach (string name in ProjectedControls)
-        {
-            if (name.StartsWith("DspPower", StringComparison.Ordinal) || !ModelOwns(name)) continue;
-            if (!ReferenceEquals(WebDspControl(name), sender)) continue;
-            var message = sender switch
-            {
-                Slider slider => JsonSerializer.SerializeToElement(new { value = slider.Value }),
-                ToggleSwitch toggle => JsonSerializer.SerializeToElement(new { value = toggle.IsOn }),
-                ComboBox combo => JsonSerializer.SerializeToElement(new { index = combo.SelectedIndex }),
-                _ => default
-            };
-            if (message.ValueKind == JsonValueKind.Object) SetModelControl(name, message);
-            return;
-        }
-
-    }
-
     // DSP 装载中旗标（2026-10-31 从 MainWindow.EqDsp.cs 搬来）：DspStateHost 投影网页状态在读写。
     private bool _audioFxLoading;
     // DSP 电源开关防回环旗标（2026-10-31 从 MainWindow.DspPower.cs 搬来）：同上，DspStateHost 在读写。

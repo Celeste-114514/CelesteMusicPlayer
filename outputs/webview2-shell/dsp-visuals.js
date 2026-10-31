@@ -373,7 +373,7 @@
         ['补偿增益',db(v('DspCompMakeupSlider',0))],
         ['干湿比',Math.round(Number(v('DspCompMixSlider',100)))+' %']
       ]));
-      root.append(actions([['恢复默认',async()=>{await set('DspCompThresholdSlider',-12);await set('DspCompRatioSlider',4);refresh();}],['峰值检测',async()=>{await set('DspCompPeakToggle',!v('DspCompPeakToggle'));refresh();},{active:!!v('DspCompPeakToggle')}]],'dsp-compressor-actions'));
+      root.append(actions([['恢复默认',async()=>{await set('DspCompThresholdSlider',-12);await set('DspCompRatioSlider',4);refresh();}]],'dsp-compressor-actions'));
     }
 
     // ---- Stereo field / Matrix / ReplayGain ----------------------------------------------
