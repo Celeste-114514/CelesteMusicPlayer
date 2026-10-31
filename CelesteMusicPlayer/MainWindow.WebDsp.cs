@@ -338,7 +338,7 @@ namespace CelesteMusicPlayer
             {
                 "DspPowerComp", "DspCompToggle", "DspCompThresholdSlider", "DspCompRatioSlider",
                 "DspCompAttackSlider", "DspCompReleaseSlider", "DspCompKneeSlider",
-                "DspCompMakeupSlider", "DspCompMixSlider", "DspCompPeakToggle"
+                "DspCompMakeupSlider", "DspCompMixSlider"
             },
             ["channel"] = new[]
             {
@@ -380,88 +380,6 @@ namespace CelesteMusicPlayer
             return index >= 0 && index < active.Length && active[index];
         }
 
-        private Dictionary<string, FrameworkElement>? _webDspControls;
-
-        /// <summary>
-        /// Resolves a control by its x:Name. The map is built from the generated fields rather than
-        /// from RootShell.FindName on purpose: a typo in a name then fails at compile time instead of
-        /// turning into a page that silently renders nothing at runtime.
-        /// </summary>
-        private FrameworkElement? WebDspControl(string name)
-        {
-            if (_webDspControls == null)
-            {
-                var map = new Dictionary<string, FrameworkElement>(StringComparer.Ordinal);
-                void Add(string key, FrameworkElement? element)
-                {
-                    if (element != null)
-                        map[key] = element;
-                }
-
-                Add("DspPowerHeadroom", DspPowerHeadroom);
-                Add("AudioFxSafetyHeadroomSlider", AudioFxSafetyHeadroomSlider);
-                Add("AudioFxSafetyLimiterToggle", AudioFxSafetyLimiterToggle);
-
-                Add("DspPowerRg", DspPowerRg);
-                Add("AudioFxRgModeCombo", AudioFxRgModeCombo);
-                Add("AudioFxRgPreampSlider", AudioFxRgPreampSlider);
-                Add("AudioFxRgPreventClippingToggle", AudioFxRgPreventClippingToggle);
-
-                Add("DspPowerSrc", DspPowerSrc);
-                Add("SrcRateCombo", SrcRateCombo);
-                Add("SrcQualityCombo", SrcQualityCombo);
-                Add("SrcDitherCombo", SrcDitherCombo);
-
-                Add("DspPowerComp", DspPowerComp);
-                Add("DspCompToggle", DspCompToggle);
-                Add("DspCompThresholdSlider", DspCompThresholdSlider);
-                Add("DspCompRatioSlider", DspCompRatioSlider);
-                Add("DspCompAttackSlider", DspCompAttackSlider);
-                Add("DspCompReleaseSlider", DspCompReleaseSlider);
-                Add("DspCompKneeSlider", DspCompKneeSlider);
-                Add("DspCompMakeupSlider", DspCompMakeupSlider);
-                Add("DspCompMixSlider", DspCompMixSlider);
-                Add("DspCompPeakToggle", DspCompPeakToggle);
-
-                Add("DspPowerChannel", DspPowerChannel);
-                Add("AudioFxChannelToggle", AudioFxChannelToggle);
-                Add("AudioFxChannelBalanceSlider", AudioFxChannelBalanceSlider);
-                Add("AudioFxChannelLeftGainSlider", AudioFxChannelLeftGainSlider);
-                Add("AudioFxChannelRightGainSlider", AudioFxChannelRightGainSlider);
-                Add("AudioFxChannelMonoCombo", AudioFxChannelMonoCombo);
-                Add("AudioFxChannelSwapToggle", AudioFxChannelSwapToggle);
-                Add("AudioFxChannelInvertLToggle", AudioFxChannelInvertLToggle);
-                Add("AudioFxChannelInvertRToggle", AudioFxChannelInvertRToggle);
-                Add("AudioFxChannelLeftDelaySlider", AudioFxChannelLeftDelaySlider);
-                Add("AudioFxChannelRightDelaySlider", AudioFxChannelRightDelaySlider);
-                Add("DspPowerXfeed", DspPowerXfeed);
-                Add("AudioFxChannelCrossfeedToggle", AudioFxChannelCrossfeedToggle);
-                Add("AudioFxChannelCrossfeedSlider", AudioFxChannelCrossfeedSlider);
-                Add("AudioFxChannelCrossfeedCutoffSlider", AudioFxChannelCrossfeedCutoffSlider);
-
-                Add("DspPowerField", DspPowerField);
-                Add("DspFieldToggle", DspFieldToggle);
-                Add("DspFieldWidthSlider", DspFieldWidthSlider);
-                Add("DspFieldCenterSlider", DspFieldCenterSlider);
-                Add("DspFieldSideSlider", DspFieldSideSlider);
-
-                Add("DspPowerMatrix", DspPowerMatrix);
-                Add("DspMatrixToggle", DspMatrixToggle);
-                Add("DspMatrixLlSlider", DspMatrixLlSlider);
-                Add("DspMatrixLrSlider", DspMatrixLrSlider);
-                Add("DspMatrixRlSlider", DspMatrixRlSlider);
-                Add("DspMatrixRrSlider", DspMatrixRrSlider);
-
-                Add("DspPowerFir", DspPowerFir);
-                Add("RoomIrEnabledToggle", RoomIrEnabledToggle);
-                Add("RoomIrGainSlider", RoomIrGainSlider);
-                Add("RoomTrimSlider", RoomTrimSlider);
-
-                _webDspControls = map;
-            }
-
-            return _webDspControls.TryGetValue(name, out FrameworkElement? control) ? control : null;
-        }
 
         private object[] WebDspDescribeModule(string module)
         {
@@ -476,115 +394,27 @@ namespace CelesteMusicPlayer
 
         private IEnumerable<object> WebDspDescribeControl(string name)
         {
-            if (ModelOwns(name))
-            {
-                yield return DescribeModelControl(name);
-                yield break;
-            }
-
-            if (WebDspControl(name) is not FrameworkElement element)
+            if (!ModelOwns(name))
                 yield break;
 
-            object? described = element switch
-            {
-                Slider slider => new
-                {
-                    name,
-                    kind = "slider",
-                    value = slider.Value,
-                    min = slider.Minimum,
-                    max = slider.Maximum,
-                    step = slider.StepFrequency,
-                    enabled = slider.IsEnabled
-                },
-                ToggleSwitch toggle => new
-                {
-                    name,
-                    kind = "switch",
-                    value = toggle.IsOn,
-                    enabled = toggle.IsEnabled
-                },
-                CheckBox check => new
-                {
-                    name,
-                    kind = "switch",
-                    value = check.IsChecked == true,
-                    enabled = check.IsEnabled
-                },
-                ComboBox combo => new
-                {
-                    name,
-                    kind = "combo",
-                    index = combo.SelectedIndex,
-                    items = combo.Items.OfType<object>().Select(item => WebDspComboLabel(item)).ToArray(),
-                    enabled = combo.IsEnabled
-                },
-                _ => null
-            };
-
-            if (described != null)
-                yield return described;
-        }
-
-        /// <summary>ComboBox items may be plain strings or ComboBoxItem; both are shown by their text.</summary>
-        private static string WebDspComboLabel(object item)
-        {
-            if (item is ComboBoxItem comboItem)
-                return comboItem.Content?.ToString() ?? "";
-            return item?.ToString() ?? "";
+            yield return DescribeModelControl(name);
         }
 
         private void WebDspApplyControl(string name, JsonElement msg)
         {
-            if (ModelOwns(name))
-            {
-                if (SetModelControl(name, msg))
-                {
-                    if (RgParameters.Owns(name)) ApplyReplayGainToEngine();
-                    else if (SrcParameters.Owns(name)) ApplySrcSettings();
-                    else if (CompParameters.Owns(name)) ApplyCompParameters();
-                    else if (FieldParameters.Owns(name)) ApplyFieldParameters();
-                    else if (MatrixParameters.Owns(name)) ApplyMatrixParameters();
-                    else if (FirParameters.Owns(name)) ApplyFirParameters();
-                    else ApplyDspToEngine();
-                }
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(name))
-                throw new ArgumentException("缺少控件名。");
-            if (WebDspControl(name) is not FrameworkElement element)
+            if (!ModelOwns(name))
                 throw new ArgumentException("控件不存在：" + name);
 
-            switch (element)
-            {
-                case Slider slider:
-                    if (msg.TryGetProperty("value", out var valueElement) && valueElement.ValueKind == JsonValueKind.Number)
-                        slider.Value = WebDspFinite(valueElement, slider.Minimum, slider.Maximum);
-                    break;
+            if (!SetModelControl(name, msg))
+                return;
 
-                case ToggleSwitch toggle:
-                    if (msg.TryGetProperty("value", out var toggleElement))
-                        toggle.IsOn = toggleElement.ValueKind == JsonValueKind.True;
-                    break;
-
-                case CheckBox check:
-                    if (msg.TryGetProperty("value", out var checkElement))
-                        check.IsChecked = checkElement.ValueKind == JsonValueKind.True;
-                    break;
-
-                case ComboBox combo:
-                    if (msg.TryGetProperty("index", out var indexElement) && indexElement.ValueKind == JsonValueKind.Number)
-                    {
-                        int index = (int)indexElement.GetDouble();
-                        if (index >= 0 && index < combo.Items.Count)
-                            combo.SelectedIndex = index;
-                    }
-                    break;
-
-                default:
-                    throw new ArgumentException("这个控件不支持从网页修改：" + name);
-            }
+            if (RgParameters.Owns(name)) ApplyReplayGainToEngine();
+            else if (SrcParameters.Owns(name)) ApplySrcSettings();
+            else if (CompParameters.Owns(name)) ApplyCompParameters();
+            else if (FieldParameters.Owns(name)) ApplyFieldParameters();
+            else if (MatrixParameters.Owns(name)) ApplyMatrixParameters();
+            else if (FirParameters.Owns(name)) ApplyFirParameters();
+            else ApplyDspToEngine();
         }
 
         private static string ReadString(JsonElement msg, string property)
