@@ -35,7 +35,8 @@
 - ⚠ 命令行传文件走「零散播放窗口」（精简引擎），测不到 FIR/EQ。
 
 ## 服务边界（W13 主线）
-- 曲目动作 `WebTrackActionService`（trackAction + browse）、目录 `WebFolderBrowseService`、曲库 `WebLibraryService`、
+- 曲目动作 `WebTrackActionService`（trackAction + browse）、队列 `WebQueueService`（queue + more）、
+  目录 `WebFolderBrowseService`、曲库 `WebLibraryService`、
   标签 `WebTagService`（tags 全部：list/read/write + 在线搜索 + 歌词 + 改名 + 封面，会话态在实例里所以是单例）、
   设置 `WebSettingsService`、DSP 参数 `Dsp*Parameters`。宿主能力各走一个 `I*Host`，
   **只放服务造不出来的**（真播放/删盘/外部程序/页面快照）。
@@ -74,6 +75,10 @@
 - ✅ publish 崩溃解法：`python _publish_retry_clean.py 8`（每轮关构建服务 + 清 obj/bin + 重试）。
 - ⚠⚠ **publish 成功 ≠ 产物正常**：exit=0、`error CS`=0，DLL 却少约 106 KB（缺 CsWinRT `WinRT.*GenericHelpers/*VtableClasses`）。
   **同步 dist 前必须先看体积**（正常 3.0–3.1 MB），突变就重编，别信 exit=0。坏产物"能启动也能跑"，功能测试发现不了。
+  重跑 `_publish_retry_clean.py` **救不回来**（它只清 `obj/x64`+`bin/x64`，不清 `bin/Release`）——
+  要把 `obj`、`bin/Release`、`bin/x64` **整个**移走再 publish。
+- ⚠ 干净 publish 只有 **269 个文件**（UseWinUI=false + AppSDK 已删）：不带 `DirectML.dll`/`CoreMessagingXP.dll`/
+  `dwmcorei.dll`/`.mui`/`.winmd`。同步 dist 会报 `STALE=293`，那是 W13 之前的残留，**不是坏产物**。
 - ⚠ **Edit 工具会整文件改换行**：CRLF 被写成全 LF，diff 从 1 行炸成上千行。改完必看 `git diff --stat`；
   要恢复用 `git show HEAD:<path>` 取原字节、只换目标片段、写临时文件再 `os.replace`。
 - ⚠ 只改网页不必等 publish；**改了 C# 必须等 publish 成功**。
