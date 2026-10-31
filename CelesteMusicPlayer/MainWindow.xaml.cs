@@ -418,7 +418,7 @@ namespace CelesteMusicPlayer
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
         // W13：艺术家头像编辑独立窗口随 XAML 界面下线。
         private ITrayIcon? _trayIcon;
-        private TaskbarThumbnailButtons? _taskbarButtons;
+        // _taskbarButtons 已随 NativeTaskbar.cs 域整体转活（2026-10-31 第十八刀）。
         // 任务栏缩略图按钮专用：宿主 WinUI 矢量 / FontIcon 的隐藏 Canvas（在视觉树中、Opacity=0、
         // 位置偏移到 -10000,-10000，肉眼看不见但能正常 measure/arrange/render）。
         // 用于把图标渲染成 HICON，避免手绘心形在小尺寸下模糊。

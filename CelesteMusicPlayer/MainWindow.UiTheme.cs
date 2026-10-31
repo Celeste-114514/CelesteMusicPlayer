@@ -75,41 +75,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private DispatcherQueueTimer? _thumbPumpTimer;
-        private int _thumbPumpTicks;
-
-        private void StartThumbnailButtonsPump()
-        {
-            if (_thumbPumpTimer != null) return;
-            var timer = DispatcherQueue.CreateTimer();
-            timer.Interval = TimeSpan.FromMilliseconds(250);
-            int maxTicks = 40; // ~10 秒，足以覆盖 Explorer 任务栏重绘窗口
-            timer.Tick += async (s, e) =>
-            {
-                _thumbPumpTicks++;
-                try
-                {
-                    if (_taskbarButtons != null)
-                    {
-                        await _taskbarButtons.PumpAsync();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    StartupLog.WriteException("thumbPump.Tick", ex);
-                }
-                if (_thumbPumpTicks >= maxTicks)
-                {
-                    timer.Stop();
-                    _thumbPumpTimer = null;
-                    StartupLog.Write("[thumb] Pump 已停止 ticks=" + _thumbPumpTicks);
-                }
-            };
-            timer.Start();
-            _thumbPumpTimer = timer;
-            StartupLog.Write("[thumb] Pump 已启动，每 250ms 一次，最多 40 次");
-        }
-
+        // （2026-10-31 第十八刀：缩略图按钮泵三件已随 NativeTaskbar.cs 域整体转活）
 
         private void ApplyStartupOverlayWindows()
         {
@@ -1284,129 +1250,8 @@ namespace CelesteMusicPlayer
         // 选中高亮（圆角灰底 + 左侧直竖条，切换带淡入动画）、收起时只留图标
         // =====================================================================
 
-        /// <summary>
-        /// 一个左侧导航条目。指示条（Indicator）是按钮外面的独立 Border ——
-        /// 画在按钮的左边框上会被 CornerRadius 裁成一段弧，用户反馈过"竖条是弧形"。
-        /// </summary>
-        private sealed class NavItemRef
-        {
-            public Button Button = null!;
-            public Border? Indicator;
-            public FrameworkElement? Glyph;   // 背景图式用的单色图标（FontIcon / Path）
-            public FrameworkElement? Emoji;   // 经典模式用的彩色 emoji
-            public TextBlock? Label;
-            public bool IsTool;               // 音效处理 / 播放列表
-
-            // 极客界面不用 Fluent 字形（它就是"塑料感"的来源）：换成等宽符号 + 磷光单色
-            public string GeekSymbol = string.Empty;
-            public Panel? GlyphHost;          // 图标挂在哪个容器上（符号文本插同一层）
-            public TextBlock? GeekGlyph;      // 懒创建；切出极客只是隐藏，不删元素
-        }
-
-        private List<NavItemRef>? _navItems;
+        // （2026-10-31 第十九刀：NavItemRef 条目模型 + NavItems 懒构建已转活 MainWindow.NavHost.cs）
         private string? _lastAnimatedNavTag;
-
-        private List<NavItemRef> NavItems => _navItems ??= BuildNavItems();
-
-        private List<NavItemRef> BuildNavItems()
-        {
-            var items = new List<NavItemRef>();
-            AddNavItem(items, NavSongsButton, NavSongsIndicator, false, "♪");
-            AddNavItem(items, NavAlbumsButton, NavAlbumsIndicator, false, "■");
-            AddNavItem(items, NavArtistsButton, NavArtistsIndicator, false, "◉");
-            AddNavItem(items, NavAlbumArtistsButton, NavAlbumArtistsIndicator, false, "◎");
-            AddNavItem(items, NavFavoritesButton, NavFavoritesIndicator, false, "♥");
-            AddNavItem(items, NavRatingsButton, NavRatingsIndicator, false, "★");
-            AddNavItem(items, NavRecentButton, NavRecentIndicator, false, "↺");
-            AddNavItem(items, NavGenreButton, NavGenreIndicator, false, "※");
-            AddNavItem(items, NavYearButton, NavYearIndicator, false, "▒");
-            AddNavItem(items, NavMostPlayedButton, NavMostPlayedIndicator, false, "▲");
-            AddNavItem(items, NavFoldersButton, NavFoldersIndicator, false, "▤");
-            // 2026-10-12 用户要求：播放列表 / 播放队列 上移到分割线上方（媒体库之下）。
-            // IsTool 只作标注，动到哪组就跟着改。
-            AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, false, "▦");
-            AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false, "≡");
-            AddNavItem(items, NavWebDavButton, NavWebDavIndicator, false, "☁");
-            // 「标签」（2026-10-13 阶段 5a）：工具区最上一格，与音效处理 / 设置同组
-            AddNavItem(items, NavTagEditButton, NavTagEditIndicator, true, "✎");
-            AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true, "♫");
-            // 「设置」（2026-10-12 阶段 0）：工具区最下，点进去是主区里的设置面板
-            AddNavItem(items, NavSettingsButton, NavSettingsIndicator, true, "⚙");
-
-            // 自检：条目里的「字形 / emoji / 文字」是靠遍历按钮内容抓的，抓漏了会静默退化
-            // （经典界面下 emoji 不显示、图标还是老的单色字形）。这里留一行日志便于核对。
-            int glyph = items.Count(i => i.Glyph != null);
-            int emoji = items.Count(i => i.Emoji != null);
-            int label = items.Count(i => i.Label != null);
-            int bar = items.Count(i => i.Indicator != null);
-            StartupLog.Write($"[导航] 条目={items.Count} 字形={glyph} emoji={emoji} 文字={label} 竖条={bar}");
-            return items;
-        }
-
-        private static void AddNavItem(List<NavItemRef> items, Button? button, Border? indicator, bool isTool, string geekSymbol)
-        {
-            if (button == null)
-            {
-                return;
-            }
-
-            var item = new NavItemRef { Button = button, Indicator = indicator, IsTool = isTool, GeekSymbol = geekSymbol };
-
-            // 竖条以自身中心缩放（"长出来"的动画用）。XAML 里不写，省得 15 个条目抄 15 遍。
-            if (indicator != null)
-            {
-                indicator.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
-                indicator.RenderTransform = new ScaleTransform();
-            }
-
-            if (button.Content is DependencyObject content)
-            {
-                // 带父容器的遍历：极客符号要插在图标那一层，得知道图标挂在哪个 Panel 上
-                var queue = new Queue<(DependencyObject Node, Panel? Parent)>();
-                queue.Enqueue((content, null));
-
-                while (queue.Count > 0)
-                {
-                    (DependencyObject node, Panel? parent) = queue.Dequeue();
-
-                    if (node is TextBlock block)
-                    {
-                        string? marker = block.Tag as string;
-                        if (marker == "NavEmoji")
-                        {
-                            item.Emoji ??= block;
-                        }
-                        else if (marker == "NavLabel")
-                        {
-                            item.Label ??= block;
-                        }
-                    }
-                    else if (item.Glyph == null && node is FontIcon or Shapes.Path)
-                    {
-                        item.Glyph = (FrameworkElement)node;
-                        item.GlyphHost = parent;
-                    }
-
-                    if (node is Panel panel)
-                    {
-                        foreach (UIElement child in panel.Children)
-                        {
-                            queue.Enqueue((child, panel));
-                        }
-                    }
-                    else
-                    {
-                        int count = VisualTreeHelper.GetChildrenCount(node);
-                        for (int i = 0; i < count; i++)
-                        {
-                            queue.Enqueue((VisualTreeHelper.GetChild(node, i), parent));
-                        }
-                    }
-                }
-            }
-
-            items.Add(item);
-        }
 
         /// <summary>
         /// 遍历按钮内容里的元素。刻意先走 Panel.Children：这些 TextBlock/FontIcon 是 XAML 里直接写在
@@ -1531,32 +1376,6 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-        }
-
-        /// <summary>造一个插入式的等宽符号文本（放在原图标的位置上，宽度钉死所以不错位）。</summary>
-        private static TextBlock? BuildNavGeekGlyph(NavItemRef item)
-        {
-            Panel? host = item.GlyphHost;
-            if (host == null)
-            {
-                return null;
-            }
-
-            var symbol = new TextBlock
-            {
-                Text = item.GeekSymbol,
-                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
-                FontSize = 13,
-                Width = 20,
-                TextAlignment = TextAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                IsHitTestVisible = false,
-                Tag = "GeekNavSymbol",
-            };
-
-            int index = item.Glyph is UIElement glyphElement ? host.Children.IndexOf(glyphElement) : -1;
-            host.Children.Insert(index >= 0 ? index : 0, symbol);
-            return symbol;
         }
 
         /// <summary>

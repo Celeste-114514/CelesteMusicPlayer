@@ -451,28 +451,6 @@ namespace CelesteMusicPlayer
             ApplyWebDavNavEntry(settings);
         }
 
-        /// <summary>
-        /// 显示 / 隐藏一个左侧导航条目。
-        /// ⚠️ 必须连外层那个 Grid 一起隐藏，不能只隐藏 Button：
-        /// 每个条目是「Grid 包 [Button + 指示条 Border]」，指示条是常驻元素（Height=16、Opacity=0、Visibility=Visible），
-        /// 只把 Button 设成 Collapsed 的话 Grid 还留着 16px 高 ——
-        /// 用户就看到了「播放队列」和「播放最多」之间凭空多出两格空白（隐藏的流派 + 年份），还把左侧顶出滚动条。
-        /// </summary>
-        private static void SetNavEntryVisibility(FrameworkElement? button, bool visible)
-        {
-            if (button == null)
-            {
-                return;
-            }
-
-            Visibility v = visible ? Visibility.Visible : Visibility.Collapsed;
-            button.Visibility = v;
-            if (button.Parent is FrameworkElement entry)
-            {
-                entry.Visibility = v;
-            }
-        }
-
         private void ApplyLyricPanelFromSettings(AppSettingsState settings)
         {
             if (LyricsPanel == null)
