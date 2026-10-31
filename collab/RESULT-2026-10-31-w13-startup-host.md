@@ -335,3 +335,59 @@ Rebuild 0 错误；publish 正常 / 269 文件；接口回归 failures+jsErrors 
 | `ToggleFavoriteForCurrent`（23） | 全局热键「收藏当前曲」 | 无（网页没有全局热键），**必须保留** |
 | `InitializeMusicPlayer2Features`（23） | 播放器初始化后的功能挂接 | 部分（网页接管 UI），**需逐个看** |
 | `OnTagsSaved`（25） | 网页改完标签回宿主刷内存 | **有**（网页自己刷），宿主只需通知，可瘦身 |
+
+---
+
+# 批 34-35：迁移收官（18 → 0），旧界面壳文件全部删除
+
+用户要求「做快一点，这一轮多做一些」，于是不再逐个试搬，改成**一次性算完整闭包 + 批量搬**。
+
+## 批 34（提交 `e2b6e0b`）：最后 107 个成员，18 → 0
+
+先用闭包工具算出 8 个残留成员的完整闭包（107 个成员、跨 8 个壳文件），
+再按域一次性建 6 个宿主文件批量搬运：
+
+| 宿主 | 内容 |
+|---|---|
+| `WindowLifecycleHost` | 首激活 / 关闭序列 / 关闭子窗口 / 窗口框架 / 背景视频的窗口状态 / `IsIconic` |
+| `BackgroundMediaHost` | 自定义背景图与视频、背景动效、主题色联动、最小化暂停 |
+| `NavigationStyleHost` | 分类图标配色与字形、导航选中动画、胶囊排序按钮、边框取色 |
+| `CategoryViewHost` | `ApplyCategoryView` + 收藏/最近/最常听/评分视图、空列表提示、导航胶囊取色 |
+| `LibraryLoadHost` | 恢复/重扫曲库、批量建项、文件监听、标签保存后刷新、功能挂接与热键、`PlaylistBuildResult` |
+| `LibraryChromeHost` | 详情页关闭、专辑排序按钮、左侧导航高亮 |
+| `SettingsApplyHost`（已有） | `ApplySettingsLive` + 扩展应用 + 界面风格应用 |
+
+**86 个方法 + 17 个字段/嵌套类型**。踩到三个坑：
+1. **闭包工具漏字段**：它只认「带修饰符的方法」，字段没算进去 → 搬完报 132 个错，
+   一看只有 17 个字段，手工补完就归零。**方法闭包 ≠ 完整依赖，字段要单独扫。**
+2. **using 被插进方法体**：我用「插到最后一条 using 之后」的脚本补命名空间，结果文件里有
+   `using TagLib.File tagFile = ...` 这种语句，被当成文件头 using，插到了方法中间。
+   改成「只认 `^using X;$`」并把误插的行搬回文件头才修好。
+3. **`[DllImport]` 特性没跟着搬**：`IsIconic` 搬走了、特性行留在原地，编译器报 CS0601。
+
+## 批 35（提交 `1a0d9d5`）：删掉 9 个壳文件，-7,260 行
+
+探针归零意味着**没有任何活代码再引用旧界面**，于是整批删除：
+
+`Features` / `Misc` / `UiTheme` / `Library` / `Library2` / `EqDsp` / `ShellPages` /
+`ArtistDetail` / `Settings` —— 合计 7,251 行。
+
+产物 DLL 从 2,978,816 → **2,844,160** 字节（-134KB），与删除行数吻合。
+
+## 验证（删除前后各跑一遍，全绿）
+
+- Rebuild 0 错误
+- publish 正常 / 269 文件
+- 接口回归：failures+jsErrors 空、exitCode 0、**关闭后进程正常退出**（证明搬走的关闭序列没问题）
+- 侧键探针 `ok:true`
+- 实播 `ok=true`、pos 8.09
+
+## W13 迁移阶段收官
+
+账面 **1,024 → 0**。三层结构现在是：
+① 网页外壳（`outputs/webview2-shell`）+ WebView2 宿主；
+② 业务服务与宿主分片（`*Host.cs` 二十余个，按域划分）；
+③ 已删除的旧原生界面（只在 git 历史里）。
+
+剩下的旧界面周边（NowPlayingLayout / TerminalLyrics / Visualizer 等 9 个
+`Compile Remove` 文件）仍在仓库里但**从未参与编译**，属于下一步清理项。
