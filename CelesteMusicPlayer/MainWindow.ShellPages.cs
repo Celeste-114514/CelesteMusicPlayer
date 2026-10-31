@@ -480,19 +480,6 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 从任何地方跳到主界面的「标签」板块并打开指定文件：右键菜单、播放页、设置健康检查、
-        /// WebUI 的 edittags 命令原来都是弹独立 TagEditorWindow（阶段 6 收尾后已删），现在统一走这里。
-        /// 文件不在标签列表里的会先加进来（后台读标签），再全部选中并停在「快速编辑」子页。
-        /// </summary>
-        internal void OpenTagEditForFiles(IEnumerable<string>? paths)
-        {
-            DispatcherQueue.TryEnqueue(() => {
-                OpenWebShell();
-                _webShellWindow?.RevealTagFiles(paths ?? Array.Empty<string>());
-            });
-        }
-
-        /// <summary>
         /// 从任何地方跳到主界面的「设置」面板：托盘菜单、桌面歌词工具栏、播放页右键菜单都走这里。
         /// 原来这些入口是弹独立设置窗口（SettingsWindow.ShowOrActivate），阶段 3 起改成切面板。
         /// </summary>

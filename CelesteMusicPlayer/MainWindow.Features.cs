@@ -552,66 +552,6 @@ namespace CelesteMusicPlayer
                 : "均衡器已应用（bit-perfect 直通）";
         }
 
-        private void OnTagsSaved(string path)
-        {
-            DispatcherQueue.TryEnqueue(() => RefreshTrackMetadataFromDisk(path));
-        }
-
-        private void RefreshTrackMetadataFromDisk(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return;
-            }
-
-            try
-            {
-                PlaylistItem fresh = CreatePlaylistItemFromPath(path);
-                ReplaceMetadataInCollection(_playlist, fresh);
-                ReplaceMetadataInCollection(_queue.Items, fresh);
-                if (string.Equals(_nowPlayingPath, path, StringComparison.OrdinalIgnoreCase))
-                {
-                    _ = UpdateNowPlayingPanelAsync(fresh);
-                }
-
-                if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
-                    || string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal)
-                    || string.Equals(_currentCategory, "Recent", StringComparison.Ordinal))
-                {
-                    ApplyCategoryView();
-                }
-
-                NotifyCurrentPlaylistWindow();
-            }
-            catch (Exception ex)
-            {
-                _ = ShowErrorAsync("刷新标签失败", ex.Message);
-            }
-        }
-
-        private static void ReplaceMetadataInCollection(
-            System.Collections.ObjectModel.ObservableCollection<PlaylistItem> list,
-            PlaylistItem fresh)
-        {
-            for (int i = 0; i < list.Count; i++)
-            {
-                if (!string.Equals(list[i].FilePath, fresh.FilePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                PlaylistItem old = list[i];
-                old.Title = fresh.Title;
-                old.Artist = fresh.Artist;
-                old.AlbumArtist = fresh.AlbumArtist;
-                old.Album = fresh.Album;
-                old.Track = fresh.Track;
-                old.Year = fresh.Year;
-                old.Duration = fresh.Duration;
-                old.Genre = fresh.Genre;
-            }
-        }
-
         /// <summary>将歌曲插入当前播放项之后（下一首播放）。</summary>
         internal void PlaySongsNext(IEnumerable<PlaylistItem> songs)
         {
@@ -2769,6 +2709,68 @@ namespace CelesteMusicPlayer
 
             NowPlayingText.Text = "媒体库有更新，正在自动刷新…";
             RescanLocalLibraryButton_Click(null!, new RoutedEventArgs());
+        }
+
+        // ---- 标签保存后从磁盘刷新（第二十刀暂退回：连着 ApplyCategoryView 分类大域，待分类域刀一起转活）----
+
+        private void OnTagsSaved(string path)
+        {
+            DispatcherQueue.TryEnqueue(() => RefreshTrackMetadataFromDisk(path));
+        }
+
+        private void RefreshTrackMetadataFromDisk(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            try
+            {
+                PlaylistItem fresh = CreatePlaylistItemFromPath(path);
+                ReplaceMetadataInCollection(_playlist, fresh);
+                ReplaceMetadataInCollection(_queue.Items, fresh);
+                if (string.Equals(_nowPlayingPath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = UpdateNowPlayingPanelAsync(fresh);
+                }
+
+                if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
+                    || string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal)
+                    || string.Equals(_currentCategory, "Recent", StringComparison.Ordinal))
+                {
+                    ApplyCategoryView();
+                }
+
+                NotifyCurrentPlaylistWindow();
+            }
+            catch (Exception ex)
+            {
+                _ = ShowErrorAsync("刷新标签失败", ex.Message);
+            }
+        }
+
+        private static void ReplaceMetadataInCollection(
+            System.Collections.ObjectModel.ObservableCollection<PlaylistItem> list,
+            PlaylistItem fresh)
+        {
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (!string.Equals(list[i].FilePath, fresh.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                PlaylistItem old = list[i];
+                old.Title = fresh.Title;
+                old.Artist = fresh.Artist;
+                old.AlbumArtist = fresh.AlbumArtist;
+                old.Album = fresh.Album;
+                old.Track = fresh.Track;
+                old.Year = fresh.Year;
+                old.Duration = fresh.Duration;
+                old.Genre = fresh.Genre;
+            }
         }
     }
 }
