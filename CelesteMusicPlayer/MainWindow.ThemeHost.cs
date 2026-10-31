@@ -13,7 +13,6 @@ namespace CelesteMusicPlayer;
 /// </summary>
 public sealed partial class MainWindow
 {
-    private ResourceDictionary? _celesteTokenDictionary;
     private string? _celesteAppliedThemeName;
     private string? _lastAppliedThemeName;
     private bool _themeAppliedOnce;
@@ -70,9 +69,6 @@ public sealed partial class MainWindow
                 _celesteAppliedThemeName = themeName;
 
                 bool dark = ResolveIsDark();
-
-                // ---- 1) 原生页：换掉元素级令牌字典 ----
-                ApplyCelesteTokensToTree(theme, dark);
 
                 StartupLog.Write("[Theme] 已应用主题=" + (themeName ?? "(内置默认)") +
                                  " 模式=" + (dark ? "深色" : "浅色") + " 名称=" + theme?.Name);
@@ -143,47 +139,6 @@ public sealed partial class MainWindow
                 if (t != null) return t;
             }
             return CelesteThemeStore.CreateDefault();
-        }
-
-        /// <summary>把令牌字典挂到 RootShell（换掉旧的）。窗口未就绪时静默跳过。</summary>
-        private void ApplyCelesteTokensToTree(CelesteThemeFile? theme, bool dark)
-        {
-            var host = RootShell;
-            if (host == null) return;
-
-            try
-            {
-                var dict = CelesteTokenApplier.Build(theme, dark);
-
-                // 先摘掉旧的再挂新的：同一时刻元素级只能有一个"我们的"字典来源。
-                if (_celesteTokenDictionary != null)
-                {
-                    try { host.Resources.MergedDictionaries.Remove(_celesteTokenDictionary); }
-                    catch { /* 已经不在里面了，无所谓 */ }
-                }
-
-                host.Resources.MergedDictionaries.Add(dict);
-                _celesteTokenDictionary = dict;
-
-                StartupLog.Write("[Theme] 令牌字典已挂载，键数=" + CountTokenKeys(dict));
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("ApplyCelesteTokensToTree", ex);
-            }
-        }
-
-        private static int CountTokenKeys(ResourceDictionary dict)
-        {
-            int n = 0;
-            try { n = dict.Keys.Count; } catch { }
-            try
-            {
-                if (dict.ThemeDictionaries.TryGetValue("Default", out var d) && d is ResourceDictionary dr)
-                    n += dr.Keys.Count;
-            }
-            catch { }
-            return n;
         }
 
         /// <summary>

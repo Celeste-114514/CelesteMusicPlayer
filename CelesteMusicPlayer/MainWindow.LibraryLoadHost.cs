@@ -102,7 +102,6 @@ public sealed partial class MainWindow
                     }
 
                     await LoadLibraryFilesAsync(paths);
-                    UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
                     LibrarySessionStore.SaveFolder(folderPath, paths);
                     await RestoreLastPlayingTrackAsync();
                     ApplyStartupOverlayWindows();
@@ -122,7 +121,6 @@ public sealed partial class MainWindow
                 }
 
                 await LoadLibraryFilesAsync(paths);
-                UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
                 await RestoreLastPlayingTrackAsync();
                 ApplyStartupOverlayWindows();
             }
@@ -192,9 +190,7 @@ public sealed partial class MainWindow
                 // 以前这里走 LoadAndAddFiles 的 UI 线程逐个同步解析：3609 首要卡十几秒，
                 // 而且解析结果不写索引——下次启动原样再卡一遍（2026-10-09 用户实测反馈）。
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                PlaylistBuildResult built = await BuildPlaylistItemsAsync(missing, known,
-                    (d, t) => DispatcherQueue.TryEnqueue(() =>
-                        UpdateStartupLoadingStatus($"正在载入曲库 {System.Math.Min(d, t)}/{t}…")));
+                PlaylistBuildResult built = await BuildPlaylistItemsAsync(missing, known);
 
                 if (built.Items.Count == 0)
                 {
@@ -241,7 +237,6 @@ public sealed partial class MainWindow
 
                 StartupLog.Write($"[library] 媒体库文件夹补入 {built.Items.Count} 首，库内共 {_playlist.Count} 首"
                     + $"（索引命中 {built.IndexHits} 首，实际解析 {built.Fresh.Count} 首），耗时 {sw.ElapsedMilliseconds} ms");
-                UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
 
                 // 索引写回放到后台：不拖慢启动，失败也不影响播放
                 if (built.Fresh.Count > 0 || built.Missing.Count > 0)

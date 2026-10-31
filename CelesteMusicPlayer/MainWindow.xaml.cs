@@ -558,26 +558,12 @@ namespace CelesteMusicPlayer
         {
             StartupLog.Write("MainWindow ctor begin");
             Instance = this;
-            Content = RootShell;
             // 缓存 UI 线程 DispatcherQueue 给引擎层（HiFiOutputBackend）在后台线程构造时取用，
             // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
             HiFiOutputBackend.UiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             StartupLog.Write("MainWindow ctor: legacy XAML owner removed");
             // 迷你播放器桥接：挂上之后 tick / 命令才有宿主（单向数据流，见 MiniPlayerBridge）
             MiniPlayerBridge.Attach(this);
-            // 左分类栏「浮动板块」阴影（2026-10-16 用户要求：视觉上像从主程序左侧浮出的一块板）。
-            // WinUI3 ThemeShadow 对窗口内元素即可渲染；挂不上只丢阴影不丢功能，整体兜底。
-            // Z 向 40 只扩散不偏移——本卡片通高贴左缘，光从上方来的 Y 偏移会让顶部阴影发虚。
-            try
-            {
-                if (LeftCategoryNavBorder != null && LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
-                {
-                }
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ctor.leftNavShadow", caught);
-            }
             // 启动加载遮罩：XAML 里默认就是 Visible，这里只负责上色/挂点击/起兜底定时器
             SetupStartupLoading();
             InitializeSrcUi();
@@ -620,7 +606,6 @@ namespace CelesteMusicPlayer
                     };
                     Canvas.SetLeft(_thumbIconHostCanvas, -10000);
                     Canvas.SetTop(_thumbIconHostCanvas, -10000);
-                    RootShell.Children.Add(_thumbIconHostCanvas);
                 }
                 catch (Exception caught)
                 {

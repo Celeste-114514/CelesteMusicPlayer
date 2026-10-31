@@ -27,7 +27,6 @@ namespace CelesteMusicPlayer
         /// <summary>恢复上次曲库 → 再播放启动带进来的文件（顺序不能反）。</summary>
         private async Task RestoreLastLibraryThenPendingFileAsync()
         {
-            UpdateStartupLoadingStatus("正在读取曲库…");
             try
             {
                 await RestoreLastLibraryAsync();

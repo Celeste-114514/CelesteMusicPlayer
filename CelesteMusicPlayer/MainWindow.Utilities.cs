@@ -789,34 +789,9 @@ namespace CelesteMusicPlayer
                     : Color.FromArgb(255, 32, 32, 32);
             }
 
-            // 优先取右侧面板实际底色（用户看到的整体 UI 区域色）
-            if (ColorHelper.TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
-                && paneColor.A > 0
-                && !ColorHelper.IsNearWhite(paneColor))
-            {
-                return Color.FromArgb(255, paneColor.R, paneColor.G, paneColor.B);
-            }
-
-            FrameworkElement? anchor = Content as FrameworkElement ?? NowPlayingPaneContent;
-            string[] keys =
-            {
-                "CardBackgroundFillColorDefault",
-                "CardBackgroundFillColorDefaultBrush",
-                "SolidBackgroundFillColorBase",
-                "SolidBackgroundFillColorBaseBrush",
-                "ApplicationPageBackgroundThemeBrush"
-            };
-
-            foreach (string key in keys)
-            {
-                if (ColorHelper.TryGetThemeColor(anchor, key, out Color themeColor)
-                    && themeColor.A > 0
-                    && !ColorHelper.IsNearWhite(themeColor))
-                {
-                    return Color.FromArgb(255, themeColor.R, themeColor.G, themeColor.B);
-                }
-            }
-
+            // 以前这里还会去问「右侧面板当前底色」和几个 WinUI 主题键。那两个锚点现在都是
+            // 垫片控件（Background 恒 null、Resources 恒空），每次都落到下面这个回退值上，
+            // 所以直接给结论，不再假装能读到。
             // 深色 Mica / 深灰 UI 回退（勿用浅灰，否则矩形发白）
             return Color.FromArgb(255, 42, 42, 42);
         }
