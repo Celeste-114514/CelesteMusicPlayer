@@ -131,11 +131,6 @@ public sealed partial class MainWindow
 
         private async Task<CloseWindowAction> ShowCloseChoiceDialogAsync()
         {
-            if (Content?.XamlRoot == null)
-            {
-                return CloseWindowAction.Exit;
-            }
-
             var dontAsk = new CheckBox
             {
                 Content = "下次不再询问",
@@ -156,8 +151,7 @@ public sealed partial class MainWindow
                 PrimaryButtonText = "缩小到托盘",
                 SecondaryButtonText = "退出播放器",
                 CloseButtonText = "取消",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = Content.XamlRoot
+                DefaultButton = ContentDialogButton.Primary
             };
 
             // 关闭对话框按钮用当前主题色(ContentDialog 局部资源)

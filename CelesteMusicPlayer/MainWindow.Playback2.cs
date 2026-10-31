@@ -524,7 +524,7 @@ namespace CelesteMusicPlayer
             {
                 if (_queue.Items.Count == 0)
                 {
-                    await ShowErrorAsync("保存播放列表", "当前播放列表为空。", xamlRoot);
+                    await ShowErrorAsync("保存播放列表", "当前播放列表为空。");
                     return;
                 }
 
@@ -557,7 +557,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex)
             {
-                await ShowErrorAsync("保存播放列表失败", ex.Message, xamlRoot);
+                await ShowErrorAsync("保存播放列表失败", ex.Message);
             }
         }
 
@@ -575,7 +575,7 @@ namespace CelesteMusicPlayer
                 UserPlaylistFileDto? dto = UserPlaylistFileStore.LoadFromPath(path);
                 if (dto?.Songs == null)
                 {
-                    await ShowErrorAsync("打开播放列表失败", "文件格式无效。", xamlRoot);
+                    await ShowErrorAsync("打开播放列表失败", "文件格式无效。");
                     return;
                 }
 
@@ -583,7 +583,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex)
             {
-                await ShowErrorAsync("打开播放列表失败", ex.Message, xamlRoot);
+                await ShowErrorAsync("打开播放列表失败", ex.Message);
             }
         }
 
@@ -659,7 +659,7 @@ namespace CelesteMusicPlayer
 
             if (files.Length == 0)
             {
-                await ShowErrorAsync("打开播放列表", "PlayList 文件夹中还没有已保存的播放列表。", xamlRoot);
+                await ShowErrorAsync("打开播放列表", "PlayList 文件夹中还没有已保存的播放列表。");
                 return null;
             }
 
@@ -914,7 +914,7 @@ namespace CelesteMusicPlayer
                 PrimaryButtonText = "删除",
                 CloseButtonText = "取消",
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = hostRoot ?? Content.XamlRoot
+                XamlRoot = hostRoot ?? Content?.XamlRoot
             };
 
             ColorHelper.ApplyDialogAccent(dialog);

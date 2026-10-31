@@ -486,7 +486,11 @@ namespace CelesteMusicPlayer
         // ==== 错误对话框（2026-10-31 从 MainWindow.Misc.cs 搬来）====
         // 22 处调用点分散在 Playback / Playback2 / Playback3 / Library2 / Features，
         // 定义原来留在壳文件里，等于整个壳被这 22 处拴住。
-        private async System.Threading.Tasks.Task ShowErrorAsync(string title, string message, XamlRoot? xamlRoot = null)
+        // 2026-11-01：这里原来要先等 Content.XamlRoot 就绪（轮询约 2s）才敢弹窗。
+        // 界面搬到网页壳之后 MainWindow 没有视觉树，Content 恒为 null —— 于是**每条错误都被
+        // 这一层挡在日志里，一次都没弹过**（用户只看到"没反应"）。ContentDialog 现在由
+        // NativeContentDialogs 用 WinForms 真弹窗实现，根本不需要 XamlRoot，等待与守卫一并删掉。
+        private async System.Threading.Tasks.Task ShowErrorAsync(string title, string message)
         {
             try
             {
@@ -497,40 +501,15 @@ namespace CelesteMusicPlayer
                     $"[对话框] {title} | {message?.Replace("\r\n", " / ").Replace("\n", " / ")}");
                 global::CelesteMusicPlayer.StartupLog.Flush();
 
-                // 早期启动（如 FirstActivated 阶段）Content.XamlRoot 可能尚未建立，
-                // 此时弹 ContentDialog 会抛 "This element does not have a XamlRoot" 并被静默吞掉。
-                // 改为等待 XamlRoot 就绪再弹，最多约 2s；仍拿不到则把错误写入日志而非丢失。
-                XamlRoot? root = await GetXamlRootWhenReadyAsync(xamlRoot);
-                if (root == null)
-                {
-                    global::CelesteMusicPlayer.StartupLog.Write("ShowErrorAsync: XamlRoot 不可用，错误未弹出 title=" + title + " msg=" + message);
-                    return;
-                }
                 ContentDialog dialog = new()
                 {
                     Title = title,
                     Content = message,
-                    CloseButtonText = "确定",
-                    XamlRoot = root
+                    CloseButtonText = "确定"
                 };
                 await dialog.ShowAsync();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-        private System.Threading.Tasks.Task<XamlRoot?> GetXamlRootWhenReadyAsync(XamlRoot? preferred)
-        {
-            var tcs = new System.Threading.Tasks.TaskCompletionSource<XamlRoot?>();
-            int tries = 0;
-            void Poll()
-            {
-                XamlRoot? r = preferred ?? Content?.XamlRoot;
-                if (r != null) { tcs.TrySetResult(r); return; }
-                if (++tries > 40) { tcs.TrySetResult(null); return; } // 约 2s 上限，避免无限等待
-                DispatcherQueue?.TryEnqueue(Poll);
-            }
-            DispatcherQueue?.TryEnqueue(Poll);
-            return tcs.Task;
         }
 
         // 曲目在播放列表里的下标（纯查表，2026-10-31 从 MainWindow.Library2.cs 搬来）

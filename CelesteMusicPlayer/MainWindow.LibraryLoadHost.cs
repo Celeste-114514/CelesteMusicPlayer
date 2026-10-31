@@ -741,13 +741,11 @@ public sealed partial class MainWindow
             ApplyPlaybackRateFromSettings();
             RestartGlobalHotkeysFromSettings();
             RestartLibraryWatchFromSettings();
-            AttachRootKeyboardAccelerators();
             UpdateFavoriteButtonUi();
             AppSettingsState boot = AppSettingsStore.Load();
             ApplyNavVisibilityFromSettings(boot);
             ApplySpectrumVisibilityFromSettings(boot);
             ApplyCoverVisibilityFromSettings(boot);
-            AttachGlobalMouseWheelVolume();
             AttachLyricSaveConfirm();
         }
 
@@ -797,8 +795,7 @@ public sealed partial class MainWindow
                             Content = "已找到歌词，是否保存到：\n" + Path.GetFileName(candidatePath),
                             PrimaryButtonText = "保存",
                             CloseButtonText = "不保存",
-                            DefaultButton = ContentDialogButton.Primary,
-                            XamlRoot = Content.XamlRoot
+                            DefaultButton = ContentDialogButton.Primary
                         };
                         tcs.TrySetResult(await dialog.ShowAsync() == ContentDialogResult.Primary);
                     }
@@ -816,82 +813,6 @@ public sealed partial class MainWindow
 
                 return await tcs.Task;
             };
-        }
-
-        private void AttachGlobalMouseWheelVolume()
-        {
-            if (Content is not UIElement root)
-            {
-                return;
-            }
-
-            root.PointerWheelChanged -= Root_PointerWheelChanged;
-            root.PointerWheelChanged += Root_PointerWheelChanged;
-        }
-
-        private void Root_PointerWheelChanged(dynamic sender, dynamic e)
-        {
-            if (!AppSettingsStore.Load().GlobalMouseWheelVolume)
-            {
-                return;
-            }
-
-            if (FocusManager.GetFocusedElement(Content.XamlRoot) is Slider)
-            {
-                return;
-            }
-
-            int delta = e.GetCurrentPoint(null).Properties.MouseWheelDelta;
-            if (delta == 0)
-            {
-                return;
-            }
-
-            AdjustVolumeBy(delta > 0 ? 2 : -2);
-            e.Handled = true;
-        }
-
-        private void AttachRootKeyboardAccelerators()
-        {
-            if (Content is not UIElement root)
-            {
-                return;
-            }
-
-            root.KeyDown -= Root_KeyDown;
-            root.KeyDown += Root_KeyDown;
-        }
-
-        private void Root_KeyDown(dynamic sender, dynamic e)
-        {
-            if (e.Handled)
-            {
-                return;
-            }
-
-            // 输入框内不抢快捷键
-            if (FocusManager.GetFocusedElement(Content.XamlRoot) is TextBox or AutoSuggestBox)
-            {
-                return;
-            }
-
-            VirtualKey key = e.Key;
-            if (key == VirtualKey.Space)
-            {
-                TogglePlayPausePublic();
-                e.Handled = true;
-            }
-            else if (key == VirtualKey.Left)
-            {
-                SeekBySeconds(-5);
-                e.Handled = true;
-            }
-            else if (key == VirtualKey.Right)
-            {
-                SeekBySeconds(5);
-                e.Handled = true;
-            }
-            // 「查找歌曲」已移除（老版本遗留），F / F3 不再绑定任何动作。
         }
 
         internal void ToggleFavoriteForCurrent()

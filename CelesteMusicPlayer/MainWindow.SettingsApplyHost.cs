@@ -420,12 +420,9 @@ public sealed partial class MainWindow
                     || (mode is "ClassicSystem"
                         && Application.Current.RequestedTheme == ElementTheme.Dark);
 
-                if (Content is FrameworkElement root)
-                {
-                    root.RequestedTheme = !opaque
-                        ? ElementTheme.Default
-                        : darkClassic ? ElementTheme.Dark : ElementTheme.Light;
-                }
+                // 2026-11-01：这里原来还要把 RequestedTheme 写到 Content 这棵视觉树上。
+                // 界面搬到网页壳后 MainWindow 没有视觉树（Content 恒 null），那段赋值从未生效；
+                // 网页的主题由 WebShell 发 theme 消息驱动，与这条无关，故删除。
 
                 if (opaque)
                 {

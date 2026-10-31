@@ -183,12 +183,6 @@ namespace CelesteMusicPlayer
 
             ApplyPlaybackOrderToPlayer();
             ClearNowPlayingPanel();
-            if (Content is FrameworkElement root)
-            {
-                root.ActualThemeChanged += (_, _) =>
-                {
-                };
-            }
 
             AppWindow.Changed += (_, args) =>
             {
