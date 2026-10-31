@@ -34,7 +34,6 @@ public sealed partial class MainWindow
             switch (_currentCategory)
             {
                 case "Songs":
-                    SetSongSortUiForCategory(isUserPlaylist: false);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _playlistViewSource = _playlist;
@@ -45,7 +44,6 @@ public sealed partial class MainWindow
                     break;
 
                 case "UserPlaylist":
-                    SetSongSortUiForCategory(isUserPlaylist: true);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _playlistViewSource = _queue.Items;
@@ -101,7 +99,6 @@ public sealed partial class MainWindow
                     break;
 
                 case "Ratings":
-                    SetSongSortUiForCategory(isUserPlaylist: false);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     ApplyRatingCategory();
@@ -120,7 +117,6 @@ public sealed partial class MainWindow
 
                 case "GenreSongs":
                 case "YearSongs":
-                    SetSongSortUiForCategory(isUserPlaylist: false);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     var groupedSongs = _currentCategory == "GenreSongs"
@@ -166,7 +162,6 @@ public sealed partial class MainWindow
                 SetPlaylistEmptyHint(false, string.Empty);
             }
 
-            UpdateUserPlaylistActionBarVisibility();
             UpdateLibrarySearchUi();
         }
 
@@ -208,7 +203,6 @@ public sealed partial class MainWindow
 
         private void ApplyFavoritesOrRecentCategory()
         {
-            SetSongSortUiForCategory(isUserPlaylist: false);
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 
@@ -300,7 +294,6 @@ public sealed partial class MainWindow
         /// <summary>播放最多：按播放次数降序显示媒体库歌曲。</summary>
         private void ApplyMostPlayedCategory()
         {
-            SetSongSortUiForCategory(isUserPlaylist: false);
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 

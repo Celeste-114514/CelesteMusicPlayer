@@ -167,23 +167,6 @@ namespace CelesteMusicPlayer
             return -1;
         }
 
-        // =====================================================================
-        // 排序
-        // =====================================================================
-
-        private void SetSongSortUiForCategory(bool isUserPlaylist)
-        {
-            Visibility librarySort = isUserPlaylist ? Visibility.Collapsed : Visibility.Visible;
-            Visibility playlistSort = isUserPlaylist ? Visibility.Visible : Visibility.Collapsed;
-
-            // 同一个「播放所有歌曲」按钮在播放队列视角语义不同：那里是「播放该队列」，且不重建队列
-            ToolTipService.SetToolTip(
-                PlayAllLibrarySongsButton,
-                isUserPlaylist
-                    ? "从当前播放队列第一首开始播放（不改动队列）"
-                    : "把当前界面显示的歌曲替换进播放队列并按显示顺序播放");
-        }
-
         /// <summary>播放列表「更改排序」对话框（主界面与当前播放列表窗口共用）。</summary>
         internal async Task ChangeUserPlaylistSortAsync(XamlRoot xamlRoot)
         {
@@ -332,25 +315,10 @@ namespace CelesteMusicPlayer
             if (ReferenceEquals(target, _playlist))
             {
                 UpdateCurrentIndexByPath(preservePlayingPath);
-                // 仅当 PlaylistView 当前确实显示完整的 _playlist（未开搜索过滤）时才按 _playlist 下标设选中，
-                // 否则下标对过滤子集越界会抛 ArgumentException；过滤场景由 ApplySongsSearchFilter 重建并刷新选中。
-                if (_currentIndex >= 0
-                    && string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
-                    && ReferenceEquals(_playlistViewSource, _playlist)
-                    && _currentIndex < PlaylistView.Items.Count)
-                {
-                }
             }
             else if (ReferenceEquals(target, _queue.Items) && !string.IsNullOrEmpty(preservePlayingPath))
             {
                 _queue.Index = FindUserPlaylistIndex(preservePlayingPath);
-                // 同上：仅当 PlaylistView 当前显示完整的 _queue.Items（未开过滤）时按该下标设选中，避免越界。
-                if (_queue.Index >= 0
-                    && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
-                    && ReferenceEquals(_playlistViewSource, _queue.Items)
-                    && _queue.Index < PlaylistView.Items.Count)
-                {
-                }
             }
         }
 
@@ -517,13 +485,6 @@ namespace CelesteMusicPlayer
 
             PlayUserPlaylistAt(0);
             NotifyCurrentPlaylistWindow();
-        }
-
-        private void UpdateUserPlaylistActionBarVisibility()
-        {
-            bool show = !_isMultiSelectMode
-                && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
-                && PlaylistListBorder.Visibility == Visibility.Visible;
         }
 
         private void RemoveSongsFromUserPlaylist(IEnumerable<PlaylistItem> songs)

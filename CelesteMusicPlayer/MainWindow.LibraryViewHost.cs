@@ -48,7 +48,6 @@ public sealed partial class MainWindow
                 _albums.Add(entry);
             }
 
-            ApplyAlbumsSearchFilter();
 
             foreach (AlbumEntry entry in entries)
             {
@@ -123,12 +122,6 @@ public sealed partial class MainWindow
 
             if (!show)
             {
-
-                if (_currentCategory != "Folders")
-                {
-                    ClearFolderSearchHighlightOnly();
-                }
-
                 return;
             }
 
@@ -143,41 +136,15 @@ public sealed partial class MainWindow
             {
                 case "Songs":
                     ApplySongsSearchFilter();
-                    ClearFolderSearchHighlightOnly();
-                    break;
-                case "Albums":
-                    ApplyAlbumsSearchFilter();
-                    ClearFolderSearchHighlightOnly();
-                    break;
-                case "Artists":
-                case "AlbumArtists":
-                    ApplyArtistsSearchFilter();
-                    ClearFolderSearchHighlightOnly();
                     break;
                 case "Folders":
                     ApplyFolderSearch();
                     break;
                 case "UserPlaylist":
                     ApplyUserPlaylistSearchFilter();
-                    ClearFolderSearchHighlightOnly();
                     break;
                 default:
                     break;
-            }
-        }
-
-        private void ClearFolderSearchHighlightOnly()
-        {
-            if (_folderSearchHighlightPath == null && _folderSearchMatches.Count == 0)
-            {
-                return;
-            }
-
-            _folderSearchHighlightPath = null;
-            _folderSearchMatches.Clear();
-            _folderSearchIndex = -1;
-            if (FolderBrowserView != null && _currentCategory == "Folders")
-            {
             }
         }
 
@@ -209,7 +176,6 @@ public sealed partial class MainWindow
                 _artists.Add(entry);
             }
 
-            ApplyArtistsSearchFilter();
 
             foreach (ArtistEntry entry in _artists.ToList())
             {
@@ -339,54 +305,6 @@ public sealed partial class MainWindow
             {
                 WebArtistAvatarGate.Release();
             }
-        }
-
-        private void ApplyAlbumsSearchFilter()
-        {
-            if (_currentCategory != "Albums" || AlbumGridView == null)
-            {
-                return;
-            }
-
-            string q = _librarySearchText.Trim();
-            if (string.IsNullOrEmpty(q))
-            {
-                if (!ReferenceEquals(AlbumGridView.ItemsSource, _albums))
-                {
-                }
-
-                return;
-            }
-
-            List<AlbumEntry> filtered = _albums
-                .Where(a =>
-                    ContainsIgnoreCase(a.Name, q)
-                    || ContainsIgnoreCase(a.Artist, q))
-                .ToList();
-
-        }
-
-        private void ApplyArtistsSearchFilter()
-        {
-            if ((_currentCategory != "Artists" && _currentCategory != "AlbumArtists") || ArtistGridView == null)
-            {
-                return;
-            }
-
-            string q = _librarySearchText.Trim();
-            if (string.IsNullOrEmpty(q))
-            {
-                if (!ReferenceEquals(ArtistGridView.ItemsSource, _artists))
-                {
-                }
-
-                return;
-            }
-
-            List<ArtistEntry> filtered = _artists
-                .Where(a => ContainsIgnoreCase(a.Name, q))
-                .ToList();
-
         }
 
         // W13 第二十九刀：搜索过滤 / 已实现容器枚举

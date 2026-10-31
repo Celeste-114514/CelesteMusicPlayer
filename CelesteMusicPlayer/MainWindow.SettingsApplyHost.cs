@@ -71,7 +71,6 @@ public sealed partial class MainWindow
             // 自定义背景图片：保存后即时应用
             try
             {
-                ApplyCustomBackground(settings.CustomBackgroundPath);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -455,8 +454,8 @@ public sealed partial class MainWindow
 
                     // 背景图层全部隐藏（含视频暂停）
 
-                    StopCustomBackgroundVideo();
-                    StopBackgroundMotion();
+
+
 
                     // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线（极客界面保持单色，终端风不上彩）
 
@@ -476,8 +475,7 @@ public sealed partial class MainWindow
 
                     // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）
                     ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
-                    ApplyCustomBackground(settings.CustomBackgroundPath);
-                    ApplyBorderColorFromUiTint();
+                        ApplyBorderColorFromUiTint();
 
                     // 从经典切回来时，把系统按钮恢复成背景图式原本的浅灰配色
                     //（经典浅色界面会把它们改成深色，不还原的话回到深色背景上会看不见）

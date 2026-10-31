@@ -59,9 +59,6 @@ public sealed partial class MainWindow
                     // 设置开了「启动时打开迷你播放器」时，首次激活后把迷你条拉起来
                     OpenMiniPlayerIfStartupEnabled();
 
-                    // 订阅主题色变化事件(统一刷新强调元素)
-                    ThemeColorService.ThemeColorChanged -= OnThemeColorChanged;
-                    ThemeColorService.ThemeColorChanged += OnThemeColorChanged;
 
                     // 音量条自绘:尺寸变化/初始绘制/交互
 
@@ -76,13 +73,6 @@ public sealed partial class MainWindow
                     // 进度条悬停提示:分:秒格式(替代默认秒数)
                     try
                     {
-                    }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-                    // 自定义背景图片
-                    try
-                    {
-                        ApplyCustomBackground(AppSettingsStore.Load().CustomBackgroundPath);
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
@@ -194,18 +184,6 @@ public sealed partial class MainWindow
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.CloseDesktopLyrics", caught); }
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
-
-            // 背景视频播放器：关窗即释放解码资源
-            try
-            {
-                StopBackgroundMotion();
-                // 2026-10-07：先 Close 源再 Dispose 播放器——MediaPlayer.Dispose() 不会替我们
-                //   释放 MediaSource 的解码器（引用计数还有别人），不 Close 等于漏一份。
-                CloseBackgroundVideoSource();
-                _backgroundVideoPlayer?.Dispose();
-                _backgroundVideoPlayer = null;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
 
             // 同理停掉设备监听：窗口销毁后 DeviceWatcher 的 COM 回调还会继续来，
             // 那时再去 TryEnqueue 访问已分离的 XAML 就会崩在退出阶段。
@@ -333,60 +311,5 @@ public sealed partial class MainWindow
 
             // 注：以前这里会把 Assets\AppIcon.png 塞进标题栏图标（非打包模式下 ms-appx:/// 不可用）。
             // 现在标题栏图标改成 XAML 里的矢量线稿（圆圈 + 音符），不再需要这张 png，故移除。
-        }
-
-        private void OnAppWindowChangedForBackgroundVideo(AppWindow sender, AppWindowChangedEventArgs args)
-        {
-            // AppWindow.Changed 回调不在 UI 线程上，且最小化瞬间布局还没稳定，丢到 UI 队列里稍后判
-            DispatcherQueue.TryEnqueue(UpdateBackgroundVideoMinimizeState);
-        }
-
-        private void UpdateBackgroundVideoMinimizeState()
-        {
-            if (_backgroundVideoPlayer == null || _backgroundVideoPlayer.Source == null)
-            {
-                return; // 没在放视频，不用管
-            }
-
-            try
-            {
-                IntPtr hwnd = _mainWindowHwnd != IntPtr.Zero
-                    ? _mainWindowHwnd
-                    : NativeHandle;
-                if (hwnd == IntPtr.Zero)
-                {
-                    return;
-                }
-
-                // 2026-10-07 记录：这里只覆盖【最小化】。被其它窗口完全遮住时视频仍在后台解码，
-                //   属于纯浪费；但 WinUI3 没有可靠的「被遮挡」通知（IsWindowVisible 在被盖住时仍为 true），
-                //   要做对需额外接 Win32 钩子（WM_WINDOWPOSCHANGED + 遮挡判定），复杂度与风险都偏高。
-                //   当前取舍：先保证「看得见时才解码」（最小化已停）；
-                //   后续若确认遮挡解码是主要开销，再单独加钩子，不要塞在这里草率实现。
-                if (IsIconic(hwnd))
-                {
-                    if (!_backgroundVideoPausedByMinimize)
-                    {
-                        _backgroundVideoPlayer.Pause();
-                        _backgroundVideoPausedByMinimize = true;
-                        StartupLog.Write("背景视频：窗口最小化，已暂停解码");
-                        // 2026-10-07 内存排查：暂停后视频帧缓存是否被释放（MediaPlayerElement
-                        // 可能仍留着解码帧）。若这里不降，说明视频是内存大户且没回收路径。
-                        MemProbe.Log("视频暂停后");
-                    }
-                }
-                else if (_backgroundVideoPausedByMinimize
-                         && CustomBackgroundVideo != null
-                         && CustomBackgroundVideo.Visibility == Visibility.Visible)
-                {
-                    _backgroundVideoPlayer.Play();
-                    _backgroundVideoPausedByMinimize = false;
-                    StartupLog.Write("背景视频：窗口还原，继续播放");
-                }
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
-            }
         }
     }
