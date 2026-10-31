@@ -95,10 +95,6 @@ public sealed partial class MainWindow
 
         private async Task ApplyAlbumArtBackgroundAsync(byte[]? coverBytes, string forPath)
         {
-            if (AlbumArtBackgroundImage == null)
-            {
-                return;
-            }
 
             // 经典不透明界面：封面背景与它完全无关，切歌时不允许重新铺上
             // 经典 / 极客（不透明界面）与封面背景完全无关：切歌换封面也不许把背景图铺回来

@@ -36,10 +36,9 @@ public sealed partial class MainWindow
             {
                 case "Songs":
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    PlaylistListBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
-                    PlaylistView.ItemsSource = _playlist;
+                    _playlistViewSource = _playlist;
 
                     _sortField = SortField.Title;
                     _sortAscending = true;
@@ -48,10 +47,9 @@ public sealed partial class MainWindow
 
                 case "UserPlaylist":
                     SetSongSortUiForCategory(isUserPlaylist: true);
-                    PlaylistListBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
-                    PlaylistView.ItemsSource = _queue.Items;
+                    _playlistViewSource = _queue.Items;
                     // 播放列表默认不排序：保持添加顺序（后添加批次在前，批内相对顺序不变）
                     RenumberCollection(_queue.Items);
                     ScrollUserPlaylistToPlaying();
@@ -59,7 +57,6 @@ public sealed partial class MainWindow
 
                 case "Albums":
                     UpdateAlbumSortButtonsUi();
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _ = RefreshAlbumViewAsync();
@@ -67,14 +64,12 @@ public sealed partial class MainWindow
 
                 case "Artists":
                 case "AlbumArtists":
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _ = RefreshArtistViewAsync();
                     break;
 
                 case "Folders":
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     SetFolderBrowserMode(isWebDav: false);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
@@ -82,7 +77,6 @@ public sealed partial class MainWindow
                     break;
 
                 case "WebDav":
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     // 同一个「文件夹」界面复用给网络库：台头换名字、藏掉「添加文件夹」（网络库不是加本地目录）
                     SetFolderBrowserMode(isWebDav: true);
                     CloseAlbumDetailUi();
@@ -91,7 +85,6 @@ public sealed partial class MainWindow
                     break;
 
                 case "PlaylistWall":
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     if (string.IsNullOrEmpty(_currentPlaylistDetail))
                     {
                         ApplyPlaylistWallCategory();
@@ -111,7 +104,6 @@ public sealed partial class MainWindow
 
                 case "Ratings":
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    PlaylistListBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     ApplyRatingCategory();
@@ -123,7 +115,6 @@ public sealed partial class MainWindow
 
                 case "Genres":
                 case "Years":
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _ = RefreshGenreYearViewAsync();
@@ -132,7 +123,6 @@ public sealed partial class MainWindow
                 case "GenreSongs":
                 case "YearSongs":
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    PlaylistListBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     var groupedSongs = _currentCategory == "GenreSongs"
@@ -145,12 +135,11 @@ public sealed partial class MainWindow
                             .ToList();
                     var groupedCollection = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(groupedSongs);
                     RenumberCollection(groupedCollection);
-                    PlaylistView.ItemsSource = groupedCollection;
+                    _playlistViewSource = groupedCollection;
                     break;
 
                 case "AudioFX":
                     // 音效处理 DSP 工作台（EQ / 声道平衡 / 安全限幅）
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     LoadAudioFxUiFromStore();
@@ -158,7 +147,6 @@ public sealed partial class MainWindow
 
                 case "Settings":
                     // 设置面板（2026-10-12 阶段 0 骨架）：版式与音效处理一致，分类导航由通用子页框架生成
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     EnsureSettingsUiBuilt();
@@ -166,7 +154,6 @@ public sealed partial class MainWindow
 
                 case "TagEdit":
                     // 标签板块（2026-10-13 阶段 5a）：左标签面板 + 右文件列表，子页导航在面板内部
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     EnsureTagEditUiBuilt();
@@ -174,7 +161,6 @@ public sealed partial class MainWindow
             }
 
             // 仅「播放队列」分类支持拖拽重排（其它列表保持排序语义不变）
-            PlaylistView.CanReorderItems = ReferenceEquals(PlaylistView.ItemsSource, _queue.Items);
 
             // 空状态提示：仅 Favorites / Recent / Ratings 自己管理；其余分类隐藏
             if (_currentCategory is not ("Favorites" or "Recent" or "Ratings"))
@@ -212,7 +198,6 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                PlaylistView.ScrollIntoView(playing);
             });
         }
 
@@ -240,7 +225,6 @@ public sealed partial class MainWindow
 
             if (_currentCategory is "Genres" or "Years")
             {
-                ArtistGridView.ItemsSource = entries;
                 RefreshPlaylistSelectionChrome();
             }
         }
@@ -282,7 +266,6 @@ public sealed partial class MainWindow
         private void ApplyFavoritesOrRecentCategory()
         {
             SetSongSortUiForCategory(isUserPlaylist: false);
-            PlaylistListBorder.Visibility = Visibility.Visible;
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 
@@ -361,7 +344,7 @@ public sealed partial class MainWindow
             }
 
             RenumberCollection(items);
-            PlaylistView.ItemsSource = items;
+            _playlistViewSource = items;
             SetPlaylistEmptyHint(items.Count == 0,
                 string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal) ? "暂时没有添加我喜欢的音乐" : "最近没有播放记录");
         }
@@ -369,14 +352,12 @@ public sealed partial class MainWindow
         /// <summary>歌曲列表空状态提示：空时显示 hint，否则收起。</summary>
         private void SetPlaylistEmptyHint(bool empty, string hint)
         {
-            if (PlaylistEmptyHint == null) return;
         }
 
         /// <summary>播放最多：按播放次数降序显示媒体库歌曲。</summary>
         private void ApplyMostPlayedCategory()
         {
             SetSongSortUiForCategory(isUserPlaylist: false);
-            PlaylistListBorder.Visibility = Visibility.Visible;
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 
@@ -404,7 +385,7 @@ public sealed partial class MainWindow
             }
 
             RenumberCollection(result);
-            PlaylistView.ItemsSource = result;
+            _playlistViewSource = result;
         }
 
         /// <summary>刷新评分分类：按 _ratingFilter 过滤媒体库歌曲并填充列表。</summary>
@@ -427,7 +408,7 @@ public sealed partial class MainWindow
             }
 
             RenumberCollection(col);
-            PlaylistView.ItemsSource = col;
+            _playlistViewSource = col;
             SetPlaylistEmptyHint(col.Count == 0, _ratingFilter >= 0
                 ? (_ratingFilter == 0 ? "没有未评分的歌曲" : "没有 " + _ratingFilter + " 星评分的歌曲")
                 : "还没有给任何歌曲评分");

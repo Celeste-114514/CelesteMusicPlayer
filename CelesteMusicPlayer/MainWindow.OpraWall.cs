@@ -59,10 +59,6 @@ namespace CelesteMusicPlayer
         /// <summary>按当前来源筛选重铺曲线列表（列表本体来自 _opraEqs，不重新查库）。</summary>
         private void ApplyOpraEqFilter()
         {
-            if (OpraEqList == null)
-            {
-                return;
-            }
 
             List<OpraProductEqSummary> shown = _opraEqs;
             if (_opraSourceFilter != null)
@@ -110,10 +106,6 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (OpraVendorWall == null)
-                {
-                    return;
-                }
 
                 List<OpraVendor> vendors = _opra.GetTopVendors(14);
                 if (vendors.Count == 0)
@@ -383,18 +375,6 @@ namespace CelesteMusicPlayer
                     Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL - 2, padT - 2, plotW + 4, plotH + 4) }
                 });
 
-                if (OpraPreviewNote != null)
-                {
-                    // 报「形状」值（不含预增益）：预增益是防止叠加削波用的整体下移，
-                    // 混进来会让人以为低音被压了，而实际只是整条曲线一起沉下去。
-                    double loDb = SumOpraGainAt(corr.Curve, 60.0) - corr.Curve.PreampDb;
-                    double hiDb = SumOpraGainAt(corr.Curve, 8000.0) - corr.Curve.PreampDb;
-                    OpraPreviewNote.Text =
-                        $"共 {corr.Curve.Bands.Count} 段。实线 = 套用后的实际响应，虚线 = 校正形状（不含预增益）。"
-                        + $"预增益 {(corr.Curve.PreampDb >= 0 ? "+" : "")}{corr.Curve.PreampDb:0.#} dB 是负数在这是正常的："
-                        + "它是为了防止几段增益叠起来顶到削波，整条曲线被一起压低，不代表低音也被压了 —— 看虚线才知道抬了哪、压了哪。"
-                        + $"60Hz {(loDb >= 0 ? "+" : "")}{loDb:0.#} dB，8kHz {(hiDb >= 0 ? "+" : "")}{hiDb:0.#} dB。";
-                }
             }
             catch (Exception caught)
             {

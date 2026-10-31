@@ -221,10 +221,6 @@ namespace CelesteMusicPlayer
         /// <summary>下方说明：给三个具体频点的混入量，比看图更容易建立直觉。</summary>
         private void UpdateDspXfeedNote(bool enabled, double amount, double cutoff, double fs)
         {
-            if (DspXfeedCurveNote == null)
-            {
-                return;
-            }
 
             if (!enabled || amount <= 0.0001)
             {

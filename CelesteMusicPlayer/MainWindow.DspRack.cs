@@ -95,28 +95,16 @@ namespace CelesteMusicPlayer
 
         private void RefreshDspCompReadouts()
         {
-            if (DspCompThresholdText == null)
-            {
-                return;
-            }
 
         }
 
         private void RefreshDspFieldReadouts()
         {
-            if (DspFieldWidthText == null)
-            {
-                return;
-            }
 
         }
 
         private void RefreshDspMatrixReadouts()
         {
-            if (DspMatrixLlText == null)
-            {
-                return;
-            }
 
         }
 
@@ -406,10 +394,6 @@ namespace CelesteMusicPlayer
         /// 机架里只有 8 个可排序模块，没有固定行。</summary>
         private void MoveDspRackEntry(int delta)
         {
-            if (DspRackList == null)
-            {
-                return;
-            }
 
             // 行下标即机架下标：0..7 一一对应 8 个内核模块
             int i = DspRackList.SelectedIndex;

@@ -64,10 +64,6 @@ public sealed partial class MainWindow
                     ThemeColorService.ThemeColorChanged += OnThemeColorChanged;
 
                     // 音量条自绘:尺寸变化/初始绘制/交互
-                    if (VolumeStyleCanvas != null)
-                    {
-                        VolumeStyleCanvas.SizeChanged += VolumeStyleCanvas_SizeChanged;
-                    }
 
                     // 缓存波形主题色(信息卡频谱用)
                     try

@@ -282,10 +282,6 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void UpdateDspMatrixPhaseNote(bool enabled, double ll, double rl, double lr, double rr)
         {
-            if (DspMatrixPhaseText == null)
-            {
-                return;
-            }
 
             if (!enabled)
             {

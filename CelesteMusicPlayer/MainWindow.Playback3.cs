@@ -321,10 +321,6 @@ namespace CelesteMusicPlayer
 
             // 共享模式：MediaPlayer 数字音量（跟随用户）。
             MediaPlayer? player = GetPlayer();
-            if (player != null)
-            {
-                player.Volume = e.NewValue / 100.0;
-            }
 
             // 设备/引擎音量：共享=数字增益随滑块；独占/ASIO 默认软件音量条固定 100%（实际音量由 DAC 硬件旋钮/
             // 系统端点音量控制，bit-perfect 保真）；设置页开启「HiFi 软件音量」后，独占/ASIO 下滑条改走
@@ -561,10 +557,6 @@ namespace CelesteMusicPlayer
         /// </summary>
         internal void SetVolumePublic(double value0To100)
         {
-            if (VolumeSlider == null)
-            {
-                return;
-            }
 
             VolumeSlider.Value = Math.Clamp(value0To100, 0, VolumeSlider.Maximum);
         }
@@ -1019,11 +1011,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            PlaylistItem? item = PlaylistView.SelectedItem as PlaylistItem;
-            if (item == null && _playlist.Count > 0)
-            {
-                item = _playlist[0];
-            }
+            PlaylistItem? item = _playlist.Count > 0 ? _playlist[0] : null;
 
             if (item != null
                 && !string.Equals(_waveformPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
@@ -1348,10 +1336,6 @@ namespace CelesteMusicPlayer
         /// <summary>信号链调试面板：实时显示 源格式→输出格式→是否独占→是否经过 DSP（对标 foobar 排障"假 bit-perfect"）。</summary>
         internal void UpdateSignalChainDisplay()
         {
-            if (SignalChainInfoText == null)
-            {
-                return;
-            }
 
             try
             {
@@ -1903,10 +1887,9 @@ namespace CelesteMusicPlayer
             if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
                 && !_isMultiSelectMode
                 && index >= 0
-                && PlaylistView.ItemsSource is System.Collections.IList songsList
+                && _playlistViewSource is System.Collections.IList songsList
                 && index < songsList.Count)
             {
-                PlaylistView.ScrollIntoView(item);
             }
 
             StartPlayback(item);
@@ -1936,15 +1919,13 @@ namespace CelesteMusicPlayer
             if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
                 && !_isMultiSelectMode)
             {
-                PlaylistView.ScrollIntoView(item);
             }
             else if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
                 && !_isMultiSelectMode
                 && _currentIndex >= 0
-                && PlaylistView.ItemsSource is System.Collections.IList songsList2
+                && _playlistViewSource is System.Collections.IList songsList2
                 && _currentIndex < songsList2.Count)
             {
-                PlaylistView.ScrollIntoView(_playlist[_currentIndex]);
             }
 
             StartPlayback(item);

@@ -32,8 +32,8 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void RefreshQueueUi()
         {
-            PlaylistView.ItemsSource = null;
-            PlaylistView.ItemsSource = _queue.Items;
+            _playlistViewSource = null;
+            _playlistViewSource = _queue.Items;
             RenumberCollection(_queue.Items);
             NotifyCurrentPlaylistWindow();
             if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();

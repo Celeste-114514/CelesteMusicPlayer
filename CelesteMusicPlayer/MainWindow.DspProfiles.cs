@@ -125,10 +125,6 @@ namespace CelesteMusicPlayer
                     : "当前：方案「" + ProfileCoordinator.ActiveName + "」正在生效";
             }
 
-            if (DspProfileHintText == null)
-            {
-                return;
-            }
 
             if (_dspProfileRows.Count == 0)
             {

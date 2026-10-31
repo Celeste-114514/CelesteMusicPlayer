@@ -246,10 +246,6 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (AddToLibraryButton == null)
-                {
-                    return;
-                }
 
                 string? path = _externalPlayPath ?? _nowPlayingPath;
                 bool hasPath = !string.IsNullOrWhiteSpace(path) && File.Exists(path);

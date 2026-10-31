@@ -860,19 +860,13 @@ public sealed partial class MainWindow
                 var ch = extra.ChannelBalance;
                 ReplayGainState rglog = ReplayGainStore.Load();
                 StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
-                AudioFxChannelToggle.IsOn = ch.Enabled;
                 SelectAudioFxMonoMode(ch.MonoMode);
-                AudioFxChannelCrossfeedToggle.IsOn = ch.CrossfeedEnabled;
                 // Crossfeed 已独立成页：强度和截止的两处读数要在加载时同步一次
                 RefreshDspXfeedLevelReadout();
                 RefreshCrossfeedCutoffReadout();
-                AudioFxChannelCrossfeedSlider.Value = ch.CrossfeedLevel;
                 // 老存档没有这个字段 → 反序列化得到默认 700，正好等于旧版写死值，行为不变
-                AudioFxChannelCrossfeedCutoffSlider.Value = ch.CrossfeedCutoffHz;
 
                 var safety = extra.Safety;
-                AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;
-                AudioFxSafetyLimiterToggle.IsOn = safety.EnableLimiter;
 
                 // ReplayGain：先装载模型，再让控件照模型投影（模型是唯一参数来源）
                 RgParameters.Load(ReplayGainStore.Load());

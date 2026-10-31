@@ -38,10 +38,6 @@ namespace CelesteMusicPlayer
 
             bool show = _albumDetailDsdFiles.Count > 0;
 
-            if (AlbumDetailPreloadHint == null)
-            {
-                return;
-            }
 
             if (!show)
             {
@@ -132,10 +128,6 @@ namespace CelesteMusicPlayer
 
         private void RefreshPreloadHint(int done, int fail, int total, string? lastError)
         {
-            if (AlbumDetailPreloadHint == null)
-            {
-                return;
-            }
 
             string s = $"预加载中/完成：{done}/{total}" + (fail > 0 ? $"，失败 {fail}" : string.Empty);
             if (!string.IsNullOrEmpty(lastError))

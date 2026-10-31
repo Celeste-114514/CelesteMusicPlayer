@@ -180,10 +180,6 @@ namespace CelesteMusicPlayer
         }
 
         private void UpdateDesktopLyricsBadge()        {
-            if (DesktopLyricsStateBadge == null)
-            {
-                return;
-            }
 
             bool on = _desktopLyricsEnabled && _desktopLyricsWindow != null;
         }

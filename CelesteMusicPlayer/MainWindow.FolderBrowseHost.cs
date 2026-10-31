@@ -65,7 +65,6 @@ public sealed partial class MainWindow
             {
                 try
                 {
-                    FolderBrowserView.SelectedItem = item;
                     FolderBrowserView.ScrollIntoView(item);
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

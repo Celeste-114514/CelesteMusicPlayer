@@ -21,7 +21,6 @@ namespace CelesteMusicPlayer
                 SrcParameters.Load(saved.SrcTargetHz, saved.SrcQuality, saved.SrcDither);
 
                 FillLabelCombo(SrcRateCombo, DspSrcParameters.RateLabels);
-                SrcRateCombo.SelectedIndex = SrcParameters.RateIndex;
                 UpdateSrcStateText(SrcParameters.TargetHz);
 
                 FillLabelCombo(SrcQualityCombo, DspSrcParameters.QualityLabels);
@@ -144,11 +143,6 @@ namespace CelesteMusicPlayer
         /// 播放会话变化时由播放逻辑调用。</summary>
         internal void RefreshSrcSessionState()
         {
-            if (SrcSessionStateText == null) return;
-            string desc = _audioEngine?.SrcStateDescription ?? "";
-            SrcSessionStateText.Text = string.IsNullOrEmpty(desc)
-                ? "尚未播放"
-                : "当前会话：" + desc;
             // 链路图上的源/目标采样率就来自这段会话描述，一起刷
             RedrawSrcChain();
         }
@@ -156,7 +150,6 @@ namespace CelesteMusicPlayer
         /// <summary>刷新右侧状态文字：关闭 / 已开启。</summary>
         private void UpdateSrcStateText(int hz)
         {
-            if (SrcStateText == null) return;
         }
 
         #region 输出缓冲区（抗卡顿 / 低延迟）
@@ -176,16 +169,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (OutputBufferCombo == null)
-                {
-                    return;
-                }
 
                 int saved = AppSettingsStore.Load().OutputBufferMs;
-                OutputBufferCombo.Items.Clear();
                 foreach (var opt in OutputBufferOptions)
                 {
-                    OutputBufferCombo.Items.Add(opt.Label);
                 }
 
                 int idx = 2; // 默认 100ms（推荐）

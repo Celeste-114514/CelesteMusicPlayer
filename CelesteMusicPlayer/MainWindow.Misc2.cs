@@ -130,7 +130,6 @@ namespace CelesteMusicPlayer
                 && (!HeaderEndPadCol.Width.IsAbsolute
                     || Math.Abs(HeaderEndPadCol.Width.Value - endPad) >= 0.5))
             {
-                HeaderEndPadCol.Width = new GridLength(endPad);
             }
         }
 

@@ -231,10 +231,6 @@ namespace CelesteMusicPlayer
         /// <summary>刷新「输出 · 安全监控」页的链路条：输入 → 余量 → 处理 → 输出。</summary>
         private void UpdateDspSafetyChain()
         {
-            if (DspChainInputText == null)
-            {
-                return;
-            }
 
             bool bypass = RackParameters.Bypassed;
 
@@ -335,10 +331,6 @@ namespace CelesteMusicPlayer
         /// <summary>刷新「输出 · 安全监控」页的数值。数据全部来自引擎侧真实统计。</summary>
         private void UpdateDspOutputMonitor()
         {
-            if (OutMonitorPeakText == null)
-            {
-                return;
-            }
 
             float peak = _audioEngine?.OutputPeakDbfs ?? float.NegativeInfinity;
             int clip = _audioEngine?.OutputClipCount ?? 0;

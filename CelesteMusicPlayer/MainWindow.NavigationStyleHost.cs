@@ -18,54 +18,6 @@ public sealed partial class MainWindow
 {
         private string? _lastAnimatedNavTag;
 
-        // W13 第三十四刀：导航外观
-
-        /// <summary>经典界面专属：侧栏分类按钮图标按类别上彩色（媒体播放器风格）；classic=false 时还原主题前景色。</summary>
-        private void ApplyClassicNavIconColors(bool classic)
-        {
-            try
-            {
-                (Microsoft.UI.Xaml.Controls.Button button, Windows.UI.Color color)[] items =
-                {
-                    (NavSongsButton, Windows.UI.Color.FromArgb(255, 0, 120, 212)),      // 歌曲：蓝
-                    (NavAlbumsButton, Windows.UI.Color.FromArgb(255, 135, 100, 184)),   // 专辑：紫
-                    (NavArtistsButton, Windows.UI.Color.FromArgb(255, 227, 0, 140)),    // 歌手：品红
-                    (NavAlbumArtistsButton, Windows.UI.Color.FromArgb(255, 194, 57, 179)), // 专辑歌手
-                    (NavFavoritesButton, Windows.UI.Color.FromArgb(255, 247, 99, 12)),  // 收藏：橙
-                    (NavRatingsButton, Windows.UI.Color.FromArgb(255, 234, 163, 0)),    // 评分：金黄
-                    (NavRecentButton, Windows.UI.Color.FromArgb(255, 0, 183, 195)),     // 最近：青
-                    (NavPlaylistWallButton, Windows.UI.Color.FromArgb(255, 16, 124, 16)), // 歌单墙：绿
-                    (NavGenreButton, Windows.UI.Color.FromArgb(255, 3, 131, 135)),      // 流派
-                    (NavYearButton, Windows.UI.Color.FromArgb(255, 73, 130, 5)),        // 年代
-                    (NavMostPlayedButton, Windows.UI.Color.FromArgb(255, 202, 80, 16)), // 最常播放
-                    (NavFoldersButton, Windows.UI.Color.FromArgb(255, 116, 77, 169)),   // 文件夹
-                    (NavAudioFxButton, Windows.UI.Color.FromArgb(255, 0, 153, 188)),    // 音效
-                    (UserPlaylistNavButton, Windows.UI.Color.FromArgb(255, 152, 111, 11)), // 自建歌单
-                };
-
-                foreach ((Microsoft.UI.Xaml.Controls.Button button, Windows.UI.Color color) in items)
-                {
-                    Microsoft.UI.Xaml.Controls.FontIcon? icon = FindFirstFontIcon(button);
-                    if (icon == null)
-                    {
-                        continue;
-                    }
-
-                    // 纯色图标模式（设置里关掉 emoji）下经典模式也保持字形跟随文字单色，
-                    // 不再涂类别彩色——那就是图景界面的观感。emoji 开启时才上类别彩色。
-                    if (classic && AppSettingsStore.Load().NavEmojiIcons)
-                    {
-                        icon.Foreground = new SolidColorBrush(color);
-                    }
-                    else
-                    {
-                        icon.ClearValue(Microsoft.UI.Xaml.Controls.FontIcon.ForegroundProperty);
-                    }
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
-        }
-
         private static Microsoft.UI.Xaml.Controls.FontIcon? FindFirstFontIcon(DependencyObject? root)
         {
             if (root == null)

@@ -197,10 +197,6 @@ public sealed partial class MainWindow
 
         private void UpdateLibrarySearchUi()
         {
-            if (LibrarySearchPanel == null)
-            {
-                return;
-            }
 
             bool show = !_isMultiSelectMode
                 && _openedAlbum == null
@@ -220,20 +216,6 @@ public sealed partial class MainWindow
 
             // 分类切换时刷新搜索框占位文案（原 SetLibrarySearchBasePrompt 随极客皮肤移除，
             // 经典路径就是直接写 PlaceholderText）。
-            if (LibrarySearchBox != null)
-            {
-                LibrarySearchBox.PlaceholderText = _currentCategory switch
-                {
-                    "Songs" => "搜索标题、专辑、艺术家",
-                    "Albums" => "搜索专辑、艺术家",
-                    "Artists" => "搜索艺术家",
-                    "AlbumArtists" => "搜索专辑艺术家",
-                    "Folders" => "搜索文件名",
-                    "UserPlaylist" => "搜索标题、艺术家、专辑、年份",
-                    _ => "搜索"
-                };
-            }
-
             ApplyLibrarySearchNow();
         }
 
@@ -454,7 +436,6 @@ public sealed partial class MainWindow
             {
                 if (!ReferenceEquals(AlbumGridView.ItemsSource, _albums))
                 {
-                    AlbumGridView.ItemsSource = _albums;
                 }
 
                 RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
@@ -467,7 +448,6 @@ public sealed partial class MainWindow
                     || ContainsIgnoreCase(a.Artist, q))
                 .ToList();
 
-            AlbumGridView.ItemsSource = filtered;
             RefreshAlbumWallSelectionChrome(AlbumGridView, filtered);
         }
 
@@ -483,7 +463,6 @@ public sealed partial class MainWindow
             {
                 if (!ReferenceEquals(ArtistGridView.ItemsSource, _artists))
                 {
-                    ArtistGridView.ItemsSource = _artists;
                 }
 
                 return;
@@ -493,7 +472,6 @@ public sealed partial class MainWindow
                 .Where(a => ContainsIgnoreCase(a.Name, q))
                 .ToList();
 
-            ArtistGridView.ItemsSource = filtered;
         }
 
         // W13 第二十九刀：搜索过滤 / 已实现容器枚举

@@ -97,10 +97,6 @@ namespace CelesteMusicPlayer
         /// <summary>设置输出缓冲区大小（毫秒，20~500）。越小越跟手，越大越抗卡顿。下次开播生效。</summary>
         public void SetOutputBufferMs(int ms)
         {
-            if (_hifiOut != null)
-            {
-                _hifiOut.OutputBufferMs = ms;
-            }
         }
 
         /// <summary>当前输出缓冲区大小（毫秒）。</summary>
@@ -772,10 +768,6 @@ namespace CelesteMusicPlayer
             get => _hifiOut?.SoftwareVolumeEnabled ?? false;
             set
             {
-                if (_hifiOut != null)
-                {
-                    _hifiOut.SoftwareVolumeEnabled = value;
-                }
             }
         }
 

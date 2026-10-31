@@ -254,10 +254,6 @@ namespace CelesteMusicPlayer
 
             double effSide = EffectiveSideDb(sideDb, width);
 
-            if (DspFieldCorrText == null)
-            {
-                return;
-            }
 
             if (!enabled)
             {

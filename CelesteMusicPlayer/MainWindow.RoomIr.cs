@@ -27,10 +27,6 @@ namespace CelesteMusicPlayer
         /// <summary>进入 FIR 页时把存档装进模型并投影到面板（幂等，可反复调用）。</summary>
         internal void LoadRoomCorrectionIntoPanel()
         {
-            if (RoomIrPathBox == null)
-            {
-                return;
-            }
 
             FirParameters.Load(RoomCorrectionStore.Load());
             _roomIrUiReady = true;
@@ -125,20 +121,12 @@ namespace CelesteMusicPlayer
 
         private void UpdateRoomIrGainText()
         {
-            if (RoomIrGainValueText == null)
-            {
-                return;
-            }
 
             double g = FirParameters.Current.GainDb;
         }
 
         private void UpdateRoomTrimLabel()
         {
-            if (RoomTrimLabel == null)
-            {
-                return;
-            }
 
         }
 

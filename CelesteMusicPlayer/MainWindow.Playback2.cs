@@ -726,9 +726,9 @@ namespace CelesteMusicPlayer
             // 注意 _playlist 是 readonly 字段不能重新赋值，故主列表走“解绑→原地清空/填充→重绑”路径；
             // _queue.Items 非 readonly，可直接换新集合。
             bool isUser = ReferenceEquals(target, _queue.Items);
-            bool rebind = ReferenceEquals(PlaylistView.ItemsSource, target);
+            bool rebind = ReferenceEquals(_playlistViewSource, target);
 
-            if (rebind) PlaylistView.ItemsSource = null;
+            if (rebind) _playlistViewSource = null;
 
             ObservableCollection<PlaylistItem> effective;
             if (isUser)
@@ -745,7 +745,7 @@ namespace CelesteMusicPlayer
 
             if (rebind || (isUser && _currentCategory == "UserPlaylist"))
             {
-                PlaylistView.ItemsSource = effective;
+                _playlistViewSource = effective;
             }
 
             RenumberCollection(effective);
@@ -762,7 +762,7 @@ namespace CelesteMusicPlayer
                 // 否则下标对过滤子集越界会抛 ArgumentException；过滤场景由 ApplySongsSearchFilter 重建并刷新选中。
                 if (_currentIndex >= 0
                     && string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
-                    && ReferenceEquals(PlaylistView.ItemsSource, _playlist)
+                    && ReferenceEquals(_playlistViewSource, _playlist)
                     && _currentIndex < PlaylistView.Items.Count)
                 {
                 }
@@ -773,7 +773,7 @@ namespace CelesteMusicPlayer
                 // 同上：仅当 PlaylistView 当前显示完整的 _queue.Items（未开过滤）时按该下标设选中，避免越界。
                 if (_queue.Index >= 0
                     && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
-                    && ReferenceEquals(PlaylistView.ItemsSource, _queue.Items)
+                    && ReferenceEquals(_playlistViewSource, _queue.Items)
                     && _queue.Index < PlaylistView.Items.Count)
                 {
                 }
@@ -1678,10 +1678,10 @@ namespace CelesteMusicPlayer
             }
 
             // 整表替换，避免 Clear + N 次 Add 触发数千次 UI/集合通知导致卡死崩溃
-            bool rebindPlaylistView = ReferenceEquals(PlaylistView.ItemsSource, _queue.Items);
+            bool rebindPlaylistView = ReferenceEquals(_playlistViewSource, _queue.Items);
             if (rebindPlaylistView)
             {
-                PlaylistView.ItemsSource = null;
+                _playlistViewSource = null;
             }
 
             _queue.Replace(rebuilt);
@@ -1689,7 +1689,7 @@ namespace CelesteMusicPlayer
             if (rebindPlaylistView
                 || string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
             {
-                PlaylistView.ItemsSource = _queue.Items;
+                _playlistViewSource = _queue.Items;
             }
 
             if (!string.IsNullOrWhiteSpace(playingPath))
@@ -2045,10 +2045,6 @@ namespace CelesteMusicPlayer
 
                 var img = container.ContentTemplateRoot as FrameworkElement;
                 var coverImg = img?.FindName("RowCoverImage") as Microsoft.UI.Xaml.Controls.Image;
-                if (coverImg != null)
-                {
-                    coverImg.Source = bmp;
-                }
 
                 // 有封面隐藏边框线/底色，无封面显示框 + 光盘占位（与专辑墙/详情页一致）
                 var coverFrame = img?.FindName("RowCoverBorder") as Border;
@@ -2100,10 +2096,6 @@ namespace CelesteMusicPlayer
                 foreach (ListViewItem container in EnumerateRealizedListViewItems(list))
                 {
                     Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
-                    if (chrome != null)
-                    {
-                        chrome.Width = list.ActualWidth;
-                    }
                 }
             }
         }

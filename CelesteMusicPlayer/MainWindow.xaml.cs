@@ -458,6 +458,10 @@ namespace CelesteMusicPlayer
         private bool _isUserSeeking;
         private bool _isUpdatingProgressUi;
 
+        /// <summary>PlaylistView 当前显示的数据源。旧界面靠 <c>PlaylistView.ItemsSource</c> 记这个状态，
+        /// 控件换成垫片后改由本字段持有，语义不变。</summary>
+        private object? _playlistViewSource;
+
         /// <summary>
         /// 一次拖动手势是否已经执行过跳转。
         /// Slider 在松手时会连续触发 PointerReleased 和 PointerCaptureLost，两个处理器都调
@@ -578,7 +582,6 @@ namespace CelesteMusicPlayer
             {
                 if (LeftCategoryNavBorder != null && LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
                 {
-                    LeftCategoryNavBorder.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
                 }
             }
             catch (Exception caught)
@@ -671,31 +674,14 @@ namespace CelesteMusicPlayer
             // 导致：主题色按钮显示成透明底 + 白字（用户实测"很神秘"、专辑详情页
             // "添加至播放队列"透明）。按钮的 Height/Padding/CornerRadius 在 XAML 里都有，
             // 删掉调用即恢复 E4 样式与 XAML 属性，无需替代逻辑。
-            PlaylistView.SelectionChanged += PlaylistView_SelectionChromeChanged;
-            PlaylistView.ContainerContentChanging += PlaylistView_ContainerContentChanging;
-            PlaylistView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
-            PlaylistView.ItemsSource = _playlist;
-            AlbumGridView.ItemsSource = _albums;
-            AlbumGridView.ContainerContentChanging += AlbumGridView_ContainerContentChanging;
+            _playlistViewSource = _playlist;
             ApplyAccentSelectionResources(AlbumGridView);
             ApplyAccentSelectionResources(AlbumTrackListView);
-            AlbumTrackListView.ContainerContentChanging += AlbumTrackListView_ContainerContentChanging;
-            PlaylistDetailListView.SizeChanged += SongListView_SizeChanged;
-            FolderBrowserView.SizeChanged += (_, _) =>
             {
                 if (FolderBrowserView.ActualWidth > 0) RefreshFolderBrowserSelectionChrome();
             };
-            PlaylistDetailListView.ContainerContentChanging += PlaylistDetailListView_ContainerContentChanging;
-            PlaylistDetailListView.SelectionChanged += PlaylistDetailListView_SelectionChromeChanged;
-            PlaylistDetailListView.SizeChanged += SongListView_SizeChanged;
-            AlbumTrackListView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
-            ArtistGridView.ItemsSource = _artists;
             ApplyAccentSelectionResources(ArtistTrackListView);
-            ArtistTrackListView.ContainerContentChanging += ArtistTrackListView_ContainerContentChanging;
-            ArtistTrackListView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
-            ArtistAlbumGridView.ContainerContentChanging += ArtistAlbumGridView_ContainerContentChanging;
             ApplyAccentSelectionResources(ArtistAlbumGridView);
-            FolderBrowserView.ContainerContentChanging += FolderBrowserView_ContainerContentChanging;
             ApplyAccentSelectionResources(FolderBrowserView);
 
             SyncHeaderColumnsFromState();

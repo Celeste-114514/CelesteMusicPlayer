@@ -443,9 +443,9 @@ namespace CelesteMusicPlayer
                         }
 
                         _queue.Replace(rebuilt);
-                        if (ReferenceEquals(PlaylistView.ItemsSource, _queue.Items) == false)
+                        if (ReferenceEquals(_playlistViewSource, _queue.Items) == false)
                         {
-                            PlaylistView.ItemsSource = _queue.Items;
+                            _playlistViewSource = _queue.Items;
                         }
 
                         int idx = (queue.CurrentIndex >= 0 && queue.CurrentIndex < _queue.Items.Count)
@@ -650,18 +650,16 @@ namespace CelesteMusicPlayer
                 }
 
                 if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
-                    && ReferenceEquals(PlaylistView.ItemsSource, _queue.Items)
+                    && ReferenceEquals(_playlistViewSource, _queue.Items)
                     && userPlaylistIndex >= 0
                     && userPlaylistIndex < _queue.Items.Count)
                 {
-                    PlaylistView.ScrollIntoView(item);
                 }
                 else if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
                     && _currentIndex >= 0
                     && _playlist.Count > _currentIndex
-                    && ReferenceEquals(PlaylistView.ItemsSource, _playlist))
+                    && ReferenceEquals(_playlistViewSource, _playlist))
                 {
-                    PlaylistView.ScrollIntoView(_playlist[_currentIndex]);
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
@@ -838,10 +836,6 @@ namespace CelesteMusicPlayer
 
         private void UpdatePlaybackRateButtonText()
         {
-            if (PlaybackRateText == null)
-            {
-                return;
-            }
 
             double rate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
         }
@@ -897,10 +891,10 @@ namespace CelesteMusicPlayer
             int added = 0;
 
             // 大批量导入时临时解绑列表视图，避免逐条 Add 触发 ListView 反复创建/测量容器造成卡顿
-            bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            bool rebounded = ReferenceEquals(_playlistViewSource, _playlist);
             if (rebounded)
             {
-                PlaylistView.ItemsSource = null;
+                _playlistViewSource = null;
             }
 
             foreach (string path in filePaths)
@@ -941,7 +935,7 @@ namespace CelesteMusicPlayer
             // 循环结束恢复绑定；即使下方早返回(added==0)也能保持列表可见
             if (rebounded)
             {
-                PlaylistView.ItemsSource = _playlist;
+                _playlistViewSource = _playlist;
             }
 
             if (added == 0)
@@ -1206,7 +1200,6 @@ namespace CelesteMusicPlayer
         /// <summary>刷新当前曲目 ReplayGain 标签信息文本。</summary>
         private void RefreshAudioFxRgInfo()
         {
-            if (AudioFxRgInfoText == null) return;
             if (_currentRgData == null)
             {
                 return;
@@ -1257,10 +1250,6 @@ namespace CelesteMusicPlayer
 
         private void UpdatePlaylistWallEmptyHint()
         {
-            if (PlaylistWallEmptyHint == null)
-            {
-                return;
-            }
 
         }
 
@@ -1877,9 +1866,9 @@ namespace CelesteMusicPlayer
             string q = _librarySearchText.Trim();
             if (string.IsNullOrEmpty(q))
             {
-                if (!ReferenceEquals(PlaylistView.ItemsSource, _playlist))
+                if (!ReferenceEquals(_playlistViewSource, _playlist))
                 {
-                    PlaylistView.ItemsSource = _playlist;
+                    _playlistViewSource = _playlist;
                 }
 
                 RefreshPlaylistSelectionChrome();
@@ -1893,7 +1882,7 @@ namespace CelesteMusicPlayer
                     || ContainsIgnoreCase(p.Artist, q))
                 .ToList();
 
-            PlaylistView.ItemsSource = filtered;
+            _playlistViewSource = filtered;
             RefreshPlaylistSelectionChrome();
         }
 
@@ -1909,9 +1898,9 @@ namespace CelesteMusicPlayer
             string q = _librarySearchText.Trim();
             if (string.IsNullOrEmpty(q))
             {
-                if (!ReferenceEquals(PlaylistView.ItemsSource, _queue.Items))
+                if (!ReferenceEquals(_playlistViewSource, _queue.Items))
                 {
-                    PlaylistView.ItemsSource = _queue.Items;
+                    _playlistViewSource = _queue.Items;
                 }
 
                 RefreshPlaylistSelectionChrome();
@@ -1922,7 +1911,7 @@ namespace CelesteMusicPlayer
                 .Where(p => MatchesPlaylistSearch(p, q))
                 .ToList();
 
-            PlaylistView.ItemsSource = filtered;
+            _playlistViewSource = filtered;
             RefreshPlaylistSelectionChrome();
         }
 
@@ -2228,10 +2217,6 @@ namespace CelesteMusicPlayer
 
 
         private void ApplyArtistSongsFrostChrome()        {
-            if (ArtistSongsFrostPanel == null)
-            {
-                return;
-            }
 
             // 歌曲列表区无边框（与专辑详情页歌曲列表一致）
             ArtistSongsFrostPanel.ClearValue(Border.CornerRadiusProperty);

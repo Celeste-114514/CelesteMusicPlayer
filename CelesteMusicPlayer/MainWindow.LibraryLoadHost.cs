@@ -210,10 +210,10 @@ public sealed partial class MainWindow
                     : null;
 
                 // 大批量插入时临时解绑列表视图，避免逐条 Add 触发 ListView 反复创建/测量容器
-                bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+                bool rebounded = ReferenceEquals(_playlistViewSource, _playlist);
                 if (rebounded)
                 {
-                    PlaylistView.ItemsSource = null;
+                    _playlistViewSource = null;
                 }
 
                 foreach (PlaylistItem it in CueTrackExpansion.Expand(built.Items))
@@ -223,7 +223,7 @@ public sealed partial class MainWindow
 
                 if (rebounded)
                 {
-                    PlaylistView.ItemsSource = _playlist;
+                    _playlistViewSource = _playlist;
                 }
 
                 // 收尾与 LoadAndAddFiles 一致：按当前分类刷新（播放队列分类只重编号、不重排）
@@ -362,10 +362,10 @@ public sealed partial class MainWindow
                 ? _playlist[_currentIndex].FilePath
                 : null;
 
-            bool rebindPlaylistView = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            bool rebindPlaylistView = ReferenceEquals(_playlistViewSource, _playlist);
             if (rebindPlaylistView)
             {
-                PlaylistView.ItemsSource = null;
+                _playlistViewSource = null;
             }
 
             _playlist.Clear();
@@ -430,7 +430,7 @@ public sealed partial class MainWindow
             if (rebindPlaylistView
                 || string.Equals(_currentCategory, "Songs", StringComparison.Ordinal))
             {
-                PlaylistView.ItemsSource = _playlist;
+                _playlistViewSource = _playlist;
             }
 
             if (!string.IsNullOrWhiteSpace(playingPath))
@@ -625,10 +625,10 @@ public sealed partial class MainWindow
             PlaylistBuildResult built = await BuildPlaylistItemsAsync(paths, known,
                 (d, t) => DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"加载 {System.Math.Min(d, t)}/{t}"));
 
-            bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            bool rebounded = ReferenceEquals(_playlistViewSource, _playlist);
             if (rebounded)
             {
-                PlaylistView.ItemsSource = null;
+                _playlistViewSource = null;
             }
 
             _playlist.Clear();
@@ -641,7 +641,7 @@ public sealed partial class MainWindow
 
             if (rebounded)
             {
-                PlaylistView.ItemsSource = _playlist;
+                _playlistViewSource = _playlist;
             }
 
             StartupLog.Write($"[library] 后台加载完成：扫描 {paths.Length} 个路径，入库 {built.Items.Count} 首"

@@ -52,10 +52,6 @@ namespace CelesteMusicPlayer
         /// <summary>显示 / 隐藏左侧「网络音乐库」条目（供设置窗口保存 / 删除后调用）。</summary>
         private void ApplyWebDavNavEntry(AppSettingsState settings)
         {
-            if (NavWebDavButton == null)
-            {
-                return;
-            }
 
             WebDavLocation loc = WebDavLocation.FromSettings(settings);
 
@@ -96,10 +92,6 @@ namespace CelesteMusicPlayer
         /// <summary>切到网络音乐库分类时调用：列服务器根目录。</summary>
         private async void RefreshWebDavBrowserRoots()
         {
-            if (FolderBrowserView == null)
-            {
-                return;
-            }
 
             _folderBrowserItems.Clear();
             WebDavLocation? loc = GetWebDavLocation();

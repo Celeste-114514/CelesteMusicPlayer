@@ -106,10 +106,6 @@ public sealed partial class MainWindow
                 {
                     // 刚打开波形开关:立即加载当前播放(或选中)歌曲的波形
                     string? cur = _nowPlayingPath;
-                    if (string.IsNullOrEmpty(cur) && PlaylistView.SelectedItem is PlaylistItem selItem)
-                    {
-                        cur = selItem.FilePath;
-                    }
 
                     if (!string.IsNullOrEmpty(cur))
                     {
@@ -286,10 +282,6 @@ public sealed partial class MainWindow
 
         private void ApplyLyricPanelFromSettings(AppSettingsState settings)
         {
-            if (LyricsPanel == null)
-            {
-                return;
-            }
 
             TextAlignment align = settings.LyricAlign switch
             {
@@ -426,10 +418,6 @@ public sealed partial class MainWindow
                         bool softVol = IsHiFiSoftVolumeUiUnlocked();
                         VolumeSlider.Value = softVol ? Math.Clamp(settings.Volume, 0, 100) : VolumeSlider.Maximum;
                         MediaPlayer? hifiPlayer = GetPlayer();
-                        if (hifiPlayer != null)
-                        {
-                            hifiPlayer.Volume = softVol ? settings.Volume / 100.0 : 1.0; // 引擎路径下 MediaPlayer 常停用，兜底置满
-                        }
 
                         if (softVol)
                         {
@@ -442,10 +430,6 @@ public sealed partial class MainWindow
                         VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
                         _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动同步，避免退出误写
                         MediaPlayer? player = GetPlayer();
-                        if (player != null)
-                        {
-                            player.Volume = VolumeSlider.Value / 100.0;
-                        }
 
                     }
                 }
@@ -552,7 +536,6 @@ public sealed partial class MainWindow
                     StopBackgroundMotion();
 
                     // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线（极客界面保持单色，终端风不上彩）
-                    ApplyClassicNavIconColors(classic: classic);
 
                     // 面板底色/选中样式全部按新主题重刷（顺序：先信息卡底色，再依赖它取色的胶囊/表头）
                     ApplyNowPlayingCardChrome();
@@ -573,7 +556,6 @@ public sealed partial class MainWindow
                 {
                     FrostedGlass.ClassicMode = null;
                     RootShell.ClearValue(Grid.BackgroundProperty);
-                    ApplyClassicNavIconColors(classic: false);
                     _cachedMultiSelectFrostBrush = null;
 
                     // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）

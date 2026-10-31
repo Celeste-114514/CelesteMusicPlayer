@@ -49,7 +49,6 @@ namespace CelesteMusicPlayer
                     // 2026-10-09 应用户要求去掉了"不想等？点一下这里可以先进去"的提示文字，
                     // 交互本身留着——不显眼，但不想等的人随手一戳就能进，兜底超时之外
                     // 的另一条路。哪天不想要了，把这两行和 Tapped 一起去掉即可。
-                    StartupLoadingOverlay.Tapped += (_, _) => HideStartupLoading();
                 }
 
                 _loadingSafetyTimer = DispatcherQueue.CreateTimer();
@@ -78,7 +77,6 @@ namespace CelesteMusicPlayer
         private void UpdateStartupLoadingStatus(string text)
         {
             if (_startupLoadingHidden) return;
-            if (StartupLoadingStatus == null) return;
             try
             {
             }
@@ -128,7 +126,6 @@ namespace CelesteMusicPlayer
                 {
                     try
                     {
-                        StartupLoadingOverlay.Visibility = Visibility.Collapsed;
                         if (StartupLoadingRing != null) StartupLoadingRing.IsActive = false;
                     }
                     catch { /* 窗口正在关，无所谓 */ }

@@ -174,28 +174,21 @@ public sealed partial class MainWindow
         {
             try
             {
-                if (AudioOutputDeviceCombo == null)
-                {
-                    return;
-                }
 
                 var s = AppSettingsStore.Load();
                 string mode = string.IsNullOrWhiteSpace(s.OutputMode) ? "Shared" : s.OutputMode;
                 string selectedId = s.OutputDeviceId ?? string.Empty;
-                AudioOutputDeviceCombo.Items.Clear();
 
                 if (string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase))
                 {
                     var drivers = HiFiOutputBackend.EnumerateAsioDrivers();
                     if (drivers.Count == 0)
                     {
-                        AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "（未检测到 ASIO 驱动）", Tag = "" });
                     }
                     else
                     {
                         foreach (string d in drivers)
                         {
-                            AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = d, Tag = d });
                         }
                     }
                 }
@@ -203,11 +196,9 @@ public sealed partial class MainWindow
                 {
                     var devices = HiFiOutputBackend.EnumerateWasapiDevices();
                     string defaultId = HiFiOutputBackend.GetDefaultWasapiDeviceId();
-                    AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "系统默认", Tag = "" });
                     foreach ((string id, string name) in devices)
                     {
                         string label = string.Equals(id, defaultId, System.StringComparison.OrdinalIgnoreCase) ? name + " (默认)" : name;
-                        AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = label, Tag = id });
                     }
                 }
 
@@ -298,10 +289,6 @@ public sealed partial class MainWindow
         {
             try
             {
-                if (AudioLinkSourceFmt == null)
-                {
-                    return;
-                }
 
                 bool hifi = IsHiFiModeSelected();
                 var chain = _audioEngine?.ChainFormat;
@@ -327,26 +314,13 @@ public sealed partial class MainWindow
                 // 限幅：开着且已有其它逐样本模块 → 随链生效（防削波）；开着但全链直通 → 待命（不动样本）；
                 // 关着 → 完全不介入，摘要里不出现。2026-09-22 用户实测"限幅没开却显示开了"根因：
                 // 旧 AffectsBits 口径把"显式关限幅"算成激活（DspState.cs 已修），此处同步改口径。
-                string limiterNote = !limiterOn
-                    ? string.Empty
-                    : (active.Count > 0
-                        ? " · 限幅生效（随 DSP 链防削波）"
-                        : " · 限幅待命（无其它 DSP 时不做逐样本处理，不影响 bit-perfect）");
                 string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
                 // bit-perfect：综合判定（DSP + 输出格式 + 是否共享模式），不再只看 DSP 开关
-                bool chainPure = EvaluateBitPerfectChain(out string chainReason, out bool chainConfirmed);
-                AudioLinkBitPerfect.Text = chainPure
-                    ? (chainConfirmed
-                        ? "bit-perfect 直通：输出格式与源一致，无重采样、无 DSP 干预"
-                        : "bit-perfect 直通（DSP 已旁路；开始播放后按输出格式复核）")
-                    : "非 bit-perfect：" + chainReason
-                      + (chainConfirmed ? string.Empty : "（待播放确认）");
 
                 // 专业播放状态
                 // 与上面 DSP 摘要同口径：余量✓=真在处理；限幅✓=随链生效、待=开着但全链直通、—=已关闭
                 bool limiterEngaged = limiterOn && active.Count > 0;
                 // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
-                ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
                 // 按设备记忆 DSP 配置档：开关与提示同步
 
@@ -464,10 +438,6 @@ public sealed partial class MainWindow
         {
             try
             {
-                if (LinkDspCapsule == null)
-                {
-                    return;
-                }
 
                 var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
                 var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
@@ -567,10 +537,6 @@ public sealed partial class MainWindow
         {
             try
             {
-                if (AudioDeviceHotplugText == null)
-                {
-                    return;
-                }
 
 
                 _hotplugNoticeTimer ??= DispatcherQueue.CreateTimer();
