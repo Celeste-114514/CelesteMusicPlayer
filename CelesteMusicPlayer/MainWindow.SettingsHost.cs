@@ -70,8 +70,8 @@ namespace CelesteMusicPlayer
                     if (ids.Contains("WebDavUrl") || ids.Contains("WebDavDisplayName")) RefreshWebDavNavEntry();
 
                     // 外观/列表相关：走原生那套「设置页变更后即时生效」，不另写一套应用逻辑
-                    if (ids.Any(id => id is "UiStyleMode" or "CelesteThemeName" or "AccentSource" or "CustomAccentColor"
-                                          or "EnableFrostedGlass" or "EnableBackground" or "AlbumCoverAsBackground"
+                    if (ids.Any(id => id is "CelesteThemeName" or "AccentSource" or "CustomAccentColor"
+                                          or "EnableBackground" or "AlbumCoverAsBackground"
                                           or "BackgroundGaussBlur" or "GaussBlurRadius" or "BackgroundPreset"
                                           or "BackgroundPresetMotion" or "CustomBackgroundPath" or "NavEmojiIcons"
                                           or "NowPlayingLayout" or "ShowNavFavorites" or "ShowNavRecent"

@@ -280,8 +280,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>主程序界面风格：Scene = 背景图式（图景）；ClassicSystem / ClassicLight / ClassicDark = 经典界面；Geek = 极客终端风。
         /// 默认 ClassicSystem（经典 · 跟随系统）：经典界面下毛玻璃开关同样生效，可在「亚克力背板」与「纯色底」之间切换。</summary>
-        public string UiStyleMode { get; set; } = "ClassicSystem";
-
         /// <summary>侧栏分类图标是否用彩色 emoji（默认 false = 纯色图形图标，与背景图式同一套）。
         /// 开启后经典（浅色/深色/跟随系统）与背景图式都显示 emoji；极客皮肤不受此开关影响
         /// （终端风保持单色，字符键/白色图形图标由「极客按键图标」单独决定）。</summary>
@@ -816,13 +814,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         BackgroundPreset = s.BackgroundPreset?.Trim() ?? string.Empty,
         BackgroundPresetMotion = s.BackgroundPresetMotion,
         ThemePreset = s.ThemePreset?.Trim() ?? string.Empty,
-        // 界面风格：图景（背景图式）改用显式 "Scene" 表示。
-        // 早先图景用空字符串表示，老用户存档里的空值会把新默认顶掉 —— 改了默认值本机也看不到，
-        // 表现就是"默认皮肤还是图景"。现在空/未设置一律归到默认「经典 · 跟随系统」。
-        UiStyleMode = s.UiStyleMode?.Trim() is { Length: > 0 } uiStyle
-                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark"
-            ? uiStyle
-            : "ClassicSystem",
         // 侧栏 emoji 图标开关：老存档没有这个字段，反序列化即 false（纯色图标），符合当前默认
         NavEmojiIcons = s.NavEmojiIcons,
         // 磷光色：三个预设名，或 "Custom:#RRGGBB"（设置里的调色板）。未知值回退琥珀。

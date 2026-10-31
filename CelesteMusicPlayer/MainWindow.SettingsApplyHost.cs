@@ -24,7 +24,6 @@ public sealed partial class MainWindow
 {
         private int _recentRangeDaysApplied = -1;
         private double _appliedMainLyricFontSize = -1;
-        private string? _lastAppliedUiStyleMode;
         // ---- 置顶 / 桌面歌词设置联动 ----
 
         private void ApplyAlwaysOnTopFromSettings()
@@ -369,135 +368,9 @@ public sealed partial class MainWindow
                     SetPlaybackOrder(order, persist: false);
                 }
 
-                ApplyUiStyleMode(settings); // 界面风格（图景/经典浅色/深色/跟随系统/极客）；图景模式内部回落毛玻璃开关
                 // WebAppearanceService applies the native backdrop.
                 ApplyExtendedSettingsLive(settings);
             });
-        }
-
-        // W13 第三十四刀：界面风格应用
-
-        /// <summary>
-        /// 应用界面风格（设置项「界面风格」）：
-        /// "" = 现有背景图式（一切照旧，唯一入口回落到毛玻璃开关）；
-        /// ClassicSystem / ClassicLight / ClassicDark = 经典不透明界面：
-        ///   明暗主题按选项/系统切换，背板关闭、背景图层（封面背景/自定义图片/视频）全部隐藏，
-        ///   面板由 FrostedGlass 总闸统一换成不透明纯色，侧栏分类图标变为彩色；
-        private void ApplyUiStyleMode(AppSettingsState settings)
-        {
-            try
-            {
-                string mode = settings.UiStyleMode;
-                bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
-                // 2026-10-31：极客皮肤已整体移除（用户拍板：新外壳不做极客皮肤）。
-                // 老存档里的 "Geek" 由 AppSettingsStore 归一到 ClassicSystem，这里不再有分支。
-                bool opaque = classic;
-
-                // 记录本次应用的模式：设置页保存时对照它判断要不要热切换（经典家族内互切不弹重启窗）
-                _lastAppliedUiStyleMode = mode;
-
-                bool darkClassic = mode == "ClassicDark"
-                    || (mode is "ClassicSystem"
-                        && Application.Current.RequestedTheme == ElementTheme.Dark);
-
-                // 2026-11-01：这里原来还要把 RequestedTheme 写到 Content 这棵视觉树上。
-                // 界面搬到网页壳后 MainWindow 没有视觉树（Content 恒 null），那段赋值从未生效；
-                // 网页的主题由 WebShell 发 theme 消息驱动，与这条无关，故删除。
-
-                if (opaque)
-                {
-                    // 只存归一化后的 "Light" / "Dark"。
-                    // 早先这里存的是 "ClassicLight" / "ClassicDark"，和 FrostedGlass 内部判断的字符串对不上，
-                    // 结果经典浅色界面下面板被一律涂成深灰 —— 也就是"浅色模式里一片深色底"的根因。
-                    FrostedGlass.ClassicMode = darkClassic ? "Dark" : "Light";
-
-                    // 「亚克力毛玻璃背板」开关已随旧界面一起删除（2026-11-01 用户拍板）：
-                    // 现在恒走毛玻璃背板，不再有"关掉换成纯色底"的分支。
-                    FrostedGlass.ApplyWindowBackdrop(this);
-
-                    // 多选行底色缓存的取色依赖界面基色，切风格必须失效重算
-                    _cachedMultiSelectFrostBrush = null;
-
-                    // 背景图层全部隐藏（含视频暂停）
-
-
-
-
-                    // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线（极客界面保持单色，终端风不上彩）
-
-                    // 面板底色/选中样式全部按新主题重刷（顺序：先信息卡底色，再依赖它取色的胶囊/表头）
-                    ApplyBorderColorFromUiTint();
-
-                    // 主窗口系统按钮（最小化/最大化/关闭）跟着经典主题换色：浅色界面下配深色按钮，
-                    // 否则沿用背景图式的浅灰配色会在浅底上"隐身"
-                    FrostedGlass.ApplyWindowTheme(this);
-
-                    StartupLog.Write("界面风格：经典模式已应用 " + mode);
-                }
-                else
-                {
-                    FrostedGlass.ClassicMode = null;
-                    _cachedMultiSelectFrostBrush = null;
-
-                    // 现有界面：一切照旧（毛玻璃背板 + 背景图层恢复）
-                    FrostedGlass.ApplyWindowBackdrop(this);
-                        ApplyBorderColorFromUiTint();
-
-                    // 从经典切回来时，把系统按钮恢复成背景图式原本的浅灰配色
-                    //（经典浅色界面会把它们改成深色，不还原的话回到深色背景上会看不见）
-                    try
-                    {
-                        if (AppWindowTitleBar.IsCustomizationSupported())
-                        {
-                            AppWindowTitleBar titleBar = AppWindow.TitleBar;
-                            titleBar.ButtonBackgroundColor = Colors.Transparent;
-                            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-                            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(36, 255, 255, 255);
-                            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(60, 255, 255, 255);
-                            titleBar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
-                            titleBar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
-                            titleBar.ButtonHoverForegroundColor = Colors.White;
-                            titleBar.ButtonPressedForegroundColor = Colors.White;
-                        }
-                    }
-                    catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
-
-                    StartupLog.Write("界面风格：背景图式已恢复");
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
-        }
-
-        /// <summary>
-        /// 设置保存后的界面风格热切换：模式真变了才重跑 ApplyUiStyleMode。
-        /// 经典家族内互切（Classic*/Token）由此实现"不重启当场对比"；涉极客/图景的
-        /// 切换照样热应用，设置页那边的重启提示逻辑见 SettingsWindow.xaml.cs。
-        /// </summary>
-        private void OnSettingsChangedForUiStyle()
-        {
-            try
-            {
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        var settings = AppSettingsStore.Load();
-                        if (string.Equals(settings.UiStyleMode, _lastAppliedUiStyleMode, StringComparison.Ordinal))
-                        {
-                            return;
-                        }
-                        ApplyUiStyleMode(settings);
-                    }
-                    catch (Exception caught)
-                    {
-                        StartupLog.WriteException("MainWindow.OnSettingsChangedForUiStyle", caught);
-                    }
-                });
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.OnSettingsChangedForUiStyle", caught);
-            }
         }
 
         // W13 第三十四刀：旧设置面板占位

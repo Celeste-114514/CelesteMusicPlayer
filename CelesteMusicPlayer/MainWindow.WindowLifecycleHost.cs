@@ -95,12 +95,6 @@ public sealed partial class MainWindow
                     AppSettingsStore.Changed -= OnSettingsChangedForProgressStyle;
                     AppSettingsStore.Changed += OnSettingsChangedForProgressStyle;
 
-                    // 界面风格热切换（经典家族内互切不弹重启窗）：设置页保存后立刻套用，
-                    // 用户切「测试皮肤」当场就能和经典对比，不用重启。DispatcherQueue 中转与
-                    // NowPlayingLayout 同一惯例——设置可能从其他窗口保存，不假设在 UI 线程。
-                    AppSettingsStore.Changed -= OnSettingsChangedForUiStyle;
-                    AppSettingsStore.Changed += OnSettingsChangedForUiStyle;
-
                     // 启动即为波形模式:加载选中/第一首歌曲的波形预览(媒体库恢复完成后重试)
                     TryLoadWaveformPreview();
                     _ = RetryWaveformPreviewLaterAsync();
@@ -119,7 +113,6 @@ public sealed partial class MainWindow
             StartupLog.Write("MainWindow_FirstActivated");
             try
             {
-                ApplyUiStyleMode(AppSettingsStore.Load()); // 含经典界面分支；现有模式回落到 TryApplySystemBackdrop
                 ConfigureWindowChrome();
                 MakeWindowBorderless(); // 显示后再强制一次无边框，避免 WinUI 重设 caption 样式
                 ApplyWindowCorners(true); // 无边框窗口四角圆角
