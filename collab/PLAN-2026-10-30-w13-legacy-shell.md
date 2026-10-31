@@ -87,3 +87,19 @@ CurrentPlaylistWindow 还在引用壳方法（`Instance`、`ApplyCustomBackgroun
 第②步的第一刀建议切 **EqDsp 的 DSP 状态机**：`_audioFxEq` / `_audioFxPanelReady` / `_audioFxLoading` /
 undo/redo/AB 快照 + `ApplyDspToEngine` —— 引用方是 `WebDsp`(9)/`DspProfiles`/`DeviceDspProfileStore`，
 全是真活，且 `dsp get` 回包厚、能比得很硬。预计搬出约 300-400 行，壳瘦身的同时 WebDsp 的依赖变干净。
+
+---
+
+## 更正与进展（2026-10-31）
+
+**第二节「第 2 层：独立 WinUI 窗口」已过期**：17 个旧窗口/面板的 `.xaml` 与 `.xaml.cs`
+现在全部 `Page Remove` + `Compile Remove`，编译内只剩 `MainWindow`（空 Grid）和 `App`。
+挡路的只有「活代码借成员」（259 个）和「LegacyControls 控件字段」两层。
+
+**量账改成让编译器说**：`python tools/_w13_shell_exclude_probe.py` 临时排除 45 个壳文件后编译，
+按缺失成员聚合，跑完无条件还原 csproj。实测 1,024 个错误 / 259 个成员，明细见
+`collab/RESULT-2026-10-31-w13-shell-leafcut.md`。
+
+**第一刀已落地（`161f68c`）**：`LegacyBusinessState` / `LevelMeter` / `DspStatus` /
+`Crossfade` / `FullScreen` 五个只写占位控件的文件整批 `Compile Remove`（700 行），
+接线一并删除，编译 0 错、两轮接口回归 0 失败、实播两首 `ok=True`。
