@@ -2049,36 +2049,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static bool LibraryNavStatesEqual(LibraryNavState a, LibraryNavState b)
-            => string.Equals(a.Category, b.Category, StringComparison.Ordinal)
-               && string.Equals(a.ArtistName, b.ArtistName, StringComparison.OrdinalIgnoreCase)
-               && string.Equals(a.AlbumName, b.AlbumName, StringComparison.OrdinalIgnoreCase)
-               && a.AlbumFromArtist == b.AlbumFromArtist
-               && a.UsesAlbumArtist == b.UsesAlbumArtist;
-
-        /// <summary>执行会改变中间界面的导航，并写入后退栈（清空前进栈）。</summary>
-        private void CommitLibraryNavigation(Action navigate)
-        {
-            if (_suppressNavHistory)
-            {
-                navigate();
-                _navCurrent = CaptureLibraryNavState();
-                return;
-            }
-
-            LibraryNavState before = _navCurrent ?? CaptureLibraryNavState();
-            navigate();
-            LibraryNavState after = CaptureLibraryNavState();
-            if (!LibraryNavStatesEqual(before, after))
-            {
-                _navBackStack.Add(before);
-                _navForwardStack.Clear();
-            }
-
-            _navCurrent = after;
-        }
-
-
         private void ApplyAlbumsSearchFilter()
         {
             if (_currentCategory != "Albums" || AlbumGridView == null)

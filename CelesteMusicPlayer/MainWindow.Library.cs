@@ -854,17 +854,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private LibraryNavState CaptureLibraryNavState()
-            => new()
-            {
-                Category = _currentCategory,
-                ArtistName = _openedArtist?.Name,
-                AlbumName = _openedAlbum?.Name,
-                AlbumFromArtist = _albumOpenedFromArtist,
-                UsesAlbumArtist = _artistDetailUsesAlbumArtist
-            };
-
-
         private void NavigateLibraryHistoryBack()
         {
             if (_navBackStack.Count == 0)
