@@ -184,11 +184,9 @@ namespace CelesteMusicPlayer
                 MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                 if (PlayPauseIcon != null)
                 {
-                    PlayPauseIcon.Glyph = "\uE768";
                 }
                 if (FloatingPlayPauseIcon != null)
                 {
-                    FloatingPlayPauseIcon.Glyph = "\uE768";
                 }
 
                 // 任务栏缩略图按钮：暂停 → 显示"播放"图标（提示用户点播放）
@@ -209,11 +207,9 @@ namespace CelesteMusicPlayer
                 MediaSession.SetStatus(MediaPlaybackStatus.Playing);
                 if (PlayPauseIcon != null)
                 {
-                    PlayPauseIcon.Glyph = "\uE769";
                 }
                 if (FloatingPlayPauseIcon != null)
                 {
-                    FloatingPlayPauseIcon.Glyph = "\uE769";
                 }
 
                 // 任务栏缩略图按钮：播放中 → 显示"暂停"图标（提示用户点暂停）
@@ -378,7 +374,6 @@ namespace CelesteMusicPlayer
                     MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     if (PlayPauseIcon != null)
                     {
-                        PlayPauseIcon.Glyph = "\uE768";
                     }
 
                 }
@@ -470,19 +465,15 @@ namespace CelesteMusicPlayer
             // E74F mute / E992 low / E993 mid / E767 high
             if (volumePercent <= 0.5)
             {
-                VolumeIcon.Glyph = "\uE74F";
             }
             else if (volumePercent < 34)
             {
-                VolumeIcon.Glyph = "\uE992";
             }
             else if (volumePercent < 67)
             {
-                VolumeIcon.Glyph = "\uE993";
             }
             else
             {
-                VolumeIcon.Glyph = "\uE767";
             }
         }
 
@@ -621,7 +612,6 @@ namespace CelesteMusicPlayer
 
             if (NowPlayingText != null)
             {
-                NowPlayingText.Text = fav ? "已添加到我喜欢的音乐" : "已取消喜欢";
             }
 
             // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
@@ -770,12 +760,10 @@ namespace CelesteMusicPlayer
                     if (totalSeconds <= 0 || double.IsNaN(totalSeconds) || double.IsInfinity(totalSeconds))
                     {
                         ProgressSlider.Maximum = 100;
-                        TotalTimeText.Text = "00:00";
                     }
                     else
                     {
                         ProgressSlider.Maximum = totalSeconds;
-                        TotalTimeText.Text = FormatTime(duration);
                     }
 
                     double start = 0;
@@ -796,10 +784,8 @@ namespace CelesteMusicPlayer
             {
                 // E768=播放，E769=暂停
                 bool playing = sender.PlaybackState == MediaPlaybackState.Playing;
-                PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
                 if (FloatingPlayPauseIcon != null)
                 {
-                    FloatingPlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
                 }
                 UpdateWaveformTimerForPlaybackState(playing);
                 _desktopLyricsWindow?.SetPlaybackPaused(!playing && sender.PlaybackState != MediaPlaybackState.Opening);
@@ -858,7 +844,6 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                NowPlayingText.Text = "播放失败";
 
                 // args.ErrorMessage 在某些场景（如设备独占失败、续播恢复时源已释放）下为空，
                 // 仅靠它无法定位根因。补上 Error / HResult / ExtendedErrorCode / 当前源，
@@ -1212,7 +1197,6 @@ namespace CelesteMusicPlayer
             // 不拦的话每次重绘都把波形画布重新顶出来，盖在字符进度条上（用户实测"波形一直还在"）。
             if (GeekUiStyleCached)
             {
-                ProgressStyleCanvas.Visibility = Visibility.Collapsed;
                 ProgressStyleCanvas.Children.Clear();
                 return;
             }
@@ -1221,15 +1205,11 @@ namespace CelesteMusicPlayer
             if (!waveform)
             {
                 // 默认样式:恢复系统进度条(主题色跟随主题设置)
-                ProgressSlider.Opacity = 1;
-                ProgressStyleCanvas.Visibility = Visibility.Collapsed;
                 ProgressStyleCanvas.Children.Clear();
                 return;
             }
 
             // 波形进度条:底层 Slider 透明(交互保留),自绘画布显示波形
-            ProgressSlider.Opacity = 0;
-            ProgressStyleCanvas.Visibility = Visibility.Visible;
 
             double max = ProgressSlider.Maximum;
             double ratio = max > 0 ? ProgressSlider.Value / max : 0;
@@ -1708,9 +1688,6 @@ namespace CelesteMusicPlayer
                 if (IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked())
                 {
                     VolumeSlider.Value = VolumeSlider.Maximum;
-                    NowPlayingText.Text = string.Equals(AppSettingsStore.Load().OutputMode, "Asio", System.StringComparison.OrdinalIgnoreCase)
-                        ? "ASIO 模式请用声卡旋钮调音量，或在设置-播放中开启 HiFi 软件音量"
-                        : "请在 DAC / 系统音量端调节，或在设置-播放中开启 HiFi 软件音量";
                     return;
                 }
 
@@ -1776,9 +1753,7 @@ namespace CelesteMusicPlayer
             RedrawProgressStyle();
             _nowPlayingPath = null;
             _currentPlayingItem = null;   // 停止/清空：权威记录一起清，别再按旧下标猜
-            NowPlayingTitleText.Text = "未在播放";
             ResetNowPlayingArtistAlbumLinks();
-            NowPlayingCoverImage.Source = null;
             _lastCoverImage = null;   // 迷你播放器整窗背景同步清（它读的是大图，不是播放栏缩略图）
             _lastCoverThumbImage = null;   // 迷你播放器 72×72 小封面同步清（Thumb 160 档，见 UpdateTransportCoverAsync）
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
@@ -1804,27 +1779,12 @@ namespace CelesteMusicPlayer
         {
             if (item == null)
             {
-                TransportTitleText.Text = "目前未播放音乐";
-                TransportArtistText.Text = string.Empty;
-                TransportArtistText.Visibility = Visibility.Collapsed;
-                TransportFormatText.Text = string.Empty;
-                TransportFormatText.Visibility = Visibility.Collapsed;
-                TransportCoverImage.Source = null;
                 ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
                 return;
             }
 
-            TransportTitleText.Text = item.Title;
-            TransportArtistText.Text = item.Artist;
-            TransportArtistText.Visibility = Visibility.Visible;
-            TransportFormatText.Text = item.FormatInfoLine;
-            TransportFormatText.Visibility =
-                string.IsNullOrWhiteSpace(item.FormatInfoLine)
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
             if (coverKnown && applyCover)
             {
-                TransportCoverImage.Source = cover;
                 ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
             }
         }
@@ -1847,7 +1807,6 @@ namespace CelesteMusicPlayer
                 // 这首歌确实没有内嵌封面：清掉（含占位图标复位），不能留着上一首的图。
                 // ⚠️ 迷你播放器的小封面也读这里清出来的 _lastCoverThumbImage —— 不清的话
                 //    换到无封面的歌时迷你条会挂着上一首的封面（回归问题）。
-                TransportCoverImage.Source = null;
                 _lastCoverThumbImage = null;
                 ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
                 return;
@@ -1868,7 +1827,6 @@ namespace CelesteMusicPlayer
             global::CelesteMusicPlayer.StartupLog.Write(
                 $"[播放栏封面] 缓存={(fromCache ? "命中" : "现解码")} 像素={thumb.PixelWidth}x{thumb.PixelHeight}");
 
-            TransportCoverImage.Source = thumb;
             ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
 
             // 迷你播放器 72×72 小封面共用这一张（Thumb 160 档）：它以前拿播放页大图
@@ -1886,7 +1844,6 @@ namespace CelesteMusicPlayer
                 string? outFmt = _audioEngine?.ActualOutputFormat;
                 if (NowPlayingAudioInfoText != null)
                 {
-                    NowPlayingAudioInfoText.Text = string.IsNullOrEmpty(outFmt) ? string.Empty : "实际输出：" + outFmt;
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -1931,15 +1888,10 @@ namespace CelesteMusicPlayer
                     dsp = eqOn ? "EQ=on" : "EQ=off";
                 }
 
-                SignalChainInfoText.Text =
-                    "信号链：源[" + src + "] → 输出[" + outp + "] | " +
-                    "模式=" + exclusivo + (hifi ? "" : "（系统混音）") +
-                    " | DSP: " + dsp;
 
             }
             catch
             {
-                SignalChainInfoText.Text = "信号链：—";
             }
         }
 
@@ -1963,7 +1915,6 @@ namespace CelesteMusicPlayer
 
             UpdateAddToLibraryButtonVisibility();
 
-            NowPlayingTitleText.Text = item.Title;
             UpdateNowPlayingArtistAlbumText(item);
             UpdateTransportNowPlaying(item, null, coverKnown: false);
             _ = UpdateAudioInfoTextAsync(item.FilePath);
@@ -1988,7 +1939,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            NowPlayingCoverImage.Source = coverImage;
             _lastCoverImage = coverImage;   // 迷你播放器整窗背景同步（它读的是大图，不是播放栏缩略图）
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             UpdateTransportNowPlaying(item, coverImage, applyCover: false);
@@ -2094,11 +2044,7 @@ namespace CelesteMusicPlayer
             bool hasArtist = !string.IsNullOrWhiteSpace(item.Artist) && item.Artist != "未知艺术家";
             bool hasAlbum = !string.IsNullOrWhiteSpace(item.Album) && item.Album != "未知专辑";
 
-            NowPlayingArtistText.Text = hasArtist ? item.Artist.Trim() : "未知艺术家";
-            NowPlayingArtistLinkButton.IsEnabled = hasArtist;
 
-            NowPlayingAlbumText.Text = hasAlbum ? item.Album.Trim() : "未知专辑";
-            NowPlayingAlbumLinkButton.IsEnabled = hasAlbum;
         }
 
 
@@ -2111,7 +2057,6 @@ namespace CelesteMusicPlayer
             {
                 if (NowPlayingPaneContent != null)
                 {
-                    NowPlayingPaneContent.Background = new SolidColorBrush(Colors.Transparent);
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -2346,12 +2291,10 @@ namespace CelesteMusicPlayer
                     MediaSession.SetStatus(MediaPlaybackStatus.Playing);
                     if (PlayPauseIcon != null)
                     {
-                        PlayPauseIcon.Glyph = "\uE769";
                     }
 
                     if (FloatingPlayPauseIcon != null)
                     {
-                        FloatingPlayPauseIcon.Glyph = "\uE769";
                     }
 
                     _taskbarButtons?.UpdatePlayPause(true);
@@ -2365,12 +2308,10 @@ namespace CelesteMusicPlayer
                     MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     if (PlayPauseIcon != null)
                     {
-                        PlayPauseIcon.Glyph = "\uE768";
                     }
 
                     if (FloatingPlayPauseIcon != null)
                     {
-                        FloatingPlayPauseIcon.Glyph = "\uE768";
                     }
 
                     _taskbarButtons?.UpdatePlayPause(false);
@@ -2529,7 +2470,6 @@ namespace CelesteMusicPlayer
                 && PlaylistView.ItemsSource is System.Collections.IList songsList
                 && index < songsList.Count)
             {
-                PlaylistView.SelectedIndex = index;
                 PlaylistView.ScrollIntoView(item);
             }
 
@@ -2560,7 +2500,6 @@ namespace CelesteMusicPlayer
             if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
                 && !_isMultiSelectMode)
             {
-                PlaylistView.SelectedIndex = index;
                 PlaylistView.ScrollIntoView(item);
             }
             else if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
@@ -2569,7 +2508,6 @@ namespace CelesteMusicPlayer
                 && PlaylistView.ItemsSource is System.Collections.IList songsList2
                 && _currentIndex < songsList2.Count)
             {
-                PlaylistView.SelectedIndex = _currentIndex;
                 PlaylistView.ScrollIntoView(_playlist[_currentIndex]);
             }
 
@@ -2593,14 +2531,12 @@ namespace CelesteMusicPlayer
                 }
 
                 string isoPath = _queue.Items[isoIndex].FilePath;
-                NowPlayingText.Text = "正在读取 SACD 镜像…";
 
                 var tracks = await SacdIsoExtractor.ExtractTracksAsync(isoPath, s =>
                     DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; })).ConfigureAwait(false);
 
                 if (tracks.Count == 0)
                 {
-                    NowPlayingText.Text = "无法读取 SACD：缺少 sacd_extract.exe 或镜像不支持";
                     return;
                 }
 
@@ -2620,7 +2556,6 @@ namespace CelesteMusicPlayer
 
                 if (dsItems.Count == 0)
                 {
-                    NowPlayingText.Text = "无法读取 SACD 曲目信息";
                     return;
                 }
 
@@ -2791,12 +2726,10 @@ namespace CelesteMusicPlayer
                     MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     if (PlayPauseIcon != null)
                     {
-                        PlayPauseIcon.Glyph = "\uE768";
                     }
 
                     if (FloatingPlayPauseIcon != null)
                     {
-                        FloatingPlayPauseIcon.Glyph = "\uE768";
                     }
 
                     _taskbarButtons?.UpdatePlayPause(false);
@@ -2840,7 +2773,6 @@ namespace CelesteMusicPlayer
                 Journal.RecordHistory(completed: false);
             }
 
-            NowPlayingText.Text = "正在转码：" + item.Title;
 
             // 引擎接线（建引擎 / 输出模式 / 设备 / EQ / DSP / 房间校正 / ReplayGain）全部在会话里。
             // 这里只要两样：给面板用的 ReplayGain 数据，以及"能不能刷读数"。
@@ -2857,22 +2789,18 @@ namespace CelesteMusicPlayer
             {
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
-                NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
                 // DSD：以输出后端的结构化标志位为准——守卫全过且 DoP 直出已起播才提示直出；
                 // 守卫拒绝（DFF/DST/DSD512/多声道/共享/DSP 未关）或设备协商失败 → 已回退 PCM，如实提示转码。
                 if (result.Kind == PlaybackKind.DsdDirect)
                 {
-                    NowPlayingText.Text = "DSD DoP 直出（bit-perfect）· " + item.Title + " - " + item.Artist;
                     // 变速诚实性（2026-10-16 起口径变了）：DoP 直出 = 1-bit 位流直通设备，
                     // 不经 DSP 链，托管实时变速够不着 → 倍率≠1 时如实说明按 1x 播。
                     if (result.TempoActive)
                     {
-                        NowPlayingText.Text += "（DoP 直出不变速，按 1x 播放）";
                     }
                 }
                 else if (result.Kind == PlaybackKind.DsdTranscoded)
                 {
-                    NowPlayingText.Text = "已转码为 " + result.PcmDescription + " 输出";
                     StartupLog.Write("DSD 已转码 PCM 输出: " + item.FilePath + " → " + result.PcmDescription);
                     // 转成 PCM 的 DSD 走的就是普通 PCM 链路，实时变速对它有效（2026-10-16 起），
                     // 不再需要"不支持变速"的提示。
@@ -2885,7 +2813,6 @@ namespace CelesteMusicPlayer
                 Journal.RecordStart(item);
                 if (PlayPauseIcon != null)
                 {
-                    PlayPauseIcon.Glyph = "\uE769";
                 }
 
                 // 引擎桥接：时长 / 进度条 / 波形（变速时进度条按"原歌曲时间"：WAV 时长 × 倍率）
@@ -2893,7 +2820,6 @@ namespace CelesteMusicPlayer
                 double totalWav = result.Duration.TotalSeconds;
                 ProgressSlider.Maximum = Math.Max(1, totalWav * tempoScale);
                 ProgressSlider.Value = 0;
-                TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(totalWav * tempoScale));
                 _audioEngine.PositionChanged -= EnginePositionChanged;
                 _audioEngine.PositionChanged += EnginePositionChanged;
                 UpdateWaveformTimerForPlaybackState(true);
@@ -2915,9 +2841,6 @@ namespace CelesteMusicPlayer
                 _pendingStartPath = null;
 
                 string? reason = result.FailureReason;
-                NowPlayingText.Text = string.IsNullOrWhiteSpace(reason)
-                    ? "播放失败（FFmpeg 转码或打开出错）"
-                    : "播放失败：" + reason;
 
                 if (result.NeedFfmpegHint)
                 {
@@ -3041,7 +2964,6 @@ namespace CelesteMusicPlayer
                 _currentPlayingItem = next;
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
-                NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;
                 _ = UpdateNowPlayingPanelAsync(next);
                 // 无缝续接后重新加载下一首的波形/进度条样式（否则会残留上一首的波形与时长）
                 _waveformProgress = AppSettingsStore.Load().WaveformProgress;
@@ -3057,7 +2979,6 @@ namespace CelesteMusicPlayer
                     double wavSeconds = _audioEngine.Duration.TotalSeconds;
                     ProgressSlider.Maximum = Math.Max(1, wavSeconds * scale);
                     ProgressSlider.Value = 0;
-                    TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(wavSeconds * scale));
                 }
                 MediaSession.ConfigureTrack(next, playing: true);
                 AdvanceUserPlaylistIndexTo(next);
@@ -3074,7 +2995,6 @@ namespace CelesteMusicPlayer
             if (idx >= 0)
             {
                 _queue.Index = idx;
-                PlaylistView.SelectedIndex = idx;
             }
         }
 

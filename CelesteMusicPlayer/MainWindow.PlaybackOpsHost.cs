@@ -91,13 +91,11 @@ public sealed partial class MainWindow
         {
             if (AlbumArtBackgroundImage != null)
             {
-                AlbumArtBackgroundImage.Source = null;
             }
 
             // 压暗层跟着归零：只清封面图不清 Scrim 的话，53% 深色 Border 会残留继续压暗窗口
             if (AlbumArtBackgroundScrim != null)
             {
-                AlbumArtBackgroundScrim.Opacity = 0;
             }
         }
 
@@ -163,10 +161,8 @@ public sealed partial class MainWindow
                 return;
             }
 
-            AlbumArtBackgroundImage.Source = image;
             if (AlbumArtBackgroundScrim != null)
             {
-                AlbumArtBackgroundScrim.Opacity = 1;
             }
         }
 
@@ -272,7 +268,6 @@ public sealed partial class MainWindow
                 {
                     if (NowPlayingAudioInfoText != null && string.Equals(_nowPlayingPath, path, System.StringComparison.OrdinalIgnoreCase))
                     {
-                        NowPlayingAudioInfoText.Text = info ?? string.Empty;
                     }
                 });
             }

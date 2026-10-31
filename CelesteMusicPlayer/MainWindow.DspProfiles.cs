@@ -63,7 +63,6 @@ namespace CelesteMusicPlayer
 
                 if (DspProfileList != null)
                 {
-                    DspProfileList.ItemsSource = rows;
                     int restore = -1;
                     for (int i = 0; i < _dspProfileRows.Count; i++)
                     {
@@ -75,7 +74,6 @@ namespace CelesteMusicPlayer
                     }
 
                     // 没有生效方案时不预选（避免"看起来选中了但其实没应用"）；有则选中它
-                    DspProfileList.SelectedIndex = restore;
                 }
 
                 UpdateDspProfileTexts();
@@ -125,7 +123,6 @@ namespace CelesteMusicPlayer
                         ? "当前：手动设置（未套用任何方案）"
                         : "当前：手动设置（已从方案「" + ProfileCoordinator.LeftName + "」改出去）")
                     : "当前：方案「" + ProfileCoordinator.ActiveName + "」正在生效";
-                DspProfileStatusText.Text = now + "　｜　已存 " + count + " 份方案";
             }
 
             if (DspProfileHintText == null)
@@ -135,21 +132,15 @@ namespace CelesteMusicPlayer
 
             if (_dspProfileRows.Count == 0)
             {
-                DspProfileHintText.Text = "还没有方案。先把各模块调到你满意的声音，再在上面起个名字点「保存为方案」。";
             }
             else if (!string.IsNullOrEmpty(ProfileCoordinator.ActiveName))
             {
-                DspProfileHintText.Text = "当前设置来自方案「" + ProfileCoordinator.ActiveName
-                    + "」。应用后再改任一模块就会自动脱离该方案（方案本身不变，要留住改动点「更新为当前设置」）。";
             }
             else if (!string.IsNullOrEmpty(ProfileCoordinator.LeftName))
             {
-                DspProfileHintText.Text = "当前是手动设置：已从方案「" + ProfileCoordinator.LeftName
-                    + "」改出去。想留住这次改动，选中那份方案点「更新为当前设置」，或另存为新方案。";
             }
             else
             {
-                DspProfileHintText.Text = "当前是手动设置。选中一份方案点「应用方案」即整套切过去。";
             }
         }
 
@@ -159,17 +150,14 @@ namespace CelesteMusicPlayer
             bool has = SelectedDspProfile() != null;
             if (DspProfileApplyButton != null)
             {
-                DspProfileApplyButton.IsEnabled = has;
             }
 
             if (DspProfileUpdateButton != null)
             {
-                DspProfileUpdateButton.IsEnabled = has;
             }
 
             if (DspProfileDeleteButton != null)
             {
-                DspProfileDeleteButton.IsEnabled = has;
             }
         }
 
@@ -409,14 +397,10 @@ namespace CelesteMusicPlayer
                 ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
                 if (DspProfileNameBox != null)
                 {
-                    DspProfileNameBox.Text = string.Empty;
                 }
 
                 if (DspProfileSaveHintText != null)
                 {
-                    DspProfileSaveHintText.Text = replaced
-                        ? "已用当前设置覆盖同名方案「" + name + "」。"
-                        : "已保存方案「" + name + "」，当前设置现在属于它。";
                 }
 
                 RefreshDspProfileUi();
@@ -490,7 +474,6 @@ namespace CelesteMusicPlayer
                 ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
                 if (DspProfileSaveHintText != null)
                 {
-                    DspProfileSaveHintText.Text = "方案「" + name + "」已更新为当前设置。";
                 }
 
                 RefreshDspProfileUi();
@@ -539,7 +522,6 @@ namespace CelesteMusicPlayer
 
                 if (DspProfileSaveHintText != null)
                 {
-                    DspProfileSaveHintText.Text = "已删除方案「" + name + "」。当前各模块设置原样保留，声音不会变。";
                 }
 
                 RefreshDspProfileUi();

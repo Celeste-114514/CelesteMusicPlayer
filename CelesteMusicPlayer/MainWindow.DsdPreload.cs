@@ -39,7 +39,6 @@ namespace CelesteMusicPlayer
             bool show = _albumDetailDsdFiles.Count > 0;
             if (AlbumDetailPreloadPanel != null)
             {
-                AlbumDetailPreloadPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (AlbumDetailPreloadHint == null)
@@ -49,15 +48,10 @@ namespace CelesteMusicPlayer
 
             if (!show)
             {
-                AlbumDetailPreloadHint.Visibility = Visibility.Collapsed;
                 return;
             }
 
             int cached = _albumDetailDsdFiles.Count(HasDsdCache);
-            AlbumDetailPreloadHint.Visibility = Visibility.Visible;
-            AlbumDetailPreloadHint.Text = cached == 0
-                ? $"本专辑 {_albumDetailDsdFiles.Count} 首 DSD，尚未预加载（缓存目录：{DsdPreloadService.CacheRoot}）"
-                : $"已预加载 {cached}/{_albumDetailDsdFiles.Count} 首（缓存目录：{DsdPreloadService.CacheRoot}）";
         }
 
         private static bool HasDsdCache(string dsf)
@@ -152,25 +146,20 @@ namespace CelesteMusicPlayer
                 s += "（" + lastError + "）";
             }
 
-            AlbumDetailPreloadHint.Visibility = Visibility.Visible;
-            AlbumDetailPreloadHint.Text = s;
         }
 
         private void SetPreloadBusy(bool busy)
         {
             if (AlbumDetailPreloadText != null)
             {
-                AlbumDetailPreloadText.Text = busy ? "取消预加载" : "预加载整专辑 DSD";
             }
 
             if (AlbumDetailPreloadButton != null)
             {
-                AlbumDetailPreloadButton.IsEnabled = true;
             }
 
             if (AlbumDetailPreloadClearButton != null)
             {
-                AlbumDetailPreloadClearButton.IsEnabled = !busy;
             }
         }
 
@@ -187,10 +176,6 @@ namespace CelesteMusicPlayer
 
             if (AlbumDetailPreloadHint != null)
             {
-                AlbumDetailPreloadHint.Visibility = Visibility.Visible;
-                AlbumDetailPreloadHint.Text = n == 0
-                    ? "本专辑当前没有缓存文件。"
-                    : $"已删除本专辑 {n} 个缓存文件（原 DSF 未动）。";
             }
         }
     }

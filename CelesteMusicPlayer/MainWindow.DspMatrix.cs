@@ -289,7 +289,6 @@ namespace CelesteMusicPlayer
 
             if (!enabled)
             {
-                DspMatrixPhaseText.Text = "矩阵没启用，声音原样通过（图上是旁路的样子）。";
                 return;
             }
 
@@ -318,7 +317,6 @@ namespace CelesteMusicPlayer
                 parts.Append(" 有系数超过 1，总音量会被抬高，留意后面的输出安全页。");
             }
 
-            DspMatrixPhaseText.Text = parts.ToString();
         }
     }
 }

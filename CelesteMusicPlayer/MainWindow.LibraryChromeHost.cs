@@ -26,10 +26,6 @@ public sealed partial class MainWindow
             _artistDetailUsesAlbumArtist = false;
             _artistTracks.Clear();
             _artistAlbums.Clear();
-            ArtistDetailPanel.Visibility = Visibility.Collapsed;
-            ArtistGridView.Visibility = Visibility.Visible;
-            ArtistDetailAvatarBrush.ImageSource = null;
-            ArtistDetailAvatarPlaceholder.Visibility = Visibility.Visible;
             _albumOpenedFromArtist = false;
         }
 
@@ -38,11 +34,7 @@ public sealed partial class MainWindow
             _openedAlbum = null;
             _albumOpenedFromArtist = false;
             _albumTracks.Clear();
-            AlbumDetailPanel.Visibility = Visibility.Collapsed;
-            AlbumGridView.Visibility = Visibility.Visible;
-            AlbumDetailCoverImage.Source = null;
             ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
-            AlbumDetailBackButton.Content = "← 返回专辑";
         }
 
         private void UpdateAlbumSortButtonsUi()
@@ -52,13 +44,10 @@ public sealed partial class MainWindow
             // 这里统一按面板状态复位，避免按钮的可见性被别处改坏后残留。
             if (AlbumSortButton != null)
             {
-                AlbumSortButton.Visibility = Visibility.Visible;
             }
 
-            AlbumSortButton.Content = GetAlbumSortFieldName(_albumSortMode);
             if (AlbumSortOrderButton != null)
             {
-                AlbumSortOrderButton.Content = _albumSortAscending ? "升序" : "降序";
             }
         }
 

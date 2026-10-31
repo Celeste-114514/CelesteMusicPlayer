@@ -76,7 +76,6 @@ namespace CelesteMusicPlayer
                         {
                             if (SrcModeNote != null)
                             {
-                                SrcModeNote.Text = "现在拿不到源采样率（要播一首歌才知道）。先播一首，再点这张卡片。";
                             }
 
                             return;
@@ -125,7 +124,6 @@ namespace CelesteMusicPlayer
 
                 if (SrcModeNote != null)
                 {
-                    SrcModeNote.Text = note;
                 }
             }
             catch (Exception caught)
@@ -225,9 +223,6 @@ namespace CelesteMusicPlayer
                 if (SrcChainNote != null)
                 {
                     string desc = _audioEngine?.SrcStateDescription ?? string.Empty;
-                    SrcChainNote.Text = string.IsNullOrEmpty(desc)
-                        ? "还没播放过，等播一首歌这里会显示真实走了哪条路。"
-                        : "当前会话：" + desc;
                 }
             }
             catch (Exception caught)

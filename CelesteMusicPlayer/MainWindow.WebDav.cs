@@ -48,12 +48,10 @@ namespace CelesteMusicPlayer
         {
             if (MediaLibraryTreeTitle != null)
             {
-                MediaLibraryTreeTitle.Text = isWebDav ? "网络音乐库" : "媒体库";
             }
 
             if (AddMediaFolderButton != null)
             {
-                AddMediaFolderButton.Visibility = isWebDav ? Visibility.Collapsed : Visibility.Visible;
             }
         }
 
@@ -149,12 +147,9 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                FolderBrowserEmptyHint.Visibility = Visibility.Collapsed;
-                FolderBrowserView.Visibility = Visibility.Visible;
 
                 if (MediaDetailsHeader != null)
                 {
-                    MediaDetailsHeader.Text = loc.LibraryName + "（双击文件夹查看歌曲）";
                 }
             }
             catch (Exception caught)
@@ -168,24 +163,18 @@ namespace CelesteMusicPlayer
         {
             if (FolderBrowserEmptyHint != null)
             {
-                FolderBrowserEmptyHint.Text = text;
-                FolderBrowserEmptyHint.Visibility = Visibility.Visible;
             }
 
             if (FolderBrowserView != null)
             {
-                FolderBrowserView.Visibility = Visibility.Collapsed;
             }
 
             if (MediaDetailsList != null)
             {
-                MediaDetailsList.ItemsSource = null;
-                MediaDetailsList.Visibility = Visibility.Collapsed;
             }
 
             if (MediaDetailsEmptyHint != null)
             {
-                MediaDetailsEmptyHint.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -280,10 +269,6 @@ namespace CelesteMusicPlayer
             string folderPath = item.IsFolder ? item.RemotePath : GetRemoteParent(item.RemotePath);
             string header = item.IsFolder ? item.FullPath : folderPath;
 
-            MediaDetailsList.ItemsSource = null;
-            MediaDetailsList.Visibility = Visibility.Visible;
-            MediaDetailsEmptyHint.Visibility = Visibility.Collapsed;
-            MediaDetailsHeader.Text = header + "（加载中…）";
 
             try
             {
@@ -299,18 +284,10 @@ namespace CelesteMusicPlayer
                     songs[i].Index = i + 1;
                 }
 
-                MediaDetailsList.ItemsSource = songs;
-                MediaDetailsList.SelectionMode = ListViewSelectionMode.None;
-                MediaDetailsHeader.Text = header + "（" + songs.Count + " 首）";
-                MediaDetailsEmptyHint.Text = songs.Count == 0 ? "这个文件夹里没有音频文件" : string.Empty;
-                MediaDetailsEmptyHint.Visibility = songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             }
             catch (Exception caught)
             {
                 StartupLog.WriteException("MainWindow.WebDav.cs", caught);
-                MediaDetailsHeader.Text = header + "（加载失败）";
-                MediaDetailsEmptyHint.Text = "读取失败：" + DescribeWebDavFailure(caught);
-                MediaDetailsEmptyHint.Visibility = Visibility.Visible;
             }
         }
 
@@ -372,7 +349,6 @@ namespace CelesteMusicPlayer
         {
             if (MediaDetailsHeader != null)
             {
-                MediaDetailsHeader.Text = text;
             }
         }
 

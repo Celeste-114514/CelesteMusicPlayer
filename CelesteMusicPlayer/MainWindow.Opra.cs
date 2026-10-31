@@ -38,15 +38,11 @@ namespace CelesteMusicPlayer
             {
                 if (OpraStatusText != null)
                 {
-                    OpraStatusText.Text = "正在下载 OPRA 数据库…";
                 }
 
                 OpraStatus status = await _opra.EnsureLoadedAsync(refresh: false);
                 if (OpraStatusText != null)
                 {
-                    OpraStatusText.Text =
-                        $"OPRA 已就绪：{status.VendorCount} 厂商 / {status.ProductCount} 型号 / {status.EqCount} 条曲线"
-                        + (status.Source == "network" ? "（已联网下载）" : "（使用本地缓存）");
                 }
 
                 // 数据库就绪才铺品牌墙（厂商与型号数都来自这个库）
@@ -56,7 +52,6 @@ namespace CelesteMusicPlayer
             {
                 if (OpraStatusText != null)
                 {
-                    OpraStatusText.Text = "加载 OPRA 数据库失败：" + ex.Message;
                 }
             }
         }
@@ -76,7 +71,6 @@ namespace CelesteMusicPlayer
             {
                 if (OpraStatusText != null)
                 {
-                    OpraStatusText.Text = "请输入耳机型号 / 品牌关键词";
                 }
 
                 return;
@@ -92,7 +86,6 @@ namespace CelesteMusicPlayer
                 {
                     if (OpraStatusText != null)
                     {
-                        OpraStatusText.Text = "OPRA 数据库为空，请检查网络后重试。";
                     }
 
                     return;
@@ -100,26 +93,20 @@ namespace CelesteMusicPlayer
 
                 if (OpraSearchButton != null)
                 {
-                    OpraSearchButton.IsEnabled = false;
                 }
 
                 if (OpraSearchStatusText != null)
                 {
-                    OpraSearchStatusText.Text = "搜索中…";
                 }
 
                 var results = await _opra.SearchAsync(q, 24, ct: _opraCts.Token);
                 _opraResults = results;
                 if (OpraResultList != null)
                 {
-                    OpraResultList.ItemsSource = _opraResults;
                 }
 
                 if (OpraSearchStatusText != null)
                 {
-                    OpraSearchStatusText.Text = results.Count == 0
-                        ? "未找到匹配的耳机（换个品牌/型号试试）"
-                        : $"找到 {results.Count} 款（点击选曲线）";
                 }
 
                 ClearOpraDetail();
@@ -132,14 +119,12 @@ namespace CelesteMusicPlayer
             {
                 if (OpraSearchStatusText != null)
                 {
-                    OpraSearchStatusText.Text = "搜索失败：" + ex.Message;
                 }
             }
             finally
             {
                 if (OpraSearchButton != null)
                 {
-                    OpraSearchButton.IsEnabled = true;
                 }
             }
         }
@@ -156,24 +141,18 @@ namespace CelesteMusicPlayer
 
                 if (OpraDetailTitle != null)
                 {
-                    OpraDetailTitle.Text = r.Name;
                 }
 
                 if (OpraDetailSubTitle != null)
                 {
-                    OpraDetailSubTitle.Text = r.VendorName
-                        + (string.IsNullOrEmpty(r.Subtype) ? "" : " · " + r.Subtype)
-                        + $"（{r.EqCount} 条曲线）";
                 }
 
                 if (OpraEqStatusText != null)
                 {
-                    OpraEqStatusText.Text = _opraEqs.Count == 0 ? "该型号暂无可用曲线" : "选择一条曲线后点击「应用」";
                 }
 
                 if (OpraApplyButton != null)
                 {
-                    OpraApplyButton.IsEnabled = false;
                 }
 
                 // 换了型号，旧的曲线预览/徽章/收藏状态全部作废
@@ -189,12 +168,10 @@ namespace CelesteMusicPlayer
                 _opraSelectedEq = s;
                 if (OpraApplyButton != null)
                 {
-                    OpraApplyButton.IsEnabled = true;
                 }
 
                 if (OpraEqDetailText != null)
                 {
-                    OpraEqDetailText.Text = $"作者：{s.Author}\n滤波段数：{s.BandCount}\n预增益：{(s.PreampDb >= 0 ? "+" : "")}{s.PreampDb:0.##} dB";
                 }
 
                 // 选中即预览（徽章 + 曲线形状 + 收藏按钮状态一起更新）
@@ -216,12 +193,10 @@ namespace CelesteMusicPlayer
             {
                 if (OpraApplyButton != null)
                 {
-                    OpraApplyButton.IsEnabled = false;
                 }
 
                 if (OpraEqStatusText != null)
                 {
-                    OpraEqStatusText.Text = "正在解析并应用…";
                 }
 
                 OpraCorrection? corr = _opra.BuildCorrection(_opraSelectedEq.EqId);
@@ -229,7 +204,6 @@ namespace CelesteMusicPlayer
                 {
                     if (OpraEqStatusText != null)
                     {
-                        OpraEqStatusText.Text = "该曲线无法解析（参数格式不支持）。";
                     }
 
                     return;
@@ -238,7 +212,6 @@ namespace CelesteMusicPlayer
                 ApplyOpraCurve(corr.Curve);
                 if (OpraEqStatusText != null)
                 {
-                    OpraEqStatusText.Text = $"已应用：{corr.ProductVendorAndName()}（{corr.ImportedBandCount} 段 + {corr.Curve.PreampDb} dB）\n提示：可在「参数 EQ」页查看/微调，开启 EQ 后输出非 bit-perfect。";
                 }
 
                 // 记进「最近用过」，下次进来不用再搜一遍
@@ -248,14 +221,12 @@ namespace CelesteMusicPlayer
             {
                 if (OpraEqStatusText != null)
                 {
-                    OpraEqStatusText.Text = "应用失败：" + ex.Message;
                 }
             }
             finally
             {
                 if (OpraApplyButton != null)
                 {
-                    OpraApplyButton.IsEnabled = true;
                 }
             }
         }
@@ -266,32 +237,26 @@ namespace CelesteMusicPlayer
             _opraEqs = new List<OpraProductEqSummary>();
             if (OpraEqList != null)
             {
-                OpraEqList.ItemsSource = _opraEqs;
             }
 
             if (OpraDetailTitle != null)
             {
-                OpraDetailTitle.Text = string.Empty;
             }
 
             if (OpraDetailSubTitle != null)
             {
-                OpraDetailSubTitle.Text = string.Empty;
             }
 
             if (OpraEqDetailText != null)
             {
-                OpraEqDetailText.Text = string.Empty;
             }
 
             if (OpraEqStatusText != null)
             {
-                OpraEqStatusText.Text = string.Empty;
             }
 
             if (OpraApplyButton != null)
             {
-                OpraApplyButton.IsEnabled = false;
             }
         }
     }

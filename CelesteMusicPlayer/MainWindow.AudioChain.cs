@@ -153,7 +153,6 @@ namespace CelesteMusicPlayer
             {
                 if (_audioChainCloseCompleted != null && AudioChainCloseStoryboard != null)
                 {
-                    AudioChainCloseStoryboard.Completed -= _audioChainCloseCompleted;
                 }
 
                 _audioChainCloseCompleted = null;
@@ -195,14 +194,11 @@ namespace CelesteMusicPlayer
                     // 订阅去重：每次收起都 += 会叠加 handler
                     if (_audioChainCloseCompleted != null)
                     {
-                        AudioChainCloseStoryboard.Completed -= _audioChainCloseCompleted;
                     }
                     _audioChainCloseCompleted = (_, _) =>
                     {
                         AudioChainOverlayHost.Visibility = Visibility.Collapsed;
-                        AudioChainOverlayHost.IsHitTestVisible = false;
                     };
-                    AudioChainCloseStoryboard.Completed += _audioChainCloseCompleted;
 
                     try
                     {
@@ -212,13 +208,11 @@ namespace CelesteMusicPlayer
                     {
                         StartupLog.Write("[链路] 收起动画 Begin 失败，直接折叠: " + sbEx.Message);
                         AudioChainOverlayHost.Visibility = Visibility.Collapsed;
-                        AudioChainOverlayHost.IsHitTestVisible = false;
                     }
                 }
                 else
                 {
                     AudioChainOverlayHost.Visibility = Visibility.Collapsed;
-                    AudioChainOverlayHost.IsHitTestVisible = false;
                 }
                 StartupLog.Write($"[链路] 收起完成 可见={AudioChainOverlayHost.Visibility}");
             }

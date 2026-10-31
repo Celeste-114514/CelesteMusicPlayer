@@ -56,9 +56,6 @@ public sealed partial class MainWindow
                 int notInLibrary = all.Count(p => FindLibraryIndex(p) < 0);
 
                 await AddPathsToNamedPlaylistAsync(all);
-                NowPlayingText.Text = notInLibrary > 0
-                    ? $"已导入 M3U：{all.Count} 首进入歌单（其中 {notInLibrary} 首不在音乐库，仅存于歌单）"
-                    : $"已导入 M3U：{all.Count} 首进入歌单";
             }
             catch (Exception ex)
             {
@@ -141,7 +138,6 @@ public sealed partial class MainWindow
             }
 
             AddSongsToUserPlaylist(cueItems);
-            NowPlayingText.Text = $"已从 CUE 导入 {cueItems.Count} 轨";
             PlayPlaylistItem(cueItems[0]);
         }
 

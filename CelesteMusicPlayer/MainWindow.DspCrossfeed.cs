@@ -180,7 +180,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            DspXfeedLevelText.Text = AudioFxChannelCrossfeedSlider.Value.ToString("0") + "%";
         }
 
         internal void RedrawDspXfeedCanvas()
@@ -341,9 +340,6 @@ namespace CelesteMusicPlayer
 
             if (!enabled || amount <= 0.0001)
             {
-                DspXfeedCurveNote.Text = enabled
-                    ? "强度还是 0，先把上面的强度拉起来。"
-                    : "Crossfeed 没启用，对侧完全不混入。";
                 return;
             }
 
@@ -353,8 +349,6 @@ namespace CelesteMusicPlayer
                 return db.ToString("0.0") + " dB";
             }
 
-            DspXfeedCurveNote.Text = $"截止 {cutoff:0} Hz：低音 100Hz 混进来 {At(100.0)}，"
-                + $"中频 1kHz {At(1000.0)}，高频 8kHz {At(8000.0)}（相对本侧的比例）。";
         }
 
         /// <summary>

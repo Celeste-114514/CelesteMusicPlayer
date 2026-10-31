@@ -71,14 +71,10 @@ namespace CelesteMusicPlayer
                 shown = _opraEqs.Where(x => IsCommunityAuthor(x.Author) == wantCommunity).ToList();
             }
 
-            OpraEqList.ItemsSource = shown;
             UpdateOpraSourceBadge();
 
             if (OpraEqStatusText != null && _opraSourceFilter != null && shown.Count == 0)
             {
-                OpraEqStatusText.Text = _opraSourceFilter == "community"
-                    ? "该型号没有社区测量的曲线，再点一次来源徽章可看全部。"
-                    : "该型号没有 OPRA 库自有曲线，再点一次来源徽章可看全部。";
             }
         }
 
@@ -95,17 +91,8 @@ namespace CelesteMusicPlayer
             bool active = _opraSourceFilter != null
                 && _opraSourceFilter == (community ? "community" : "opra");
 
-            OpraSampleBadge.Visibility = Visibility.Visible;
-            OpraSampleBadgeText.Text = active
-                ? label + " · 已筛选（点此看全部）"
-                : label + " · 点此只看这类";
 
             // 主动筛查时加一圈强调边框，让「点了有效果」看得见
-            OpraSampleBadge.BorderThickness = active ? new Thickness(1) : new Thickness(0);
-            OpraSampleBadge.BorderBrush = active
-                ? new SolidColorBrush(DspAccentColor())
-                : null;
-            OpraSampleBadge.Opacity = active ? 1.0 : 0.85;
         }
 
         /// <summary>当前主题/皮肤下的强调色（复用 DspAccentBrush：极客下自动是磷光色）。</summary>
@@ -131,22 +118,16 @@ namespace CelesteMusicPlayer
                 List<OpraVendor> vendors = _opra.GetTopVendors(14);
                 if (vendors.Count == 0)
                 {
-                    OpraVendorWall.ItemsSource = null;
                     if (OpraVendorWallNote != null)
                     {
-                        OpraVendorWallNote.Text = "OPRA 数据库还没加载好，先等一下（或检查网络）。";
                     }
 
                     return;
                 }
 
-                OpraVendorWall.ItemsSource = vendors
-                    .Select(v => new OpraVendorChip(v.Name, _opra.GetProductCountByVendor(v.Id)))
-                    .ToList();
 
                 if (OpraVendorWallNote != null)
                 {
-                    OpraVendorWallNote.Text = $"共 {vendors.Count} 个热门品牌（括号里是该品牌收录的型号数）。点一下直接搜。";
                 }
             }
             catch (Exception caught)
@@ -164,7 +145,6 @@ namespace CelesteMusicPlayer
 
             if (OpraSearchBox != null)
             {
-                OpraSearchBox.Text = chip.Name;
             }
 
             if (OpraSearchButton != null)
@@ -206,8 +186,6 @@ namespace CelesteMusicPlayer
                     entries.Add(OpraRecentEntry.From(r, mark: "🕘"));
                 }
 
-                OpraRecentList.ItemsSource = entries;
-                OpraRecentCard.Visibility = entries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
             }
             catch (Exception caught)
             {
@@ -226,12 +204,10 @@ namespace CelesteMusicPlayer
             // 搜不到就说明本地缓存被清过或该条已被上游下架，如实告诉用户。
             if (!string.IsNullOrWhiteSpace(entry.ProductName) && OpraSearchBox != null)
             {
-                OpraSearchBox.Text = entry.ProductName;
                 OpraSearchButton_Click(OpraSearchButton ?? new Button(), new RoutedEventArgs());
 
                 if (OpraEqStatusText != null)
                 {
-                    OpraEqStatusText.Text = $"已从历史里找到「{entry.Title}」，在右边选曲线即可应用。";
                 }
             }
         }
@@ -257,7 +233,6 @@ namespace CelesteMusicPlayer
                 bool nowFavorite = OpraHistoryStore.ToggleFavorite(item);
                 if (OpraFavoriteButton != null)
                 {
-                    OpraFavoriteButton.Content = nowFavorite ? "已收藏" : "收藏";
                 }
 
                 RefreshOpraRecentList();
@@ -298,7 +273,6 @@ namespace CelesteMusicPlayer
 
                 if (OpraAutoEqBadge != null)
                 {
-                    OpraAutoEqBadge.Visibility = autoEq ? Visibility.Visible : Visibility.Collapsed;
                 }
 
                 // 来源徽章由 UpdateOpraSourceBadge 统一刷新（含「点此筛选」文案与选中态）
@@ -306,8 +280,6 @@ namespace CelesteMusicPlayer
 
                 if (OpraFavoriteButton != null)
                 {
-                    OpraFavoriteButton.IsEnabled = true;
-                    OpraFavoriteButton.Content = OpraHistoryStore.IsFavorite(eq.EqId) ? "已收藏" : "收藏";
                 }
 
                 RedrawOpraPreview();
@@ -326,18 +298,14 @@ namespace CelesteMusicPlayer
 
             if (OpraAutoEqBadge != null)
             {
-                OpraAutoEqBadge.Visibility = Visibility.Collapsed;
             }
 
             if (OpraSampleBadge != null)
             {
-                OpraSampleBadge.Visibility = Visibility.Collapsed;
             }
 
             if (OpraFavoriteButton != null)
             {
-                OpraFavoriteButton.IsEnabled = false;
-                OpraFavoriteButton.Content = "收藏";
             }
 
             if (OpraPreviewCanvas != null)
@@ -347,7 +315,6 @@ namespace CelesteMusicPlayer
 
             if (OpraPreviewNote != null)
             {
-                OpraPreviewNote.Text = "在上面选一条曲线，这里就画出它把哪些频率抬起来、哪些压下去。";
             }
         }
 
@@ -388,7 +355,6 @@ namespace CelesteMusicPlayer
                     canvas.Children.Clear();
                     if (OpraPreviewNote != null)
                     {
-                        OpraPreviewNote.Text = "这条曲线解析不出来，没法预览。";
                     }
 
                     return;

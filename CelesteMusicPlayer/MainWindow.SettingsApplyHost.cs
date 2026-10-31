@@ -299,7 +299,6 @@ public sealed partial class MainWindow
                 return;
             }
 
-            LyricsPanel.Spacing = settings.LyricLineSpacing;
             TextAlignment align = settings.LyricAlign switch
             {
                 "Left" => TextAlignment.Left,
@@ -356,12 +355,10 @@ public sealed partial class MainWindow
             {
                 if (WaveformCanvas != null)
                 {
-                    WaveformCanvas.Visibility = Visibility.Collapsed;
                 }
 
                 if (RadialVisualCanvas != null)
                 {
-                    RadialVisualCanvas.Visibility = Visibility.Collapsed;
                 }
 
                 return;
@@ -373,12 +370,10 @@ public sealed partial class MainWindow
         {
             if (NowPlayingCoverBorder != null)
             {
-                NowPlayingCoverBorder.Visibility = settings.ShowAlbumCover ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (TransportCoverBorder != null)
             {
-                TransportCoverBorder.Visibility = settings.ShowAlbumCover ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 
@@ -566,7 +561,6 @@ public sealed partial class MainWindow
                         Color rootBg = darkClassic
                                     ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
                                     : Windows.UI.Color.FromArgb(255, 243, 243, 243);
-                        RootShell.Background = new SolidColorBrush(rootBg);
                     }
 
                     // 多选行底色缓存的取色依赖界面基色，切风格必须失效重算
@@ -575,19 +569,14 @@ public sealed partial class MainWindow
                     // 背景图层全部隐藏（含视频暂停）
                     if (AlbumArtBackgroundImage != null)
                     {
-                        AlbumArtBackgroundImage.Source = null;
-                        AlbumArtBackgroundImage.Visibility = Visibility.Collapsed;
                     }
 
                     if (AlbumArtBackgroundScrim != null)
                     {
-                        AlbumArtBackgroundScrim.Opacity = 0;
                     }
 
                     if (CustomBackgroundImage != null)
                     {
-                        CustomBackgroundImage.Source = null;
-                        CustomBackgroundImage.Visibility = Visibility.Collapsed;
                     }
 
                     StopCustomBackgroundVideo();

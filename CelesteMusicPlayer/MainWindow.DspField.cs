@@ -147,7 +147,6 @@ namespace CelesteMusicPlayer
 
             if (DspFieldCenterSlider != null)
             {
-                DspFieldCenterSlider.Value = Math.Clamp(tilt, DspFieldCenterSlider.Minimum, DspFieldCenterSlider.Maximum);
             }
 
             if (DspFieldSideSlider != null)
@@ -343,15 +342,11 @@ namespace CelesteMusicPlayer
         {
             if (DspFieldMidReadout != null)
             {
-                DspFieldMidReadout.Text = enabled ? FormatSignedDb(centerDb) : "旁路";
             }
 
             double effSide = EffectiveSideDb(sideDb, width);
             if (DspFieldSideReadout != null)
             {
-                DspFieldSideReadout.Text = !enabled
-                    ? "旁路"
-                    : double.IsNegativeInfinity(effSide) ? "−∞ dB" : FormatSignedDb(effSide);
             }
 
             if (DspFieldCorrText == null)
@@ -361,7 +356,6 @@ namespace CelesteMusicPlayer
 
             if (!enabled)
             {
-                DspFieldCorrText.Text = "模块没启用，左右原样送出。";
                 return;
             }
 
@@ -383,8 +377,6 @@ namespace CelesteMusicPlayer
                     ? "左右已经反过来，和原曲的空间感是拧着的。"
                     : "空间感正常范围内。";
 
-            DspFieldCorrText.Text = $"估算输出左右相关 {rhoOut:0.00}"
-                + $"（假设输入相关 {rho:0.0}），{verdict}";
         }
 
         private static string FormatSignedDb(double db)

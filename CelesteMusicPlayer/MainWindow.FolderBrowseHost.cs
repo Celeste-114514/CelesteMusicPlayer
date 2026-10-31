@@ -143,14 +143,11 @@ public sealed partial class MainWindow
                 && _folderSearchMatches.Count > 0
                 && !string.IsNullOrWhiteSpace(_librarySearchText);
 
-            FolderSearchNavPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (!show)
             {
-                FolderSearchCountText.Text = "0/0";
                 return;
             }
 
-            FolderSearchCountText.Text = $"{_folderSearchIndex + 1}/{_folderSearchMatches.Count}";
         }
 
         /// <summary>显示媒体库根（设置里的文件夹列表）或其直接子项；未配置则回退旧单根。</summary>
@@ -167,13 +164,9 @@ public sealed partial class MainWindow
                 // 未配置媒体库：回退旧的单文件夹树
                 if (string.IsNullOrWhiteSpace(_browseFolderPath) || !Directory.Exists(_browseFolderPath))
                 {
-                    FolderBrowserView.Visibility = Visibility.Collapsed;
-                    FolderBrowserEmptyHint.Visibility = Visibility.Visible;
                     return;
                 }
 
-                FolderBrowserEmptyHint.Visibility = Visibility.Collapsed;
-                FolderBrowserView.Visibility = Visibility.Visible;
                 foreach (FolderBrowserItem child in EnumerateFolderChildren(_browseFolderPath, depth: 0))
                 {
                     _folderBrowserItems.Add(child);
@@ -183,8 +176,6 @@ public sealed partial class MainWindow
             }
 
             // 多根媒体库：每个根显示完整路径，点击展开其下树
-            FolderBrowserEmptyHint.Visibility = Visibility.Collapsed;
-            FolderBrowserView.Visibility = Visibility.Visible;
             foreach (string root in roots)
             {
                 _folderBrowserItems.Add(new FolderBrowserItem

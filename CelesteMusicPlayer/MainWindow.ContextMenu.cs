@@ -62,7 +62,6 @@ namespace CelesteMusicPlayer
                 _ => SortField.Title
             };
 
-            SortFieldText.Text = "排序：" + GetSortFieldDisplayName(_sortField);
 
             string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
                 ? _playlist[_currentIndex].FilePath

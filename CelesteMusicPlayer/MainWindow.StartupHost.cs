@@ -77,7 +77,6 @@ public sealed partial class MainWindow
             {
                 if (WindowMaxRestoreIcon != null)
                 {
-                    WindowMaxRestoreIcon.Glyph = _windowMaximized ? "\uE923" : "\uE922";
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }

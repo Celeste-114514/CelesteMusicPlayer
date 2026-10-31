@@ -186,10 +186,6 @@ namespace CelesteMusicPlayer
             }
 
             bool on = _desktopLyricsEnabled && _desktopLyricsWindow != null;
-            DesktopLyricsStateBadge.Text = on ? "on" : "off";
-            DesktopLyricsStateBadge.Foreground = on
-                ? new SolidColorBrush(Color.FromArgb(255, 80, 200, 120))
-                : new SolidColorBrush(Color.FromArgb(255, 176, 176, 176));
         }
     }
 }

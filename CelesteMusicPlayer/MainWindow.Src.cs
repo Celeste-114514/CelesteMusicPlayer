@@ -25,12 +25,8 @@ namespace CelesteMusicPlayer
                 UpdateSrcStateText(SrcParameters.TargetHz);
 
                 FillLabelCombo(SrcQualityCombo, DspSrcParameters.QualityLabels);
-                SrcQualityCombo.SelectedIndex = SrcParameters.QualityIndex;
-                SrcQualityHintText.Text = SrcParameters.QualityChoice.Hint;
 
                 FillLabelCombo(SrcDitherCombo, DspSrcParameters.DitherLabels);
-                SrcDitherCombo.SelectedIndex = SrcParameters.DitherIndex;
-                SrcDitherHintText.Text = SrcParameters.DitherChoice.Hint;
 
                 RefreshSrcSessionState();
             }
@@ -84,7 +80,6 @@ namespace CelesteMusicPlayer
             {
                 ImportExtraParameterInput(sender);
                 string key = SrcParameters.Quality;
-                SrcQualityHintText.Text = SrcParameters.QualityChoice.Hint;
 
                 AppSettingsState s = AppSettingsStore.Load();
                 if (s.SrcQuality != key)
@@ -108,7 +103,6 @@ namespace CelesteMusicPlayer
             {
                 ImportExtraParameterInput(sender);
                 string key = SrcParameters.Dither;
-                SrcDitherHintText.Text = SrcParameters.DitherChoice.Hint;
 
                 AppSettingsState s = AppSettingsStore.Load();
                 if (s.SrcDither != key)
@@ -145,8 +139,6 @@ namespace CelesteMusicPlayer
             _audioEngine?.SetSrcQuality(src.Quality);
             _audioEngine?.SetSrcDither(src.Dither);
             UpdateSrcStateText(src.TargetHz);
-            SrcQualityHintText.Text = SrcParameters.QualityChoice.Hint;
-            SrcDitherHintText.Text = SrcParameters.DitherChoice.Hint;
             RefreshSrcSessionState();
             RedrawSrcCanvas();
         }
@@ -168,7 +160,6 @@ namespace CelesteMusicPlayer
         private void UpdateSrcStateText(int hz)
         {
             if (SrcStateText == null) return;
-            SrcStateText.Text = hz <= 0 ? "关闭" : (hz / 1000.0).ToString("0.#") + " kHz";
         }
 
         #region 输出缓冲区（抗卡顿 / 低延迟）
@@ -210,10 +201,8 @@ namespace CelesteMusicPlayer
                     }
                 }
 
-                OutputBufferCombo.SelectedIndex = idx;
                 if (OutputBufferHintText != null)
                 {
-                    OutputBufferHintText.Text = OutputBufferOptions[idx].Hint;
                 }
 
                 _audioEngine?.SetOutputBufferMs(OutputBufferOptions[idx].Ms);
@@ -237,7 +226,6 @@ namespace CelesteMusicPlayer
                 int ms = OutputBufferOptions[idx].Ms;
                 if (OutputBufferHintText != null)
                 {
-                    OutputBufferHintText.Text = OutputBufferOptions[idx].Hint;
                 }
 
                 AppSettingsState s = AppSettingsStore.Load();

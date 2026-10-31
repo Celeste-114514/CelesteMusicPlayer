@@ -399,11 +399,9 @@ namespace CelesteMusicPlayer
             string glyph = playing ? "\uE769" : "\uE768";   // E769 = 暂停，E768 = 播放
             if (PlayPauseIcon != null)
             {
-                PlayPauseIcon.Glyph = glyph;
             }
             if (FloatingPlayPauseIcon != null)
             {
-                FloatingPlayPauseIcon.Glyph = glyph;
             }
 
             try
@@ -425,11 +423,6 @@ namespace CelesteMusicPlayer
                 // ⚠️ 必须用"透明画刷"而不是 null：WinUI 里 Background=null 的元素不参与命中测试，
                 // 点击会直接漏到它下面的音乐库界面（表现为播放页盖在上面，却能点到下面的「排序」）。
                 // 透明画刷视觉上完全一样，但会正常拦住鼠标。
-                NowPlayingPane.Background = new SolidColorBrush(Colors.Transparent);
-                NowPlayingPane.BorderBrush = null;
-                NowPlayingPane.BorderThickness = new Thickness(0);
-                NowPlayingPane.CornerRadius = new CornerRadius(0);
-                NowPlayingPane.Padding = new Thickness(12);
             }
 
             ApplyArtistSongsFrostChrome();
@@ -450,7 +443,6 @@ namespace CelesteMusicPlayer
         {
             if (NowPlayingPaneContent != null)
             {
-                NowPlayingPaneContent.Background = CreateNowPlayingStyleAcrylicBrush();
             }
         }
 
@@ -585,7 +577,6 @@ namespace CelesteMusicPlayer
             _pendingStartPauseAfter = false;
             _pendingStartPath = _pendingStartSeconds > 0 ? item.FilePath : null;
 
-            NowPlayingText.Text = "已就绪：" + item.Title + " - " + item.Artist;
 
             // 就绪态也要把进度条/总时长/波形准备好：否则进度条停在默认的 0~100，
             // 总时长显示 00:00，点播放前拖不了进度条，波形也是空的。
@@ -686,7 +677,6 @@ namespace CelesteMusicPlayer
                 if (duration > 1)
                 {
                     ProgressSlider.Maximum = duration;
-                    TotalTimeText.Text = FormatTime(item.Duration);
                 }
 
                 double start = Math.Clamp(_pendingStartSeconds, 0, duration > 1 ? duration : 0);
@@ -726,7 +716,6 @@ namespace CelesteMusicPlayer
                     && userPlaylistIndex >= 0
                     && userPlaylistIndex < _queue.Items.Count)
                 {
-                    PlaylistView.SelectedIndex = userPlaylistIndex;
                     PlaylistView.ScrollIntoView(item);
                 }
                 else if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
@@ -734,7 +723,6 @@ namespace CelesteMusicPlayer
                     && _playlist.Count > _currentIndex
                     && ReferenceEquals(PlaylistView.ItemsSource, _playlist))
                 {
-                    PlaylistView.SelectedIndex = _currentIndex;
                     PlaylistView.ScrollIntoView(_playlist[_currentIndex]);
                 }
             }
@@ -896,18 +884,15 @@ namespace CelesteMusicPlayer
 
             if (!IsEngineActiveNow)
             {
-                NowPlayingText.Text = "播放速度已设为 " + rateText + "（起播后生效）";
                 return Task.CompletedTask;
             }
 
             if (_audioEngine?.IsDsdDirectOut == true)
             {
                 // DoP 直出 = 1-bit 位流直通设备，不经 DSP 链，托管变速够不着它
-                NowPlayingText.Text = "DSD DoP 直出不变速（直出链路不过处理）；速度已记为 " + rateText + "，下一首 PCM 生效";
                 return Task.CompletedTask;
             }
 
-            NowPlayingText.Text = "播放速度 " + rateText + (preserve ? " · 音调不变" : " · 音调随速度变");
             StartupLog.Write($"[变速] 实时设为 {clamped:0.##}x 保调={preserve}");
             return Task.CompletedTask;
         }
@@ -921,7 +906,6 @@ namespace CelesteMusicPlayer
             }
 
             double rate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
-            PlaybackRateText.Text = rate.ToString("0.##") + "x";
         }
 
         private MediaPlayer? GetPlayer() => _mediaPlayer ?? PlayerElement?.MediaPlayer;
@@ -1100,7 +1084,6 @@ namespace CelesteMusicPlayer
             // 不自动播放：用户双击或点播放后再开始
             if (added > 0)
             {
-                NowPlayingText.Text = $"已添加 {added} 首，共 {_playlist.Count} 首";
             }
 
             if (persist && persistAsFiles)
@@ -1282,12 +1265,10 @@ namespace CelesteMusicPlayer
             {
                 if (AudioFxRgModeCombo.Items[i] is ComboBoxItem { Tag: ReplayGainMode m } && m == mode)
                 {
-                    AudioFxRgModeCombo.SelectedIndex = i;
                     return;
                 }
             }
 
-            AudioFxRgModeCombo.SelectedIndex = 0;
         }
 
 
@@ -1330,12 +1311,10 @@ namespace CelesteMusicPlayer
             if (AudioFxRgInfoText == null) return;
             if (_currentRgData == null)
             {
-                AudioFxRgInfoText.Text = "当前曲目：无 ReplayGain 标签";
                 return;
             }
 
             var d = _currentRgData.Value;
-            AudioFxRgInfoText.Text = $"当前曲目：Track {FormatHelper.FormatAudioFxDb(d.TrackGainDb)} dB / Album {FormatHelper.FormatAudioFxDb(d.AlbumGainDb)} dB / peak {d.Peak:0.###}";
         }
 
 
@@ -1385,8 +1364,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            PlaylistWallEmptyHint.Visibility =
-                _playlistWall.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
 
@@ -1443,9 +1420,6 @@ namespace CelesteMusicPlayer
         {
             _currentPlaylistDetail = name;
             FillPlaylistDetailItems();
-            PlaylistDetailNameText.Text = name;
-            PlaylistDetailCountText.Text = _playlistDetailItems.Count + " 首";
-            PlaylistDetailListView.ItemsSource = _playlistDetailItems;
             _ = LoadPlaylistDetailCoverAsync(_playlistDetailItems.FirstOrDefault()?.FilePath, name);
             ApplyCategoryViewData();
         }
@@ -1480,8 +1454,6 @@ namespace CelesteMusicPlayer
                     _playlistDetailItems[i].Index = i + 1; // 拖拽后重排连续序号
                 }
                 // Index 为 x:Bind OneTime 绑定，重设后需强制刷新才会更新序号
-                PlaylistDetailListView.ItemsSource = null;
-                PlaylistDetailListView.ItemsSource = _playlistDetailItems;
                 NamedPlaylistStore.SaveSongs(_currentPlaylistDetail, _playlistDetailItems.Select(p => p.FilePath));
             }
         }
@@ -1559,7 +1531,6 @@ namespace CelesteMusicPlayer
                 if (!string.IsNullOrEmpty(_currentPlaylistDetail))
                 {
                     NamedPlaylistStore.SaveSongs(_currentPlaylistDetail, _playlistDetailItems.Select(p => p.FilePath));
-                    PlaylistDetailCountText.Text = _playlistDetailItems.Count + " 首";
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -1597,7 +1568,6 @@ namespace CelesteMusicPlayer
 
                 if (bmp != null)
                 {
-                    PlaylistDetailCoverImage.Source = bmp;
                     ApplyCoverFrame(PlaylistDetailCover, PlaylistDetailCoverImage);
                 }
             }
@@ -1914,18 +1884,12 @@ namespace CelesteMusicPlayer
 
         private void EnterPlaylistWallMultiSelect(PlaylistCardViewModel anchor)
         {
-            PlaylistWallGridView.SelectionMode = ListViewSelectionMode.Multiple;
             AttachRangeMultiSelect(PlaylistWallGridView);
-            PlaylistWallGridView.IsItemClickEnabled = false;
-            PlaylistWallMultiBar.Visibility = Visibility.Visible;
         }
 
 
         private void ExitPlaylistWallMultiSelect()
         {
-            PlaylistWallGridView.SelectionMode = ListViewSelectionMode.None;
-            PlaylistWallGridView.IsItemClickEnabled = true;
-            PlaylistWallMultiBar.Visibility = Visibility.Collapsed;
             PlaylistWallGridView.SelectedItems.Clear();
         }
 
@@ -1964,11 +1928,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                NowPlayingText.Text = "正在从网络搜索封面…";
                 string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(vm.Name);
                 if (string.IsNullOrWhiteSpace(url))
                 {
-                    NowPlayingText.Text = "未找到封面";
                     return;
                 }
 
@@ -1980,12 +1942,10 @@ namespace CelesteMusicPlayer
                     PlaylistLibraryService.WriteCustomCover(vm.Name, bytes);
                 }
 
-                NowPlayingText.Text = string.Empty;
                 ApplyPlaylistWallCategory();
             }
             catch
             {
-                NowPlayingText.Text = "获取封面失败";
             }
         }
 
@@ -2046,7 +2006,6 @@ namespace CelesteMusicPlayer
                 List<string> songs = NamedPlaylistStore.LoadSongs(name);
                 if (songs.Count == 0)
                 {
-                    NowPlayingText.Text = "歌单「" + name + "」是空的，没有可导出的曲目";
                     return;
                 }
 
@@ -2070,7 +2029,6 @@ namespace CelesteMusicPlayer
                 StorageFile m3uFile = await folder.CreateFileAsync(safe + ".m3u8", Windows.Storage.CreationCollisionOption.ReplaceExisting);
                 await Windows.Storage.FileIO.WriteTextAsync(m3uFile, sb.ToString(), Windows.Storage.Streams.UnicodeEncoding.Utf8);
 
-                NowPlayingText.Text = "已导出歌单「" + name + "」（" + songs.Count + " 首）→ " + safe + ".m3u8";
                 StartupLog.Write("导出歌单完成: " + name + " → " + folder.Path);
             }
             catch (Exception ex)
@@ -2267,13 +2225,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            MediaDetailsEmptyHint.Visibility = Visibility.Collapsed;
-            MediaDetailsList.Visibility = Visibility.Visible;
-            MediaDetailsHeader.Text = item.FullPath;
 
             // 后台线程枚举+读取标签，避免大文件夹卡 UI
-            MediaDetailsList.ItemsSource = null;
-            MediaDetailsHeader.Text = item.FullPath + "（加载中…）";
 
             string loadedPath = item.FullPath;
             bool isFolder = item.IsFolder;
@@ -2320,17 +2273,10 @@ namespace CelesteMusicPlayer
                             return;
                         }
 
-                        MediaDetailsList.ItemsSource = songs;
-                        MediaDetailsList.SelectionMode = ListViewSelectionMode.None;
                         if (MediaOptionsButton != null)
                         {
-                            MediaOptionsButton.Visibility = Visibility.Collapsed;
                         }
 
-                        MediaDetailsHeader.Text = item.FullPath;
-                        MediaDetailsEmptyHint.Text = "无歌曲";
-                        MediaDetailsEmptyHint.Visibility =
-                            songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
                     });
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -2659,16 +2605,10 @@ namespace CelesteMusicPlayer
             }
 
             // 歌曲列表区无边框（与专辑详情页歌曲列表一致）
-            ArtistSongsFrostPanel.Background = new SolidColorBrush(Colors.Transparent);
-            ArtistSongsFrostPanel.BorderThickness = new Thickness(0);
-            ArtistSongsFrostPanel.CornerRadius = new CornerRadius(0);
-            ArtistSongsFrostPanel.Background = null;
             ArtistSongsFrostPanel.ClearValue(Border.CornerRadiusProperty);
 
             if (ArtistTrackListView != null)
             {
-                ArtistTrackListView.Background = new SolidColorBrush(Colors.Transparent);
-                ArtistTrackListView.BorderThickness = new Thickness(0);
                 ApplyAccentSelectionResources(ArtistTrackListView);
             }
         }

@@ -282,26 +282,18 @@ namespace CelesteMusicPlayer
                 case "Title|Artist":
                     w.Title = left;
                     w.Artist = right;
-                    HeaderTitleCol.Width = w.TitleLength;
-                    HeaderArtistCol.Width = w.ArtistLength;
                     break;
                 case "Artist|Album":
                     w.Artist = left;
                     w.Album = right;
-                    HeaderArtistCol.Width = w.ArtistLength;
-                    HeaderAlbumCol.Width = w.AlbumLength;
                     break;
                 case "Album|Year":
                     w.Album = left;
                     w.Year = right;
-                    HeaderAlbumCol.Width = w.AlbumLength;
-                    HeaderYearCol.Width = w.YearLength;
                     break;
                 case "Year|Duration":
                     w.Year = left;
                     w.Duration = right;
-                    HeaderYearCol.Width = w.YearLength;
-                    HeaderDurationCol.Width = w.DurationLength;
                     break;
             }
         }

@@ -85,7 +85,6 @@ namespace CelesteMusicPlayer
                 if (duration > 1 && Math.Abs(ProgressSlider.Maximum - duration) > 1)
                 {
                     ProgressSlider.Maximum = duration;
-                    TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(duration));
                 }
 
                 // 界面/歌词/SMTC/迷你播放器全部消费"源时间"：引擎位置 × 倍率
@@ -306,8 +305,6 @@ namespace CelesteMusicPlayer
         {
             bool trackOnce = _orderResolver.Order == PlaybackOrder.TrackOnce;
 
-            PlaybackOrderIcon.Visibility = trackOnce ? Visibility.Collapsed : Visibility.Visible;
-            PlaybackOrderTrackOnceGlyph.Visibility = trackOnce ? Visibility.Visible : Visibility.Collapsed;
 
             (string glyph, string name) = _orderResolver.Order switch
             {
@@ -321,7 +318,6 @@ namespace CelesteMusicPlayer
 
             if (!trackOnce)
             {
-                PlaybackOrderIcon.Glyph = glyph;
             }
 
             ToolTipService.SetToolTip(PlaybackOrderButton, name + "（左键切换，右键选择）");

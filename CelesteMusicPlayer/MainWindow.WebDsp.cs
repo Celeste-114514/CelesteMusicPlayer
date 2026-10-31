@@ -239,7 +239,6 @@ namespace CelesteMusicPlayer
             {
                 bool next = msg.TryGetProperty("value", out var bypassElement) && bypassElement.ValueKind == JsonValueKind.True;
                 if (RackParameters.Bypassed != next)
-                    DspBypassToggle.IsOn = next;   // fires the native handler: SetBypassAll + bit-perfect UI
                 return new { bypass = RackParameters.Bypassed };
             }
 

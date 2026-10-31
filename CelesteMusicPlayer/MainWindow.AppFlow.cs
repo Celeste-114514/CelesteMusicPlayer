@@ -30,14 +30,12 @@ namespace CelesteMusicPlayer
 
             if (sel == 0)
             {
-                NowPlayingText.Text = "睡眠定时器已关闭";
                 return;
             }
 
             if (sel == 6)
             {
                 _sleepMode = SleepStopMode.AfterTrack;
-                NowPlayingText.Text = "睡眠定时器：当前曲目播完后停止";
                 return;
             }
 
@@ -46,7 +44,6 @@ namespace CelesteMusicPlayer
                 int n = (int)Math.Clamp(Math.Round(trackCountValue), 1, 99);
                 _sleepMode = SleepStopMode.AfterTracks;
                 _sleepTracksRemaining = n;
-                NowPlayingText.Text = $"睡眠定时器：再播放 {n} 首后停止";
                 return;
             }
 
@@ -65,7 +62,6 @@ namespace CelesteMusicPlayer
             _sleepTimer.Interval = TimeSpan.FromMinutes(minutes);
             _sleepTimer.Tick += (_, _) => StopForSleep("睡眠定时器到点，播放已暂停");
             _sleepTimer.Start();
-            NowPlayingText.Text = $"睡眠定时器已设置：{minutes} 分钟后停止播放";
         }
 
         /// <summary>统一停止播放并清除睡眠定时器状态。</summary>
@@ -85,7 +81,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
-            NowPlayingText.Text = message;
         }
 
         private void RestartGlobalHotkeysFromSettings()
@@ -134,7 +129,6 @@ namespace CelesteMusicPlayer
 
             if (FavoriteButtonIcon != null)
             {
-                FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
                 ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
             }
 

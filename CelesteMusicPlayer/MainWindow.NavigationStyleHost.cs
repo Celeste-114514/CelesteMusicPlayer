@@ -152,7 +152,6 @@ public sealed partial class MainWindow
 
                 if (LibraryNavInnerDivider != null)
                 {
-                    LibraryNavInnerDivider.Visibility = classic ? Visibility.Visible : Visibility.Collapsed;
                 }
             }
             catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.ApplyNavIconStyle", caught); }

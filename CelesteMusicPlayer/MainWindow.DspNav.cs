@@ -505,7 +505,6 @@ namespace CelesteMusicPlayer
             {
                 if (RoomClipRiskText != null)
                 {
-                    RoomClipRiskText.Text = "还没导入 IR：先点上方「打开房间校正」导入脉冲响应 WAV，再启用卷积。";
                 }
 
                 return;
@@ -541,13 +540,8 @@ namespace CelesteMusicPlayer
             double leftPct = Math.Clamp(50 - (skewDb * 4.0), 8, 92);
             double rightPct = Math.Clamp(50 + (skewDb * 4.0), 8, 92);
 
-            DspChannelLeftBar.Value = leftPct;
-            DspChannelRightBar.Value = rightPct;
 
             double abs = Math.Abs(skewDb);
-            DspChannelSkewText.Text = abs < 0.05
-                ? "居中"
-                : (skewDb > 0 ? "偏右 " : "偏左 ") + abs.ToString("0.0") + " dB";
         }
 
         // ---------- 输出链路条 ----------
@@ -563,12 +557,8 @@ namespace CelesteMusicPlayer
             bool bypass = RackParameters.Bypassed;
 
             string src = SrcSessionStateText != null ? SrcSessionStateText.Text : string.Empty;
-            DspChainInputText.Text = (!string.IsNullOrWhiteSpace(src) && src != "—")
-                ? src
-                : "原始采样率直出";
 
             double headroom = AudioFxSafetyHeadroomSlider?.Value ?? 0;
-            DspChainHeadroomText.Text = FormatHelper.FormatAudioFxDb(headroom) + " dB";
 
             // 顺序按信号链：余量 / RG / SRC / EQ / 耳机校正 / 声道工具（含 Crossfeed）/ FIR
             // 下标用 DspActive* 具名常量显式对应 —— 曾经的 names[i] ↔ active[i] 在页面增删后会整体错位
@@ -617,13 +607,9 @@ namespace CelesteMusicPlayer
                 on.Add("FIR");
             }
 
-            DspChainProcessText.Text = bypass ? "全部旁路" : (on.Count == 0 ? "无（直通）" : string.Join(" → ", on));
 
             int clip = _audioEngine?.OutputClipCount ?? 0;
             float peak = _audioEngine?.OutputPeakDbfs ?? float.NegativeInfinity;
-            DspChainOutputText.Text = clip > 0
-                ? "已削波"
-                : (peak > -0.5f ? "接近满刻度" : "正常");
         }
 
         // ---------- 房间校正（FIR）：IR 信息 / 微调余量 trim / 削波风险 ----------
@@ -650,7 +636,6 @@ namespace CelesteMusicPlayer
 
             if (RoomTrimSlider != null)
             {
-                RoomTrimSlider.Value = Math.Clamp(FirParameters.Current.TrimDb, -24, 6);
             }
 
             UpdateRoomTrimLabel();
@@ -682,9 +667,6 @@ namespace CelesteMusicPlayer
             float peak = _audioEngine?.OutputPeakDbfs ?? float.NegativeInfinity;
             int clip = _audioEngine?.OutputClipCount ?? 0;
 
-            OutMonitorPeakText.Text = float.IsInfinity(peak) ? "—（无数据）" : peak.ToString("F1") + " dBFS";
-            OutMonitorClipText.Text = clip == 0 ? "0 次" : clip + " 次";
-            OutMonitorOverloadText.Text = clip > 0 ? "⚠ 已削波" : (peak > -0.5f ? "接近满刻度" : "正常");
 
             // 活跃 DSP 清单：按信号链顺序列出正在参与处理的模块（具名下标，见 DspActive* 常量）
             string[] names = { "余量/限幅", "ReplayGain", "SRC 升频", "参数 EQ", "声道工具", "FIR 卷积" };
@@ -711,15 +693,9 @@ namespace CelesteMusicPlayer
             }
 
             bool bypass = RackParameters.Bypassed;
-            OutMonitorActiveDspText.Text = bypass
-                ? "无（DSP 总旁路中）"
-                : (on.Count == 0 ? "无" : string.Join("、", on));
 
             // 采样率链路：沿用 SRC 会话状态文本（未升频时显示直出）
             string src = SrcSessionStateText != null ? SrcSessionStateText.Text : string.Empty;
-            OutMonitorChainText.Text = string.IsNullOrWhiteSpace(src) || src == "—"
-                ? "未升频（直出原始采样率）"
-                : src;
 
             // 链路条与上面的监控数值同源，一起刷新
             UpdateDspSafetyChain();

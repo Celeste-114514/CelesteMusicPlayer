@@ -79,12 +79,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            LyricsEmptyHint.Visibility = Visibility.Collapsed;
-            LyricsScrollViewer.Visibility = Visibility.Visible;
-
-            // 上下垫高，便于首尾句也能滚到中间
-            double pad = Math.Max(80, LyricsScrollViewer.ActualHeight / 2);
-            LyricsPanel.Padding = new Thickness(8, pad, 8, pad);
 
             AppSettingsState uiSettings = AppSettingsStore.Load();
             TextAlignment align = uiSettings.LyricAlign switch
@@ -93,7 +87,6 @@ namespace CelesteMusicPlayer
                 "Right" => TextAlignment.Right,
                 _ => TextAlignment.Center
             };
-            LyricsPanel.Spacing = uiSettings.LyricLineSpacing;
 
             foreach (LyricLine line in lyrics)
             {
@@ -232,10 +225,6 @@ namespace CelesteMusicPlayer
             _lyricRowFrames.Clear();
             _selectedLyricRow = -1;
             LyricsPanel.Children.Clear();
-            LyricsPanel.Padding = new Thickness(0);
-            LyricsScrollViewer.Visibility = Visibility.Collapsed;
-            LyricsEmptyHint.Text = hint;
-            LyricsEmptyHint.Visibility = Visibility.Visible;
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
         }
 
@@ -348,7 +337,6 @@ namespace CelesteMusicPlayer
             _userScrollingLyrics = true;
             // 滚动条永远 Hidden：能滚，但一根都不显示（用户明确要求）。
             // 必须是 Hidden 而不是 Disabled —— Disabled 会连滚动本身一起禁掉。
-            LyricsScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
             if (_lyricScrollResumeTimer == null)
             {
                 _lyricScrollResumeTimer = DispatcherQueue.CreateTimer();

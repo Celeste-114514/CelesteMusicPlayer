@@ -77,7 +77,6 @@ public sealed partial class MainWindow
                     if (_openedAlbum != null &&
                         string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
                     {
-                        AlbumDetailCoverImage.Source = image;
                         ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
                     }
                 }
@@ -124,30 +123,17 @@ public sealed partial class MainWindow
 
             if (fromArtist)
             {
-                ArtistListBorder.Visibility = Visibility.Collapsed;
-                AlbumListBorder.Visibility = Visibility.Visible;
-                AlbumDetailBackButton.Content = "← 返回艺术家";
             }
             else
             {
-                AlbumDetailBackButton.Content = "← 返回专辑";
             }
 
-            AlbumGridView.Visibility = Visibility.Collapsed;
-            AlbumDetailPanel.Visibility = Visibility.Visible;
-            AlbumSortPanel.Visibility = Visibility.Collapsed;
-            LibraryPaneTitle.Text = album.Name;
             UpdateLibrarySearchUi();
 
-            AlbumDetailCoverImage.Source = album.CoverImage;
             ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
-            AlbumDetailNameText.Text = album.Name;
-            AlbumDetailArtistText.Text = album.Artist;
             if (AlbumDetailSubInfoText != null)
             {
                 // 行2：艺术家(超链接) | 发行时间 | 曲目数
-                AlbumDetailSubInfoText.Text =
-                    " | " + album.YearText + " | " + album.TrackCount + " 首";
             }
 
             _albumTracks.Clear();
@@ -167,7 +153,6 @@ public sealed partial class MainWindow
             if (AlbumDetailDsdHint != null)
             {
                 bool allDsd = tracks.Count > 0 && tracks.All(t => IsDsdFile(t.FilePath));
-                AlbumDetailDsdHint.Visibility = allDsd ? Visibility.Visible : Visibility.Collapsed;
             }
 
             // DSD 预加载区域（专辑内一首 DSD 都没有则整块隐藏）
@@ -176,12 +161,10 @@ public sealed partial class MainWindow
             // 行3：编码器 | 位深/采样率 | 总时长（在后台线程算质量行，避免 CD 大专辑打开卡顿）
             if (AlbumDetailTechText != null)
             {
-                AlbumDetailTechText.Text = string.Empty;
                 _ = FillAlbumTechTextAsync(album, tracks);
             }
 
             // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
-            AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
         }
 
         private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
@@ -224,12 +207,10 @@ public sealed partial class MainWindow
                 && _openedArtist == null
                 && (_currentCategory is "Songs" or "Albums" or "Artists" or "AlbumArtists" or "Folders" or "UserPlaylist" or "Favorites" or "Recent" or "Ratings");
 
-            LibrarySearchPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (!show)
             {
                 if (FolderSearchNavPanel != null)
                 {
-                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
                 }
 
                 if (_currentCategory != "Folders")
@@ -265,18 +246,15 @@ public sealed partial class MainWindow
             {
                 case "Songs":
                     ApplySongsSearchFilter();
-                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
                     ClearFolderSearchHighlightOnly();
                     break;
                 case "Albums":
                     ApplyAlbumsSearchFilter();
-                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
                     ClearFolderSearchHighlightOnly();
                     break;
                 case "Artists":
                 case "AlbumArtists":
                     ApplyArtistsSearchFilter();
-                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
                     ClearFolderSearchHighlightOnly();
                     break;
                 case "Folders":
@@ -284,11 +262,9 @@ public sealed partial class MainWindow
                     break;
                 case "UserPlaylist":
                     ApplyUserPlaylistSearchFilter();
-                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
                     ClearFolderSearchHighlightOnly();
                     break;
                 default:
-                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
                     break;
             }
         }

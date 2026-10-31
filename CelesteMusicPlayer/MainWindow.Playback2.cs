@@ -571,7 +571,6 @@ namespace CelesteMusicPlayer
                 {
                     if (AlbumDetailTechText != null)
                     {
-                        AlbumDetailTechText.Text = text;
                     }
                 });
             }
@@ -709,12 +708,8 @@ namespace CelesteMusicPlayer
         {
             Visibility librarySort = isUserPlaylist ? Visibility.Collapsed : Visibility.Visible;
             Visibility playlistSort = isUserPlaylist ? Visibility.Visible : Visibility.Collapsed;
-            SortFieldButton.Visibility = librarySort;
-            SortOrderButton.Visibility = librarySort;
-            ChangeSortButton.Visibility = playlistSort;
 
             // 同一个「播放所有歌曲」按钮在播放队列视角语义不同：那里是「播放该队列」，且不重建队列
-            PlayAllLibrarySongsText.Text = isUserPlaylist ? "播放该队列" : "播放所有歌曲";
             ToolTipService.SetToolTip(
                 PlayAllLibrarySongsButton,
                 isUserPlaylist
@@ -897,7 +892,6 @@ namespace CelesteMusicPlayer
                     && ReferenceEquals(PlaylistView.ItemsSource, _playlist)
                     && _currentIndex < PlaylistView.Items.Count)
                 {
-                    PlaylistView.SelectedIndex = _currentIndex;
                 }
             }
             else if (ReferenceEquals(target, _queue.Items) && !string.IsNullOrEmpty(preservePlayingPath))
@@ -909,7 +903,6 @@ namespace CelesteMusicPlayer
                     && ReferenceEquals(PlaylistView.ItemsSource, _queue.Items)
                     && _queue.Index < PlaylistView.Items.Count)
                 {
-                    PlaylistView.SelectedIndex = _queue.Index;
                 }
             }
         }
@@ -1306,7 +1299,6 @@ namespace CelesteMusicPlayer
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
                 }
 
-                NowPlayingTitleText.Text = "未在播放";
                 ResetNowPlayingArtistAlbumLinks();
             }
             catch (Exception ex)
@@ -1435,11 +1427,6 @@ namespace CelesteMusicPlayer
             _isMultiSelectMode = true;
             SetListSelectionMode(target, ListViewSelectionMode.Multiple);
 
-            LibraryPaneTitle.Visibility = Visibility.Collapsed;
-            SongSortPanel.Visibility = Visibility.Collapsed;
-            MultiSelectTitlePanel.Visibility = Visibility.Visible;
-            MultiSelectTitleText.Text = "选择歌曲";
-            MultiSelectActionBar.Visibility = Visibility.Visible;
             ConfigureMultiSelectPrimaryAction();
             UpdateSelectAllMultiSelectButtonState();
             UpdateUserPlaylistActionBarVisibility();
@@ -1487,7 +1474,6 @@ namespace CelesteMusicPlayer
             bool show = !_isMultiSelectMode
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
                 && PlaylistListBorder.Visibility == Visibility.Visible;
-            UserPlaylistActionBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
 
@@ -2112,7 +2098,6 @@ namespace CelesteMusicPlayer
                 }
 
                 NotifyCurrentPlaylistWindow();
-                NowPlayingText.Text = "已删除：" + item.Title;
             }
             catch (Exception ex)
             {
@@ -2485,8 +2470,6 @@ namespace CelesteMusicPlayer
         {
             if (!_isMultiSelectMode)
             {
-                MultiSelectActionBar.Visibility = Visibility.Collapsed;
-                MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                 if (LibraryPaneTitle != null
                     && (_currentCategory == "Songs"
                         || _currentCategory == "UserPlaylist"
@@ -2494,7 +2477,6 @@ namespace CelesteMusicPlayer
                         || _currentCategory == "AlbumArtists"
                         || _currentCategory == "Albums"))
                 {
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                 }
 
                 return;

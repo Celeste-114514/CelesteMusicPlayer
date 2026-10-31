@@ -41,8 +41,6 @@ public sealed partial class MainWindow
             if (request != _customBackgroundRequest) return;
 
             // 视频与图片互斥：图片层退场
-            CustomBackgroundImage.Source = null;
-            CustomBackgroundImage.Visibility = Visibility.Collapsed;
 
             try
             {
@@ -81,7 +79,6 @@ public sealed partial class MainWindow
                 _backgroundVideoPath = path;
 
                 _backgroundVideoPlayer.Source = Windows.Media.Core.MediaSource.CreateFromUri(new Uri(path));
-                CustomBackgroundVideo.Visibility = Visibility.Visible;
                 _backgroundVideoPlayer.Play();
 
                 MemProbe.Log("视频背景应用后");
@@ -91,7 +88,6 @@ public sealed partial class MainWindow
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
-                CustomBackgroundVideo.Visibility = Visibility.Collapsed;
             }
 
             // 与封面背景互斥（同图片逻辑）
@@ -107,8 +103,6 @@ public sealed partial class MainWindow
             {
                 // 请求号 +1：让还在飞行中的旧壁纸任务回来时自行作废
                 _customBackgroundRequest++;
-                CustomBackgroundImage.Source = null;
-                CustomBackgroundImage.Visibility = Visibility.Collapsed;
                 StopCustomBackgroundVideo();
                 StopBackgroundMotion();
                 ClearAlbumArtBackground();
@@ -138,8 +132,6 @@ public sealed partial class MainWindow
                 {
                     if (request != _customBackgroundRequest) return;
 
-                    CustomBackgroundImage.Source = null;
-                    CustomBackgroundImage.Visibility = Visibility.Collapsed;
                     StopCustomBackgroundVideo();
                     return;
                 }
@@ -148,8 +140,6 @@ public sealed partial class MainWindow
                 {
                     if (request != _customBackgroundRequest) return;
 
-                    CustomBackgroundImage.Source = null;
-                    CustomBackgroundImage.Visibility = Visibility.Collapsed;
                     StopCustomBackgroundVideo();
                     StopBackgroundMotion();
 
@@ -241,8 +231,6 @@ public sealed partial class MainWindow
 
                 if (image == null || request != _customBackgroundRequest) return;
 
-                CustomBackgroundImage.Source = image;
-                CustomBackgroundImage.Visibility = Visibility.Visible;
 
                 // 互斥：自定义背景显示期间，封面背景（含压暗层）清掉
                 ClearAlbumArtBackground();
@@ -314,8 +302,6 @@ public sealed partial class MainWindow
 
                 if (image == null || request != _customBackgroundRequest) return;
 
-                CustomBackgroundImage.Source = image;
-                CustomBackgroundImage.Visibility = Visibility.Visible;
                 ClearAlbumArtBackground();
 
                 // 预设背景可选「缓慢移动」，按设置起停
@@ -391,7 +377,6 @@ public sealed partial class MainWindow
         {
             if (CustomBackgroundVideo != null)
             {
-                CustomBackgroundVideo.Visibility = Visibility.Collapsed;
             }
 
             if (_backgroundVideoPlayer == null) return;
@@ -441,7 +426,6 @@ public sealed partial class MainWindow
             try
             {
                 _backgroundVideoPlayer.Source = null;
-                CustomBackgroundVideo.Source = null;
                 // 关键一步：断开 MediaPlayerElement 与 MediaPlayer 的连接，
                 //   否则元素仍持有播放器，Dispose 之后它的解码资源不会真正回收。
                 CustomBackgroundVideo.SetMediaPlayer(null);
@@ -521,8 +505,6 @@ public sealed partial class MainWindow
             try
             {
                 var transform = new CompositeTransform { CenterX = 0, CenterY = 0 };
-                CustomBackgroundImage.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
-                CustomBackgroundImage.RenderTransform = transform;
                 _backgroundMotionTransform = transform;
 
                 var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
@@ -590,7 +572,6 @@ public sealed partial class MainWindow
             {
                 if (CustomBackgroundImage != null)
                 {
-                    CustomBackgroundImage.RenderTransform = null;
                 }
             }
             catch (Exception caught)

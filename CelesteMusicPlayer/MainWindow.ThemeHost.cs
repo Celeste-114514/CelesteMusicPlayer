@@ -109,13 +109,9 @@ public sealed partial class MainWindow
                 // 专辑详情页封面圆角：XAML 原本写死 CornerRadius="14"，主题盖不掉
                 if (AlbumDetailCoverBorder != null)
                 {
-                    AlbumDetailCoverBorder.CornerRadius = new CornerRadius(
-                        CelesteTokenApplier.TryGetLength(AlbumDetailCoverBorder, CelesteTokenCatalog.RadiusCover, 14));
                 }
                 if (ArtistSongsFrostPanel != null)
                 {
-                    ArtistSongsFrostPanel.CornerRadius = new CornerRadius(
-                        CelesteTokenApplier.TryGetLength(ArtistSongsFrostPanel, CelesteTokenCatalog.RadiusMedium, 8));
                 }
             }
             catch (Exception ex) { StartupLog.WriteException("RefreshDetailPagesForTheme", ex); }

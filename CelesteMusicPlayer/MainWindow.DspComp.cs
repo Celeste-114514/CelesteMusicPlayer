@@ -160,7 +160,6 @@ namespace CelesteMusicPlayer
 
                 if (DspCompGrText != null)
                 {
-                    DspCompGrText.Text = gr.ToString("0.0") + " dB";
                 }
 
                 _dspCompGrHistory.Add(gr);
@@ -225,9 +224,6 @@ namespace CelesteMusicPlayer
 
             if (DspCompInText != null)
             {
-                DspCompInText.Text = hasSignal
-                    ? (inDb <= CompCurveMinDb + 0.5 ? "-∞" : inDb.ToString("0.0") + " dB")
-                    : "—";
             }
 
             DrawDspCompInputMeterBar(hasSignal ? inDb : double.NegativeInfinity);

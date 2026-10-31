@@ -66,13 +66,9 @@ public sealed partial class MainWindow
                     // 音量条自绘:尺寸变化/初始绘制/交互
                     if (VolumeStyleCanvas != null)
                     {
-                        VolumeStyleCanvas.SizeChanged -= VolumeStyleCanvas_SizeChanged;
                         VolumeStyleCanvas.SizeChanged += VolumeStyleCanvas_SizeChanged;
-                        VolumeStyleCanvas.PointerPressed -= VolumeStyleCanvas_PointerPressed;
                         VolumeStyleCanvas.PointerPressed += VolumeStyleCanvas_PointerPressed;
-                        VolumeStyleCanvas.PointerMoved -= VolumeStyleCanvas_PointerMoved;
                         VolumeStyleCanvas.PointerMoved += VolumeStyleCanvas_PointerMoved;
-                        VolumeStyleCanvas.PointerReleased -= VolumeStyleCanvas_PointerReleased;
                         VolumeStyleCanvas.PointerReleased += VolumeStyleCanvas_PointerReleased;
                         DrawVolumeStyle();
                     }
@@ -90,7 +86,6 @@ public sealed partial class MainWindow
                     {
                         if (ProgressSlider != null)
                         {
-                            ProgressSlider.ThumbToolTipValueConverter = new SecondsToTimeSpanConverter();
                         }
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -119,7 +114,6 @@ public sealed partial class MainWindow
                     // 进度条画布尺寸变化时重绘(首次布局/窗口缩放)
                     if (ProgressStyleCanvas != null)
                     {
-                        ProgressStyleCanvas.SizeChanged -= ProgressStyleCanvas_SizeChanged;
                         ProgressStyleCanvas.SizeChanged += ProgressStyleCanvas_SizeChanged;
                         RedrawProgressStyle();
                     }
@@ -139,7 +133,6 @@ public sealed partial class MainWindow
 
                     if (PlayPauseButton != null)
                     {
-                        PlayPauseButton.SizeChanged -= BottomTransportBar_SizeChanged;
                         PlayPauseButton.SizeChanged += BottomTransportBar_SizeChanged;
                     }
 

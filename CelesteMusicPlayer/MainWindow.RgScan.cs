@@ -199,7 +199,6 @@ namespace CelesteMusicPlayer
             {
                 if (RgScanLogBox != null)
                 {
-                    RgScanLogBox.Text += line + "\n";
                 }
             });
         }
@@ -210,7 +209,6 @@ namespace CelesteMusicPlayer
             {
                 if (RgScanStatusText != null)
                 {
-                    RgScanStatusText.Text = text;
                 }
             });
         }

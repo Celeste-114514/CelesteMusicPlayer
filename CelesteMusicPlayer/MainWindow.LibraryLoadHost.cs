@@ -241,7 +241,6 @@ public sealed partial class MainWindow
                     ApplySort(preservePlayingPath: playingPath);
                 }
 
-                NowPlayingText.Text = $"已添加 {built.Items.Count} 首，共 {_playlist.Count} 首";
                 StartupLog.Write($"[library] 媒体库文件夹补入 {built.Items.Count} 首，库内共 {_playlist.Count} 首"
                     + $"（索引命中 {built.IndexHits} 首，实际解析 {built.Fresh.Count} 首），耗时 {sw.ElapsedMilliseconds} ms");
                 UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
@@ -348,7 +347,6 @@ public sealed partial class MainWindow
                 // （否则扫完还挂着「添加到音乐库」，跟启动时那个 bug 同源）
                 UpdateAddToLibraryButtonVisibility();
 
-                NowPlayingText.Text = $"已重新扫描，共 {_playlist.Count} 首";
             }
             catch (Exception ex)
             {
@@ -646,7 +644,6 @@ public sealed partial class MainWindow
                 PlaylistView.ItemsSource = _playlist;
             }
 
-            NowPlayingText.Text = $"已加载 {built.Items.Count} 首，共 {_playlist.Count} 首";
             StartupLog.Write($"[library] 后台加载完成：扫描 {paths.Length} 个路径，入库 {built.Items.Count} 首"
                 + $"（索引命中 {built.IndexHits} 首，实际解析 {built.Fresh.Count} 首），"
                 + $"列表共 {_playlist.Count} 首，耗时 {sw.ElapsedMilliseconds} ms");
@@ -938,7 +935,6 @@ public sealed partial class MainWindow
             // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
             _taskbarButtons?.UpdateFavorite(fav);
 
-            NowPlayingText.Text = fav ? "已添加到我喜欢的音乐" : "已取消喜欢";
         }
 
         private void RestartLibraryWatchFromSettings()
@@ -1022,7 +1018,6 @@ public sealed partial class MainWindow
                 return;
             }
 
-            NowPlayingText.Text = "媒体库有更新，正在自动刷新…";
             RescanLocalLibraryButton_Click(null!, new RoutedEventArgs());
         }
 

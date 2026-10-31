@@ -51,22 +51,18 @@ namespace CelesteMusicPlayer
             {
                 if (RoomIrPathBox != null)
                 {
-                    RoomIrPathBox.Text = FirParameters.Current.IrPath ?? string.Empty;
                 }
 
                 if (RoomIrGainSlider != null)
                 {
-                    RoomIrGainSlider.Value = Math.Clamp(FirParameters.Current.GainDb, -12, 12);
                 }
 
                 if (RoomIrEnabledToggle != null)
                 {
-                    RoomIrEnabledToggle.IsOn = FirParameters.Current.Enabled;
                 }
 
                 if (RoomTrimSlider != null)
                 {
-                    RoomTrimSlider.Value = Math.Clamp(FirParameters.Current.TrimDb, -24, 6);
                 }
             }
             finally
@@ -83,7 +79,6 @@ namespace CelesteMusicPlayer
         {
             if (RoomIrPathBox != null)
             {
-                RoomIrPathBox.Text = FirParameters.Current.IrPath ?? string.Empty;
             }
 
             UpdateRoomIrGainText();
@@ -159,7 +154,6 @@ namespace CelesteMusicPlayer
             }
             catch (InvalidOperationException ex)
             {
-                RoomIrEnabledToggle.IsOn = false;
                 RoomIrStatus(ex.Message);
             }
         }
@@ -179,7 +173,6 @@ namespace CelesteMusicPlayer
             }
 
             double g = FirParameters.Current.GainDb;
-            RoomIrGainValueText.Text = (g >= 0 ? "+" : "") + g.ToString("0.0") + " dB";
         }
 
         private void UpdateRoomTrimLabel()
@@ -189,7 +182,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            RoomTrimLabel.Text = "微调余量 (trim)：" + FormatHelper.FormatAudioFxDb(FirParameters.Current.TrimDb) + " dB";
         }
 
         private void RoomIrApplyButton_Click(object sender, RoutedEventArgs e)
@@ -251,7 +243,6 @@ namespace CelesteMusicPlayer
         {
             if (RoomIrLoadStatusText != null)
             {
-                RoomIrLoadStatusText.Text = text;
             }
         }
     }

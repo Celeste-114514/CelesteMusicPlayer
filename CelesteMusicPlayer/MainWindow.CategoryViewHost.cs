@@ -33,51 +33,23 @@ public sealed partial class MainWindow
 
             UpdateLibraryNavHighlight();
 
-            // 列表墙/命中单详情默认隐藏：仅其它分类内按需显 Visible，避免切到其它页面残留盖层
-            PlaylistWallBorder.Visibility = Visibility.Collapsed;
-            PlaylistDetailBorder.Visibility = Visibility.Collapsed;
-            AudioFxBorder.Visibility = Visibility.Collapsed;
-            SettingsBorder.Visibility = Visibility.Collapsed;
-            // ⚠ 标签板块（2026-10-13 并入时漏了这一行）：切到别的分类时没人把它收起来，
-            // 于是标签面板会一直叠在其它页面内容上（2026-10-14 用户实测）。
-            TagEditBorder.Visibility = Visibility.Collapsed;
-            RatingFilterPanel.Visibility = Visibility.Collapsed;
-
             switch (_currentCategory)
             {
                 case "Songs":
-                    LibraryPaneTitle.Text = "歌曲";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     PlaylistView.ItemsSource = _playlist;
 
                     _sortField = SortField.Title;
                     _sortAscending = true;
-                    SortFieldText.Text = "排序：标题";
-                    SortOrderText.Text = "升序";
                     ApplySort(playingPath);
                     break;
 
                 case "UserPlaylist":
-                    LibraryPaneTitle.Text = "播放列表";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: true);
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     PlaylistView.ItemsSource = _queue.Items;
@@ -87,16 +59,8 @@ public sealed partial class MainWindow
                     break;
 
                 case "Albums":
-                    LibraryPaneTitle.Text = "专辑";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Visible;
                     UpdateAlbumSortButtonsUi();
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Visible;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _ = RefreshAlbumViewAsync();
@@ -104,30 +68,14 @@ public sealed partial class MainWindow
 
                 case "Artists":
                 case "AlbumArtists":
-                    LibraryPaneTitle.Text = _currentCategory == "AlbumArtists" ? "专辑艺术家" : "艺术家";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Visible;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     _ = RefreshArtistViewAsync();
                     break;
 
                 case "Folders":
-                    LibraryPaneTitle.Text = "文件夹";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Visible;
                     SetFolderBrowserMode(isWebDav: false);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
@@ -135,15 +83,7 @@ public sealed partial class MainWindow
                     break;
 
                 case "WebDav":
-                    LibraryPaneTitle.Text = "网络音乐库";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Visible;
                     // 同一个「文件夹」界面复用给网络库：台头换名字、藏掉「添加文件夹」（网络库不是加本地目录）
                     SetFolderBrowserMode(isWebDav: true);
                     CloseAlbumDetailUi();
@@ -152,25 +92,13 @@ public sealed partial class MainWindow
                     break;
 
                 case "PlaylistWall":
-                    LibraryPaneTitle.Text = "播放列表";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     if (string.IsNullOrEmpty(_currentPlaylistDetail))
                     {
-                        PlaylistWallBorder.Visibility = Visibility.Visible;
-                        PlaylistDetailBorder.Visibility = Visibility.Collapsed;
                         ApplyPlaylistWallCategory();
                     }
                     else
                     {
-                        PlaylistWallBorder.Visibility = Visibility.Collapsed;
-                        PlaylistDetailBorder.Visibility = Visibility.Visible;
                     }
 
                     CloseAlbumDetailUi();
@@ -183,17 +111,8 @@ public sealed partial class MainWindow
                     break;
 
                 case "Ratings":
-                    LibraryPaneTitle.Text = "评分";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
-                    RatingFilterPanel.Visibility = Visibility.Visible;
                     PlaylistListBorder.Visibility = Visibility.Visible;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     ApplyRatingCategory();
@@ -205,34 +124,16 @@ public sealed partial class MainWindow
 
                 case "Genres":
                 case "Years":
-                    LibraryPaneTitle.Text = _currentCategory == "Genres" ? "流派" : "年份";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Visible;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
-                    ArtistGridView.Visibility = Visibility.Visible;
-                    ArtistDetailPanel.Visibility = Visibility.Collapsed;
                     _ = RefreshGenreYearViewAsync();
                     break;
 
                 case "GenreSongs":
                 case "YearSongs":
-                    LibraryPaneTitle.Text = (_currentCategory == "GenreSongs" ? "流派：" : "年份：") + (_genreYearFilter ?? "");
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     var groupedSongs = _currentCategory == "GenreSongs"
@@ -250,16 +151,7 @@ public sealed partial class MainWindow
 
                 case "AudioFX":
                     // 音效处理 DSP 工作台（EQ / 声道平衡 / 安全限幅）
-                    LibraryPaneTitle.Text = "音效处理";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
-                    AudioFxBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     EnsureAudioFxUiBuilt();
@@ -269,16 +161,7 @@ public sealed partial class MainWindow
 
                 case "Settings":
                     // 设置面板（2026-10-12 阶段 0 骨架）：版式与音效处理一致，分类导航由通用子页框架生成
-                    LibraryPaneTitle.Text = "设置";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
-                    SettingsBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     EnsureSettingsUiBuilt();
@@ -286,16 +169,7 @@ public sealed partial class MainWindow
 
                 case "TagEdit":
                     // 标签板块（2026-10-13 阶段 5a）：左标签面板 + 右文件列表，子页导航在面板内部
-                    LibraryPaneTitle.Text = "标签";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
-                    TagEditBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     EnsureTagEditUiBuilt();
@@ -304,7 +178,6 @@ public sealed partial class MainWindow
 
             // 仅「播放队列」分类支持拖拽重排（其它列表保持排序语义不变）
             PlaylistView.CanReorderItems = ReferenceEquals(PlaylistView.ItemsSource, _queue.Items);
-            PlaylistView.CanDragItems = PlaylistView.CanReorderItems;
 
             // 空状态提示：仅 Favorites / Recent / Ratings 自己管理；其余分类隐藏
             if (_currentCategory is not ("Favorites" or "Recent" or "Ratings"))
@@ -342,7 +215,6 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                PlaylistView.SelectedIndex = index;
                 PlaylistView.ScrollIntoView(playing);
             });
         }
@@ -412,15 +284,8 @@ public sealed partial class MainWindow
 
         private void ApplyFavoritesOrRecentCategory()
         {
-            LibraryPaneTitle.Visibility = Visibility.Visible;
-            MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-            SongSortPanel.Visibility = Visibility.Visible;
             SetSongSortUiForCategory(isUserPlaylist: false);
-            AlbumSortPanel.Visibility = Visibility.Collapsed;
             PlaylistListBorder.Visibility = Visibility.Visible;
-            AlbumListBorder.Visibility = Visibility.Collapsed;
-            ArtistListBorder.Visibility = Visibility.Collapsed;
-            FolderListBorder.Visibility = Visibility.Collapsed;
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 
@@ -500,9 +365,6 @@ public sealed partial class MainWindow
 
             RenumberCollection(items);
             PlaylistView.ItemsSource = items;
-            LibraryPaneTitle.Text = string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal)
-                ? "我喜欢的音乐"
-                : "最近播放";
             SetPlaylistEmptyHint(items.Count == 0,
                 string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal) ? "暂时没有添加我喜欢的音乐" : "最近没有播放记录");
         }
@@ -511,22 +373,13 @@ public sealed partial class MainWindow
         private void SetPlaylistEmptyHint(bool empty, string hint)
         {
             if (PlaylistEmptyHint == null) return;
-            PlaylistEmptyHint.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-            PlaylistEmptyHint.Text = hint;
         }
 
         /// <summary>播放最多：按播放次数降序显示媒体库歌曲。</summary>
         private void ApplyMostPlayedCategory()
         {
-            LibraryPaneTitle.Visibility = Visibility.Visible;
-            MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-            SongSortPanel.Visibility = Visibility.Visible;
             SetSongSortUiForCategory(isUserPlaylist: false);
-            AlbumSortPanel.Visibility = Visibility.Collapsed;
             PlaylistListBorder.Visibility = Visibility.Visible;
-            AlbumListBorder.Visibility = Visibility.Collapsed;
-            ArtistListBorder.Visibility = Visibility.Collapsed;
-            FolderListBorder.Visibility = Visibility.Collapsed;
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 
@@ -555,7 +408,6 @@ public sealed partial class MainWindow
 
             RenumberCollection(result);
             PlaylistView.ItemsSource = result;
-            LibraryPaneTitle.Text = "播放最多";
         }
 
         /// <summary>刷新评分分类：按 _ratingFilter 过滤媒体库歌曲并填充列表。</summary>
@@ -579,7 +431,6 @@ public sealed partial class MainWindow
 
             RenumberCollection(col);
             PlaylistView.ItemsSource = col;
-            LibraryPaneTitle.Text = "评分";
             SetPlaylistEmptyHint(col.Count == 0, _ratingFilter >= 0
                 ? (_ratingFilter == 0 ? "没有未评分的歌曲" : "没有 " + _ratingFilter + " 星评分的歌曲")
                 : "还没有给任何歌曲评分");

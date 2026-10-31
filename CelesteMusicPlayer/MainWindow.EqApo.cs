@@ -47,7 +47,6 @@ namespace CelesteMusicPlayer
 
                 string msg = "已导入 APO：" + imported + " 段"
                     + (skipped > 0 ? "（" + skipped + " 段类型不支持已跳过）" : string.Empty);
-                NowPlayingText.Text = msg;
                 StartupLog.Write("APO 导入成功: " + msg);
             }
             catch (Exception ex)
@@ -88,7 +87,6 @@ namespace CelesteMusicPlayer
                 }
 
                 await FileIO.WriteTextAsync(file, text);
-                NowPlayingText.Text = "已导出 APO 配置：" + curve.Bands.Count + " 段";
             }
             catch (Exception ex)
             {

@@ -81,20 +81,12 @@ namespace CelesteMusicPlayer
             {
                 // 压缩器：先装载模型，控件照模型投影（模型是唯一参数来源）
                 CompParameters.Load(rack.Compressor);
-                DspCompToggle.IsOn = CompParameters.Current.Enabled;
                 DspCompThresholdSlider.Value = CompParameters.Current.ThresholdDb;
-                DspCompRatioSlider.Value = CompParameters.Current.Ratio;
-                DspCompAttackSlider.Value = CompParameters.Current.AttackMs;
-                DspCompReleaseSlider.Value = CompParameters.Current.ReleaseMs;
-                DspCompKneeSlider.Value = CompParameters.Current.KneeDb;
-                DspCompMakeupSlider.Value = CompParameters.Current.MakeupDb;
-                DspCompMixSlider.Value = CompParameters.Current.Mix * 100.0;
 
                 // 声场 / 矩阵：同样先装载模型，控件照模型投影
                 FieldParameters.Load(rack.StereoField);
                 DspFieldToggle.IsOn = FieldParameters.Current.Enabled;
                 DspFieldWidthSlider.Value = FieldParameters.Current.Width * 100.0;
-                DspFieldCenterSlider.Value = FieldParameters.Current.CenterGainDb;
                 DspFieldSideSlider.Value = FieldParameters.Current.SideGainDb;
 
                 MatrixParameters.Load(rack.Matrix);
@@ -159,13 +151,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            DspCompThresholdText.Text = FormatHelper.FormatAudioFxDb(DspCompThresholdSlider.Value);
-            DspCompRatioText.Text = DspCompRatioSlider.Value.ToString("0.0") + " : 1";
-            DspCompAttackText.Text = DspCompAttackSlider.Value.ToString("0.0") + " ms";
-            DspCompReleaseText.Text = DspCompReleaseSlider.Value.ToString("0") + " ms";
-            DspCompKneeText.Text = DspCompKneeSlider.Value.ToString("0.0") + " dB";
-            DspCompMakeupText.Text = FormatHelper.FormatAudioFxDb(DspCompMakeupSlider.Value);
-            DspCompMixText.Text = DspCompMixSlider.Value.ToString("0") + "%";
         }
 
         private void RefreshDspFieldReadouts()
@@ -175,9 +160,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            DspFieldWidthText.Text = DspFieldWidthSlider.Value.ToString("0") + "%";
-            DspFieldCenterText.Text = FormatHelper.FormatAudioFxDb(DspFieldCenterSlider.Value);
-            DspFieldSideText.Text = FormatHelper.FormatAudioFxDb(DspFieldSideSlider.Value);
         }
 
         private void RefreshDspMatrixReadouts()
@@ -187,10 +169,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            DspMatrixLlText.Text = DspMatrixLlSlider.Value.ToString("0.00");
-            DspMatrixRlText.Text = DspMatrixRlSlider.Value.ToString("0.00");
-            DspMatrixLrText.Text = DspMatrixLrSlider.Value.ToString("0.00");
-            DspMatrixRrText.Text = DspMatrixRrSlider.Value.ToString("0.00");
         }
 
         private void RefreshCrossfeedCutoffReadout()
@@ -200,7 +178,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            AudioFxChannelCrossfeedCutoffText.Text = AudioFxChannelCrossfeedCutoffSlider.Value.ToString("0") + " Hz";
         }
 
         // ─────────────────────────────────────────────────────────────
@@ -283,14 +260,7 @@ namespace CelesteMusicPlayer
                     _ => (-18.0, 4.0, 10.0, 120.0, 6.0, 0.0, 100.0)
                 };
 
-            DspCompToggle.IsOn = true;
             DspCompThresholdSlider.Value = preset.threshold;
-            DspCompRatioSlider.Value = preset.ratio;
-            DspCompAttackSlider.Value = preset.attack;
-            DspCompReleaseSlider.Value = preset.release;
-            DspCompKneeSlider.Value = preset.knee;
-            DspCompMakeupSlider.Value = preset.makeup;
-            DspCompMixSlider.Value = preset.mix;
 
             PushDspRackToEngine();
 
@@ -405,7 +375,6 @@ namespace CelesteMusicPlayer
 
             DspFieldToggle.IsOn = true;
             DspFieldWidthSlider.Value = preset.width;
-            DspFieldCenterSlider.Value = preset.center;
             DspFieldSideSlider.Value = preset.side;
 
             PushDspRackToEngine();
@@ -589,8 +558,6 @@ namespace CelesteMusicPlayer
             _dspRackRows = rows;
 
             int restore = DspRackList.SelectedIndex;
-            DspRackList.ItemsSource = null;
-            DspRackList.ItemsSource = rows;
             if (restore >= 0 && restore < rows.Count)
             {
                 DspRackList.SelectedIndex = restore;
@@ -671,11 +638,9 @@ namespace CelesteMusicPlayer
             int index = DspRackList?.SelectedIndex ?? -1;
             if (index >= 0 && _dspRackRows.Count > 0 && index < _dspRackRows.Count)
             {
-                DspRackHintText.Text = _dspRackRows[index].Name + "：" + _dspRackRows[index].Hint;
             }
             else
             {
-                DspRackHintText.Text = "点选任意一行查看它的作用说明。";
             }
 
             UpdateDspRackMoveButtons();
@@ -696,8 +661,6 @@ namespace CelesteMusicPlayer
 
             int index = DspRackList?.SelectedIndex ?? -1;
             bool movable = index >= 0 && index < _dspRackRows.Count && _dspRackRows[index].Movable;
-            DspRackUpButton.IsEnabled = movable && index > 0 && _dspRackRows[index - 1].Movable;
-            DspRackDownButton.IsEnabled = movable && index < _dspRackRows.Count - 1 && _dspRackRows[index + 1].Movable;
         }
 
         private void DspRackUp_Click(object sender, RoutedEventArgs e)

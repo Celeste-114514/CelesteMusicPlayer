@@ -77,9 +77,7 @@ public sealed partial class MainWindow
             }
         }
         finally { _audioFxLoading = loading; _dspPowerSyncing = syncing; }
-        AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(ExtraParameters.Safety.HeadroomDb);
         RefreshCrossfeedCutoffReadout(); RefreshDspXfeedLevelReadout(); RedrawDspXfeedCurve(); UpdateDspChannelBars();
-        AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(RgParameters.Current.PreampDb);
         RefreshAudioFxRgInfo();
         RefreshFirReadouts();
     }
@@ -275,20 +273,16 @@ public sealed partial class MainWindow
             bool bypass = RackParameters.Bypassed;
             if (bypass)
             {
-                AudioFxBitPerfectStatusText.Text = "bit-perfect 直通（DSP 已旁路）";
                 if (AudioFxEqPillPerfectText != null)
                 {
-                    AudioFxEqPillPerfectText.Text = "bit-perfect 直通（DSP 已旁路）";
                 }
 
                 if (_currentCategory == "AudioFX")
                 {
-                    NowPlayingText.Text = "DSP 已旁路（A/B 对比中）→ 输出 bit-perfect";
                 }
 
                 if (DspBypassStatusText != null)
                 {
-                    DspBypassStatusText.Text = "已旁路：所有 DSP 暂时不参与处理，输出恢复 bit-perfect。设置全部保留，关闭开关即恢复。";
                 }
 
                 UpdateDspNavIndicators();
@@ -297,7 +291,6 @@ public sealed partial class MainWindow
 
             if (DspBypassStatusText != null)
             {
-                DspBypassStatusText.Text = "开启 = 所有 DSP（EQ／声道／限幅／ReplayGain／卷积）立即旁路，输出恢复 bit-perfect；所有设置保留，关闭开关即恢复。用于对比「处理前 / 处理后」听感。";
             }
 
             // 口径与链路面板 IsBitPerfectPure / 引擎 RefreshActive 对齐，抽取为 IsDspActiveForBadge 复用：
@@ -307,10 +300,8 @@ public sealed partial class MainWindow
 
             if (AudioFxEqPillPerfectText != null)
             {
-                AudioFxEqPillPerfectText.Text = active ? "输出非 bit-perfect（DSP 生效）" : "输出 bit-perfect 直出";
             }
 
-            AudioFxBitPerfectStatusText.Text = active ? "非 bit-perfect（已使用 DSP）" : "bit-perfect 直通";
             // 主界面信息条（左上角）提示：使用 DSP 时输出非 bit-perfect
             if (_currentCategory == "AudioFX")
             {
@@ -349,10 +340,8 @@ public sealed partial class MainWindow
             RoomCorrectionState st = FirParameters.Current;
             if (!st.Enabled || string.IsNullOrWhiteSpace(st.IrPath))
             {
-                RoomIrInfoText.Text = "未导入 IR：在上面「脉冲响应（IR）文件」卡片里点「浏览…」选一个 .wav。";
                 if (RoomClipRiskText != null)
                 {
-                    RoomClipRiskText.Text = "削波风险：—";
                 }
 
                 return;
@@ -373,9 +362,6 @@ public sealed partial class MainWindow
             if (RoomClipRiskText != null)
             {
                 bool risk = _audioEngine?.ConvolutionClippingRisk ?? false;
-                RoomClipRiskText.Text = risk
-                    ? "⚠ 卷积输出已达到满刻度（已自动钳位）：把 trim 调低，或到「输入 · 余量」加大余量。"
-                    : "削波风险：无";
             }
         }
         // DSP 批 2：电源开关同步族离壳
@@ -637,13 +623,8 @@ public sealed partial class MainWindow
                 bool pure = EvaluateBitPerfectChain(out string reason, out bool confirmed);
                 var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
                 var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
-                MainBitPerfectBadge.Background = pure ? green : amber;
                 // confirmed=false = 输出格式还没捕获（未播放）或无法识别：绿灯也要注明"待播放确认"，
                 // 不能让人以为已经核实过（2026-09-22 用户实测徽标谎报后收紧口径）。
-                MainBitPerfectText.Text = pure
-                    ? (confirmed ? "✓ bit-perfect · 直通" : "✓ bit-perfect · 待播放确认")
-                    : (confirmed ? "非 bit-perfect · " + reason : "待播放确认 · " + reason);
-                MainBitPerfectText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
@@ -722,7 +703,6 @@ public sealed partial class MainWindow
             if (!EqState.Undo()) return "没有可撤销的 EQ 修改";
             SetAudioFxEqFromSnapshot(EqState.Current);
             string msg = "已撤销 EQ 修改（还可撤销 " + EqState.UndoCount + " 步）";
-            NowPlayingText.Text = msg;
             return msg;
         }
 
@@ -732,7 +712,6 @@ public sealed partial class MainWindow
             if (!EqState.Redo()) return "没有可重做的 EQ 修改";
             SetAudioFxEqFromSnapshot(EqState.Current);
             const string msg = "已重做 EQ 修改";
-            NowPlayingText.Text = msg;
             return msg;
         }
 
@@ -843,7 +822,6 @@ public sealed partial class MainWindow
                     SetAudioFxEqFromSnapshot(EqState.Current);
                     break;
             }
-            NowPlayingText.Text = msg;
             return msg;
         }
 
@@ -868,7 +846,6 @@ public sealed partial class MainWindow
             EqState.Current.PreampDb = Math.Clamp(preampDb, -24, 24);
             ApplyDspToEngine();
             string msg = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
-            NowPlayingText.Text = msg;
             return msg;
         }
 
@@ -1020,10 +997,6 @@ public sealed partial class MainWindow
                     SimpleEqStore.Save(new SimpleEqState());
                 }
 
-                AudioFxEqSimpleBassSlider.Value = _eqSimpleBass;
-                AudioFxEqSimpleVocalSlider.Value = _eqSimpleVocal;
-                AudioFxEqSimpleAirSlider.Value = _eqSimpleAir;
-                AudioFxEqSimpleWarmSlider.Value = _eqSimpleWarm;
             }
             finally { _audioFxLoading = prevLoading; }
         }
@@ -1122,8 +1095,6 @@ public sealed partial class MainWindow
                 AddMonoComboItem("sum", "左右求和");
             }
 
-            AudioFxEqBandFreqSlider.Minimum = Math.Log10(20) / Math.Log10(2); // ~4.32 (log2)
-            AudioFxEqBandFreqSlider.Maximum = Math.Log10(20000) / Math.Log10(2); // ~14.29
 
             if (AudioFxRgModeCombo != null)
             {
@@ -1147,12 +1118,10 @@ public sealed partial class MainWindow
             {
                 if (AudioFxChannelMonoCombo.Items[i] is ComboBoxItem { Tag: string m } && string.Equals(m, mode, StringComparison.Ordinal))
                 {
-                    AudioFxChannelMonoCombo.SelectedIndex = i;
                     return;
                 }
             }
 
-            AudioFxChannelMonoCombo.SelectedIndex = 0;
         }
         // ---- DSP 批 5：极客 DSP 状态 / EQ 外部曲线入口 / 简单模式 / 预设保存 / 面板构建 ----
         private bool _geekDspActive;
@@ -1197,7 +1166,6 @@ public sealed partial class MainWindow
             if (string.IsNullOrWhiteSpace(name))
             {
                 const string bad = "预设名称不能为空，未保存";
-                NowPlayingText.Text = bad;
                 return bad;
             }
 
@@ -1207,7 +1175,6 @@ public sealed partial class MainWindow
             string newId = EqUserPresetStore.Upsert(toSave);
 
             string msg = "EQ 预设已保存：" + toSave.PresetName;
-            NowPlayingText.Text = msg;
             return msg;
         }
 
@@ -1227,15 +1194,7 @@ public sealed partial class MainWindow
                 ReplayGainState rglog = ReplayGainStore.Load();
                 StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
                 AudioFxChannelToggle.IsOn = ch.Enabled;
-                AudioFxChannelBalanceSlider.Value = ch.Balance;
-                AudioFxChannelLeftGainSlider.Value = ch.LeftGainDb;
-                AudioFxChannelRightGainSlider.Value = ch.RightGainDb;
                 SelectAudioFxMonoMode(ch.MonoMode);
-                AudioFxChannelSwapToggle.IsOn = ch.SwapChannels;
-                AudioFxChannelInvertLToggle.IsOn = ch.InvertLeft;
-                AudioFxChannelInvertRToggle.IsOn = ch.InvertRight;
-                AudioFxChannelLeftDelaySlider.Value = ch.LeftDelayMs;
-                AudioFxChannelRightDelaySlider.Value = ch.RightDelayMs;
                 AudioFxChannelCrossfeedToggle.IsOn = ch.CrossfeedEnabled;
                 // Crossfeed 已独立成页：强度和截止的两处读数要在加载时同步一次
                 RefreshDspXfeedLevelReadout();
@@ -1246,15 +1205,11 @@ public sealed partial class MainWindow
 
                 var safety = extra.Safety;
                 AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;
-                AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(safety.HeadroomDb);
                 AudioFxSafetyLimiterToggle.IsOn = safety.EnableLimiter;
 
                 // ReplayGain：先装载模型，再让控件照模型投影（模型是唯一参数来源）
                 RgParameters.Load(ReplayGainStore.Load());
                 SelectAudioFxRgMode(RgParameters.Current.Mode);
-                AudioFxRgPreampSlider.Value = RgParameters.Current.PreampDb;
-                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(RgParameters.Current.PreampDb);
-                AudioFxRgPreventClippingToggle.IsOn = RgParameters.Current.PreventClipping;
                 RefreshAudioFxRgInfo();
             }
             finally

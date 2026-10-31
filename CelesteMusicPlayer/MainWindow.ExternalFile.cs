@@ -146,7 +146,6 @@ namespace CelesteMusicPlayer
                 string? folder = Path.GetDirectoryName(path);
                 if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
                 {
-                    NowPlayingText.Text = "找不到这首歌所在的文件夹，没法按文件夹入库。";
                     return;
                 }
 
@@ -157,7 +156,6 @@ namespace CelesteMusicPlayer
                 _justAddedToLibraryPath = path;
                 UpdateAddToLibraryButtonVisibility();
 
-                NowPlayingText.Text = $"已把文件夹加入音乐库：{folder}";
             }
             catch (Exception ex)
             {
@@ -263,23 +261,17 @@ namespace CelesteMusicPlayer
 
                 bool showAdd = hasPath && !inLibrary;
 
-                AddToLibraryButton.Visibility = (showAdd || showAdded)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
 
                 // 内容随状态切换：+「添加到音乐库」  /  ✓「已加入音乐库」
                 if (AddToLibraryIcon != null)
                 {
-                    AddToLibraryIcon.Glyph = showAdded ? "\uE73E" : "\uE710";
                 }
 
                 if (AddToLibraryText != null)
                 {
-                    AddToLibraryText.Text = showAdded ? "已加入音乐库" : "添加到音乐库";
                 }
 
                 // 已加入就不可再点，避免重复入库
-                AddToLibraryButton.IsEnabled = showAdd;
             }
             catch (Exception ex)
             {

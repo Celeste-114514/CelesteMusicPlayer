@@ -579,7 +579,6 @@ namespace CelesteMusicPlayer
                 if (LeftCategoryNavBorder != null && LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
                 {
                     LeftCategoryNavBorder.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
-                    LeftCategoryNavBorder.Translation = new System.Numerics.Vector3(0, 0, 40f);
                 }
             }
             catch (Exception caught)
@@ -678,10 +677,8 @@ namespace CelesteMusicPlayer
             PlaylistView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
             PlaylistView.ItemsSource = _playlist;
             AlbumGridView.ItemsSource = _albums;
-            PlaylistWallGridView.ItemsSource = _playlistWall;
             AlbumGridView.ContainerContentChanging += AlbumGridView_ContainerContentChanging;
             ApplyAccentSelectionResources(AlbumGridView);
-            AlbumTrackListView.ItemsSource = _albumTracks;
             ApplyAccentSelectionResources(AlbumTrackListView);
             AlbumTrackListView.ContainerContentChanging += AlbumTrackListView_ContainerContentChanging;
             PlaylistDetailListView.SizeChanged += SongListView_SizeChanged;
@@ -694,14 +691,11 @@ namespace CelesteMusicPlayer
             PlaylistDetailListView.SizeChanged += SongListView_SizeChanged;
             AlbumTrackListView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
             ArtistGridView.ItemsSource = _artists;
-            ArtistTrackListView.ItemsSource = _artistTracks;
             ApplyAccentSelectionResources(ArtistTrackListView);
             ArtistTrackListView.ContainerContentChanging += ArtistTrackListView_ContainerContentChanging;
             ArtistTrackListView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
-            ArtistAlbumGridView.ItemsSource = _artistAlbums;
             ArtistAlbumGridView.ContainerContentChanging += ArtistAlbumGridView_ContainerContentChanging;
             ApplyAccentSelectionResources(ArtistAlbumGridView);
-            FolderBrowserView.ItemsSource = _folderBrowserItems;
             FolderBrowserView.ContainerContentChanging += FolderBrowserView_ContainerContentChanging;
             ApplyAccentSelectionResources(FolderBrowserView);
 

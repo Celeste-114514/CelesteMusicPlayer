@@ -139,7 +139,6 @@ public sealed partial class MainWindow
             _abLoopHint = text;
             if (AbLoopHintText != null)
             {
-                AbLoopHintText.Text = text;
             }
         }
 
@@ -151,10 +150,6 @@ public sealed partial class MainWindow
                 return;
             }
 
-            AbLoopAText.Text = _abLoopA >= 0 ? FormatTime(TimeSpan.FromSeconds(_abLoopA)) : "--:--";
-            AbLoopBText.Text = _abLoopB >= 0 ? FormatTime(TimeSpan.FromSeconds(_abLoopB)) : "--:--";
-            AbLoopToggleButton.Content = _abLoopActive ? "关闭 AB 循环" : "开启 AB 循环";
-            AbLoopToggleButton.IsEnabled = _abLoopA >= 0 && _abLoopB >= 0;
         }
 
         // ---- 组合框填充 + 输出模式切换（网页 ChangeOutputMode 直通路径）----
@@ -224,7 +219,6 @@ public sealed partial class MainWindow
                 {
                     if (o is ComboBoxItem it && it.Tag is string t && string.Equals(t, selectedId ?? "", System.StringComparison.OrdinalIgnoreCase))
                     {
-                        AudioOutputDeviceCombo.SelectedItem = it;
                         break;
                     }
                 }
@@ -316,12 +310,7 @@ public sealed partial class MainWindow
                 var chain = _audioEngine?.ChainFormat;
 
                 // 源胶囊两行：源文件真实值 / 实际送链路的转码 WAV（各说各话，绝不混一行看串）
-                AudioLinkSourceFmt.Text = BuildSourceFileLine(chain, hifi);
-                AudioLinkTranscodeWavFmt.Text = BuildTranscodeWavLine(chain, hifi);
                 // 输出胶囊两行：设备端实际格式 / 结论
-                AudioLinkOutputFmt.Text = BuildDeviceLine(chain, hifi);
-                AudioLinkOutputVerdict.Text = BuildVerdictLine(chain, hifi);
-                AudioLinkMode.Text = hifi ? "独占（WASAPI 独占 / ASIO）" : "共享（系统混音）";
 
                 // DSP 摘要（口径与引擎 ManagedDspSourceProvider.RefreshActive 对齐：
                 // 只有真正逐样本处理的模块才计入"（开）"；限幅单独开着只待命、不计入）
@@ -347,7 +336,6 @@ public sealed partial class MainWindow
                         ? " · 限幅生效（随 DSP 链防削波）"
                         : " · 限幅待命（无其它 DSP 时不做逐样本处理，不影响 bit-perfect）");
                 string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
-                AudioLinkDsp.Text = dsp + limiterNote + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
                 // bit-perfect：综合判定（DSP + 输出格式 + 是否共享模式），不再只看 DSP 开关
                 bool chainPure = EvaluateBitPerfectChain(out string chainReason, out bool chainConfirmed);
                 AudioLinkBitPerfect.Text = chainPure
@@ -358,17 +346,8 @@ public sealed partial class MainWindow
                       + (chainConfirmed ? string.Empty : "（待播放确认）");
 
                 // 专业播放状态
-                AudioProPosition.Text =
-                    (EnginePositionValue >= TimeSpan.Zero ? EnginePositionValue.ToString(@"mm\:ss") : "--")
-                    + " / " + (EngineDurationValue > TimeSpan.Zero ? EngineDurationValue.ToString(@"h\:mm\:ss") : "--");
-                AudioProBuffer.Text = string.IsNullOrWhiteSpace(_audioEngine?.OutputDeviceId)
-                    ? "系统默认"
-                    : _audioEngine.OutputDeviceId;
                 // 与上面 DSP 摘要同口径：余量✓=真在处理；限幅✓=随链生效、待=开着但全链直通、—=已关闭
                 bool limiterEngaged = limiterOn && active.Count > 0;
-                AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—")
-                    + " · 余量" + (hasHeadroom ? "✓" : "—")
-                    + " · 限幅" + (limiterEngaged ? "✓" : (limiterOn ? "待" : "—")) + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
                 ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
@@ -376,7 +355,6 @@ public sealed partial class MainWindow
                 // 按设备记忆 DSP 配置档：开关与提示同步
                 if (DeviceDspMemoryToggle != null)
                 {
-                    DeviceDspMemoryToggle.IsOn = DeviceDspProfileStore.IsEnabled();
                 }
 
                 // ASIO 卡顿排查提醒（2026-09-24 KA13 实测定案：驱动缓冲 5.8ms + USB 电源管理=几秒一卡；
@@ -384,7 +362,6 @@ public sealed partial class MainWindow
                 if (AsioBufferTipText != null)
                 {
                     bool asioMode = string.Equals(AppSettingsStore.Load().OutputMode, "Asio", StringComparison.OrdinalIgnoreCase);
-                    AsioBufferTipText.Visibility = asioMode ? Visibility.Visible : Visibility.Collapsed;
                 }
 
                 // 独占输出内核 A/B 卡片高亮同步
@@ -395,13 +372,10 @@ public sealed partial class MainWindow
                     string cur = _audioEngine?.OutputDeviceId;
                     if (string.IsNullOrWhiteSpace(cur))
                     {
-                        DeviceDspHint.Text = "当前：系统默认设备（不按设备记忆）。";
                     }
                     else
                     {
                         bool has = DeviceDspProfileStore.HasProfile(cur);
-                        DeviceDspHint.Text = (has ? "已为该设备保存配置档。" : "该设备暂无配置档；调好 DSP 后点「保存当前配置为当前设备」。")
-                            + " 设备：" + cur;
                     }
                 }
 
@@ -507,16 +481,7 @@ public sealed partial class MainWindow
                 var greenBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 46, 160, 67));
                 var amberBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 214, 148, 45));
 
-                LinkDspCapsule.BorderBrush = pure ? green : amber;
-                LinkDspCapsule.BorderThickness = new Microsoft.UI.Xaml.Thickness(2);
 
-                BitPerfectBadge.Background = pure
-                    ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 122, 52))
-                    : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 178, 116, 28));
-                AudioLinkBitPerfectBadgeText.Text = pure
-                    ? "✓ bit-perfect · 直通"
-                    : (string.IsNullOrWhiteSpace(activeText) ? "非 bit-perfect" : "非 bit-perfect · " + activeText);
-                AudioLinkBitPerfectBadgeText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
@@ -614,8 +579,6 @@ public sealed partial class MainWindow
                     return;
                 }
 
-                AudioDeviceHotplugText.Text = message;
-                AudioDeviceHotplugText.Visibility = Visibility.Visible;
 
                 _hotplugNoticeTimer ??= DispatcherQueue.CreateTimer();
                 _hotplugNoticeTimer.Interval = TimeSpan.FromSeconds(10);
@@ -634,7 +597,6 @@ public sealed partial class MainWindow
                 _hotplugNoticeTimer?.Stop();
                 if (AudioDeviceHotplugText != null)
                 {
-                    AudioDeviceHotplugText.Visibility = Visibility.Collapsed;
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
