@@ -178,91 +178,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.ApplyPlaybackRateFromSettings", caught); }
         }
 
-        private void RestartLibraryWatchFromSettings()
-        {
-            _libraryWatch.Changed -= LibraryWatch_Changed;
-            _libraryWatch.Stop();
-
-            AppSettingsState settings = AppSettingsStore.Load();
-            if (!settings.AutoUpdateLibrary)
-            {
-                return;
-            }
-
-            var folders = new List<string>();
-            if (settings.LibraryWatchFolders != null)
-            {
-                folders.AddRange(settings.LibraryWatchFolders.Where(Directory.Exists));
-            }
-
-            try
-            {
-                string? sessionFolder = LibrarySessionStore.TryLoad()?.FolderPath;
-                if (!string.IsNullOrWhiteSpace(sessionFolder)
-                    && Directory.Exists(sessionFolder)
-                    && !LibraryPathGuard.IsInternalCacheDir(sessionFolder)
-                    && !folders.Any(f => string.Equals(f, sessionFolder, StringComparison.OrdinalIgnoreCase)))
-                {
-                    folders.Add(sessionFolder);
-                    AppSettingsStore.Update(s =>
-                    {
-                        s.LibraryWatchFolders ??= new List<string>();
-                        if (!s.LibraryWatchFolders.Any(f =>
-                                string.Equals(f, sessionFolder, StringComparison.OrdinalIgnoreCase)))
-                        {
-                            s.LibraryWatchFolders.Add(sessionFolder);
-                        }
-                    });
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            if (folders.Count == 0)
-            {
-                return;
-            }
-
-            _libraryWatch.Changed += LibraryWatch_Changed;
-            _libraryWatch.Start(folders);
-        }
-
-        private void LibraryWatch_Changed(IReadOnlyList<string> paths)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (paths.Count == 0)
-                {
-                    return;
-                }
-
-                if (!AppSettingsStore.Load().AutoUpdateLibrary)
-                {
-                    return;
-                }
-
-                // 去抖合并:1 秒内的连续变更只触发一次重扫
-                _libraryWatchDebounce ??= DispatcherQueue.CreateTimer();
-                _libraryWatchDebounce.Interval = TimeSpan.FromMilliseconds(1000);
-                _libraryWatchDebounce.IsRepeating = false;
-                _libraryWatchDebounce.Tick -= OnLibraryWatchDebounceTick;
-                _libraryWatchDebounce.Tick += OnLibraryWatchDebounceTick;
-                _libraryWatchDebounce.Start();
-            });
-        }
-
-        private void OnLibraryWatchDebounceTick(dynamic sender, dynamic e)
-        {
-            if (_libraryRescanInProgress)
-            {
-                // 上一次重扫还没完成:稍后重试
-                _libraryWatchDebounce?.Start();
-                return;
-            }
-
-            NowPlayingText.Text = "媒体库有更新，正在自动刷新…";
-            RescanLocalLibraryButton_Click(null!, new RoutedEventArgs());
-        }
-
         private void AttachRootKeyboardAccelerators()
         {
             if (Content is not UIElement root)
@@ -2791,8 +2706,91 @@ namespace CelesteMusicPlayer
             }
         }
 
-        #region 输出设备热插拔（USB DAC / 蓝牙耳机插拔自动切换）
-        // （2026-10-31 W13 第十六刀：监听/回调/提示成员已整体转活 MainWindow.AudioOutputHost.cs）
-        #endregion
+        // ---- 媒体库自动重扫监听（第十七刀暂退回：RescanLocalLibraryButton_Click 连着 Library.cs 深水区，待媒体库域刀一起转活）----
+
+        private void RestartLibraryWatchFromSettings()
+        {
+            _libraryWatch.Changed -= LibraryWatch_Changed;
+            _libraryWatch.Stop();
+
+            AppSettingsState settings = AppSettingsStore.Load();
+            if (!settings.AutoUpdateLibrary)
+            {
+                return;
+            }
+
+            var folders = new List<string>();
+            if (settings.LibraryWatchFolders != null)
+            {
+                folders.AddRange(settings.LibraryWatchFolders.Where(Directory.Exists));
+            }
+
+            try
+            {
+                string? sessionFolder = LibrarySessionStore.TryLoad()?.FolderPath;
+                if (!string.IsNullOrWhiteSpace(sessionFolder)
+                    && Directory.Exists(sessionFolder)
+                    && !LibraryPathGuard.IsInternalCacheDir(sessionFolder)
+                    && !folders.Any(f => string.Equals(f, sessionFolder, StringComparison.OrdinalIgnoreCase)))
+                {
+                    folders.Add(sessionFolder);
+                    AppSettingsStore.Update(s =>
+                    {
+                        s.LibraryWatchFolders ??= new List<string>();
+                        if (!s.LibraryWatchFolders.Any(f =>
+                                string.Equals(f, sessionFolder, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            s.LibraryWatchFolders.Add(sessionFolder);
+                        }
+                    });
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+
+            if (folders.Count == 0)
+            {
+                return;
+            }
+
+            _libraryWatch.Changed += LibraryWatch_Changed;
+            _libraryWatch.Start(folders);
+        }
+
+        private void LibraryWatch_Changed(IReadOnlyList<string> paths)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (paths.Count == 0)
+                {
+                    return;
+                }
+
+                if (!AppSettingsStore.Load().AutoUpdateLibrary)
+                {
+                    return;
+                }
+
+                // 去抖合并:1 秒内的连续变更只触发一次重扫
+                _libraryWatchDebounce ??= DispatcherQueue.CreateTimer();
+                _libraryWatchDebounce.Interval = TimeSpan.FromMilliseconds(1000);
+                _libraryWatchDebounce.IsRepeating = false;
+                _libraryWatchDebounce.Tick -= OnLibraryWatchDebounceTick;
+                _libraryWatchDebounce.Tick += OnLibraryWatchDebounceTick;
+                _libraryWatchDebounce.Start();
+            });
+        }
+
+        private void OnLibraryWatchDebounceTick(dynamic sender, dynamic e)
+        {
+            if (_libraryRescanInProgress)
+            {
+                // 上一次重扫还没完成:稍后重试
+                _libraryWatchDebounce?.Start();
+                return;
+            }
+
+            NowPlayingText.Text = "媒体库有更新，正在自动刷新…";
+            RescanLocalLibraryButton_Click(null!, new RoutedEventArgs());
+        }
     }
 }

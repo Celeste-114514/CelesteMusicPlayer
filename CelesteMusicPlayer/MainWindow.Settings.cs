@@ -110,20 +110,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        internal void ApplyOverlayPreferenceFromSettings(AppSettingsState settings)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                // 「设置里改了开机打开迷你播放器」的联动：随迷你播放器一起移除（2026-10-19 删掉重写）
-
-                if (settings.OpenDesktopLyricsOnStartup != _desktopLyricsEnabled)
-                {
-                    SetDesktopLyricsEnabled(settings.OpenDesktopLyricsOnStartup, persistPreference: false);
-                }
-            });
-        }
-
-
         private void ApplyFrostedGlassPreference(bool enabled)
         {
             try
@@ -136,19 +122,6 @@ namespace CelesteMusicPlayer
                 else
                 {
                     SystemBackdrop = null;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        private void ApplyAlwaysOnTopFromSettings()
-        {
-            try
-            {
-                if (AppWindow.Presenter is OverlappedPresenter presenter)
-                {
-                    presenter.IsAlwaysOnTop = AppSettingsStore.Load().AlwaysOnTop;
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

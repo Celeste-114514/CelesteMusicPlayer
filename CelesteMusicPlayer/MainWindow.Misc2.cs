@@ -166,17 +166,6 @@ namespace CelesteMusicPlayer
         // 播放列表列：可拖分割线
         // =====================================================================
 
-        private void SyncHeaderColumnsFromState()
-        {
-            var w = PlaylistColumnWidths.Instance;
-            SetColumnWidthIfChanged(HeaderTitleCol, w.Title);
-            SetColumnWidthIfChanged(HeaderArtistCol, w.Artist);
-            SetColumnWidthIfChanged(HeaderAlbumCol, w.Album);
-            SetColumnWidthIfChanged(HeaderYearCol, w.Year);
-            SetColumnWidthIfChanged(HeaderDurationCol, w.Duration);
-        }
-
-
         private void ColumnSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             if (sender is not FrameworkElement splitter || splitter.Tag is not string pair)
