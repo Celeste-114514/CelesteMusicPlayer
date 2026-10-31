@@ -2078,7 +2078,6 @@ namespace CelesteMusicPlayer
                 entry = new ArtistEntry { Name = artistName };
             }
 
-            SetNowPlayingPaneVisible(false);
             // 从播放面板跳转：先切到「艺术家」分类并真正显示其视图根，再打开详情，保证左侧分类与右侧面板同步
             _currentCategory = "Artists";
             ApplyCategoryView();
@@ -2108,7 +2107,6 @@ namespace CelesteMusicPlayer
                 entry = new AlbumEntry { Name = albumName, Artist = artistName };
             }
 
-            SetNowPlayingPaneVisible(false);
             // 从播放面板跳转：先切到「专辑」分类并真正显示视图根，再打开详情，左侧分类与右侧面板同步
             _currentCategory = "Albums";
             ApplyCategoryView();

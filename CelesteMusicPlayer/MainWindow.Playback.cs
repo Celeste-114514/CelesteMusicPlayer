@@ -245,7 +245,6 @@ namespace CelesteMusicPlayer
                 {
                     ApplyNowPlayingCardChrome();
                     ApplyArtistSongsFrostChrome();
-                    UpdateLibraryNavHighlight();
                     ApplyAccentSelectionResources(PlaylistView);
                     RefreshPlaylistSelectionChrome();
                     ApplyCapsuleSortButtonStyle(accent: true);

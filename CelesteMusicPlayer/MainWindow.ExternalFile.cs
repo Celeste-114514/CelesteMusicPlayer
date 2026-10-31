@@ -86,7 +86,6 @@ namespace CelesteMusicPlayer
                     // 已经在播这个文件：只把「正在播放」面板展开，不重复起播
                     if (string.Equals(_nowPlayingPath, path, StringComparison.OrdinalIgnoreCase))
                     {
-                        SetNowPlayingPaneVisible(true);
                         return;
                     }
 
@@ -121,7 +120,6 @@ namespace CelesteMusicPlayer
                         continue;
                     }
 
-                    SetNowPlayingPaneVisible(true);
                     return;
                 }
             }
