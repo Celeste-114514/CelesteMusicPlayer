@@ -102,7 +102,6 @@ public sealed partial class MainWindow
                 bool wasWaveform = _waveformProgress;
                 // 恒用波形进度条（2026-10-15 定稿）：设置里的开关已下架，这里不再读旧配置里的 false
                 _waveformProgress = true;
-                RedrawProgressStyle();
                 if (_waveformProgress && !wasWaveform)
                 {
                     // 刚打开波形开关:立即加载当前播放(或选中)歌曲的波形
@@ -163,7 +162,6 @@ public sealed partial class MainWindow
             try
             {
                 Windows.UI.Color accent2 = ResolveAccentColor();
-                DrawVolumeStyle();
                 ThemeColorService.ApplySliderAccent(ProgressSlider, accent2);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
@@ -348,13 +346,7 @@ public sealed partial class MainWindow
             // 避免这里只认 WaveformCanvas、把径向模式也给盖掉。
             if (!settings.ShowSpectrum)
             {
-                if (WaveformCanvas != null)
-                {
-                }
 
-                if (RadialVisualCanvas != null)
-                {
-                }
 
                 return;
             }
@@ -363,13 +355,7 @@ public sealed partial class MainWindow
 
         private void ApplyCoverVisibilityFromSettings(AppSettingsState settings)
         {
-            if (NowPlayingCoverBorder != null)
-            {
-            }
 
-            if (TransportCoverBorder != null)
-            {
-            }
         }
 
         /// <summary>
@@ -451,7 +437,6 @@ public sealed partial class MainWindow
                             _audioEngine?.SetVolume(settings.Volume / 100.0);
                         }
 
-                        UpdateVolumeIcon(VolumeSlider.Value);
                     }
                     else
                     {
@@ -463,7 +448,6 @@ public sealed partial class MainWindow
                             player.Volume = VolumeSlider.Value / 100.0;
                         }
 
-                        UpdateVolumeIcon(VolumeSlider.Value);
                     }
                 }
                 finally
@@ -562,17 +546,8 @@ public sealed partial class MainWindow
                     _cachedMultiSelectFrostBrush = null;
 
                     // 背景图层全部隐藏（含视频暂停）
-                    if (AlbumArtBackgroundImage != null)
-                    {
-                    }
 
-                    if (AlbumArtBackgroundScrim != null)
-                    {
-                    }
 
-                    if (CustomBackgroundImage != null)
-                    {
-                    }
 
                     StopCustomBackgroundVideo();
                     StopBackgroundMotion();

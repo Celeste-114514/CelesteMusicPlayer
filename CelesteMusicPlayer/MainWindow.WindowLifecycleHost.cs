@@ -67,10 +67,6 @@ public sealed partial class MainWindow
                     if (VolumeStyleCanvas != null)
                     {
                         VolumeStyleCanvas.SizeChanged += VolumeStyleCanvas_SizeChanged;
-                        VolumeStyleCanvas.PointerPressed += VolumeStyleCanvas_PointerPressed;
-                        VolumeStyleCanvas.PointerMoved += VolumeStyleCanvas_PointerMoved;
-                        VolumeStyleCanvas.PointerReleased += VolumeStyleCanvas_PointerReleased;
-                        DrawVolumeStyle();
                     }
 
                     // 缓存波形主题色(信息卡频谱用)
@@ -84,9 +80,6 @@ public sealed partial class MainWindow
                     // 进度条悬停提示:分:秒格式(替代默认秒数)
                     try
                     {
-                        if (ProgressSlider != null)
-                        {
-                        }
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
@@ -112,11 +105,6 @@ public sealed partial class MainWindow
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
                     // 进度条画布尺寸变化时重绘(首次布局/窗口缩放)
-                    if (ProgressStyleCanvas != null)
-                    {
-                        ProgressStyleCanvas.SizeChanged += ProgressStyleCanvas_SizeChanged;
-                        RedrawProgressStyle();
-                    }
 
 
                     // 设置窗口里改「波形配色 / 白度」时即时重画进度条，用户当场看到效果（不必切歌或重启）

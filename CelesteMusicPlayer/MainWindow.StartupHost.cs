@@ -75,9 +75,6 @@ public sealed partial class MainWindow
         {
             try
             {
-                if (WindowMaxRestoreIcon != null)
-                {
-                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }

@@ -263,13 +263,7 @@ namespace CelesteMusicPlayer
 
 
                 // 内容随状态切换：+「添加到音乐库」  /  ✓「已加入音乐库」
-                if (AddToLibraryIcon != null)
-                {
-                }
 
-                if (AddToLibraryText != null)
-                {
-                }
 
                 // 已加入就不可再点，避免重复入库
             }

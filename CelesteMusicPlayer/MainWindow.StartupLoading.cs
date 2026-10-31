@@ -42,9 +42,6 @@ namespace CelesteMusicPlayer
             try
             {
                 // 转圈的进度环跟着主题色走；极客皮肤用磷光色（和其他界面一个口径）
-                if (StartupLoadingRing != null)
-                {
-                }
 
                 if (StartupLoadingOverlay != null)
                 {

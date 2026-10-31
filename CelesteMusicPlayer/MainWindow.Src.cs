@@ -198,9 +198,6 @@ namespace CelesteMusicPlayer
                     }
                 }
 
-                if (OutputBufferHintText != null)
-                {
-                }
 
                 _audioEngine?.SetOutputBufferMs(OutputBufferOptions[idx].Ms);
             }

@@ -209,9 +209,6 @@ public sealed partial class MainWindow
 
             if (!show)
             {
-                if (FolderSearchNavPanel != null)
-                {
-                }
 
                 if (_currentCategory != "Folders")
                 {

@@ -375,9 +375,6 @@ public sealed partial class MainWindow
         /// <summary>停掉并隐藏背景视频（切回图片背景 / 清空背景时调用）。</summary>
         private void StopCustomBackgroundVideo()
         {
-            if (CustomBackgroundVideo != null)
-            {
-            }
 
             if (_backgroundVideoPlayer == null) return;
             try
@@ -570,9 +567,6 @@ public sealed partial class MainWindow
 
             try
             {
-                if (CustomBackgroundImage != null)
-                {
-                }
             }
             catch (Exception caught)
             {
@@ -592,7 +586,6 @@ public sealed partial class MainWindow
             // 音量条(自绘)/进度条
             try
             {
-                DrawVolumeStyle();
                 ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

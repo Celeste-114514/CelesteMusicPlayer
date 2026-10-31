@@ -251,14 +251,8 @@ namespace CelesteMusicPlayer
 
         private void UpdateDspFieldReadouts(bool enabled, double width, double centerDb, double sideDb)
         {
-            if (DspFieldMidReadout != null)
-            {
-            }
 
             double effSide = EffectiveSideDb(sideDb, width);
-            if (DspFieldSideReadout != null)
-            {
-            }
 
             if (DspFieldCorrText == null)
             {

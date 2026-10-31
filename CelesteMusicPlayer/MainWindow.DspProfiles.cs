@@ -148,17 +148,8 @@ namespace CelesteMusicPlayer
         private void UpdateDspProfileButtons()
         {
             bool has = SelectedDspProfile() != null;
-            if (DspProfileApplyButton != null)
-            {
-            }
 
-            if (DspProfileUpdateButton != null)
-            {
-            }
 
-            if (DspProfileDeleteButton != null)
-            {
-            }
         }
 
         /// <summary>方案页徽章渲染：显示"当前设置来自哪份方案"。它是状态而不是处理模块，
@@ -389,13 +380,7 @@ namespace CelesteMusicPlayer
                 });
 
                 ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
-                if (DspProfileNameBox != null)
-                {
-                }
 
-                if (DspProfileSaveHintText != null)
-                {
-                }
 
                 RefreshDspProfileUi();
                 UpdateDspNavIndicators();
@@ -466,9 +451,6 @@ namespace CelesteMusicPlayer
                 });
 
                 ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
-                if (DspProfileSaveHintText != null)
-                {
-                }
 
                 RefreshDspProfileUi();
                 UpdateDspNavIndicators();
@@ -514,9 +496,6 @@ namespace CelesteMusicPlayer
                     ProfileCoordinator.Clear();
                 }
 
-                if (DspProfileSaveHintText != null)
-                {
-                }
 
                 RefreshDspProfileUi();
                 UpdateDspNavIndicators();

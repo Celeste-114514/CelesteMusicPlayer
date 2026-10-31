@@ -87,12 +87,6 @@ public sealed partial class MainWindow
             GridView grid = _multiSelectAlbumGrid;
             SetGridSelectionMode(grid, ListViewSelectionMode.Single);
             grid.IsItemClickEnabled = true;
-            if (ReferenceEquals(grid, ArtistAlbumGridView) && _artistAlbumItemDefaultStyle != null)
-            {
-            }
-            else if (ReferenceEquals(grid, AlbumGridView) && _libraryAlbumItemDefaultStyle != null)
-            {
-            }
 
             ApplyAccentSelectionResources(grid);
             _multiSelectAlbumGrid = null;
@@ -106,9 +100,6 @@ public sealed partial class MainWindow
             }
 
             SetListSelectionMode(FolderBrowserView, ListViewSelectionMode.Single);
-            if (_folderItemDefaultStyle != null)
-            {
-            }
 
             ApplyAccentSelectionResources(FolderBrowserView);
             _multiSelectFolderList = null;
@@ -222,12 +213,6 @@ public sealed partial class MainWindow
             }
 
             // “添加到播放列表”按钮：多选界面右下角，与“添加至播放队列”并列显示（支持歌曲/专辑/文件夹统一添加）
-            if (MultiSelectAddToPlaylistButton != null)
-            {
-            }
 
-            if (MultiSelectDeleteMenuItem != null)
-            {
-            }
         }
     }

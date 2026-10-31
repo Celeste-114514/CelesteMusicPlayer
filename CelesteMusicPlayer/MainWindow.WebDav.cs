@@ -46,13 +46,7 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void SetFolderBrowserMode(bool isWebDav)
         {
-            if (MediaLibraryTreeTitle != null)
-            {
-            }
 
-            if (AddMediaFolderButton != null)
-            {
-            }
         }
 
         /// <summary>显示 / 隐藏左侧「网络音乐库」条目（供设置窗口保存 / 删除后调用）。</summary>
@@ -139,9 +133,6 @@ namespace CelesteMusicPlayer
                 }
 
 
-                if (MediaDetailsHeader != null)
-                {
-                }
             }
             catch (Exception caught)
             {
@@ -152,21 +143,9 @@ namespace CelesteMusicPlayer
 
         private void ShowWebDavTreeMessage(string text)
         {
-            if (FolderBrowserEmptyHint != null)
-            {
-            }
 
-            if (FolderBrowserView != null)
-            {
-            }
 
-            if (MediaDetailsList != null)
-            {
-            }
 
-            if (MediaDetailsEmptyHint != null)
-            {
-            }
         }
 
         private static FolderBrowserItem ToFolderBrowserItem(WebDavEntry entry, int depth, string parent)
@@ -300,9 +279,6 @@ namespace CelesteMusicPlayer
         /// <summary>把状态写到详情区台头（下载进度、报错都用它，不再另开弹窗）。</summary>
         private void ShowWebDavStatus(string text)
         {
-            if (MediaDetailsHeader != null)
-            {
-            }
         }
 
     }

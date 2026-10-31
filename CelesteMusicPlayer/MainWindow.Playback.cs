@@ -169,7 +169,6 @@ namespace CelesteMusicPlayer
             VolumeSlider.ValueChanged += VolumeSlider_ValueChanged;
             ApplyStartupPlaybackSettings();
             _mediaPlayer.Volume = VolumeSlider.Value / 100.0;
-            UpdateVolumeIcon(VolumeSlider.Value);
             UpdateSignalChainDisplay();
             UpdateDesktopLyricsBadge();
             InitializeMusicPlayer2Features();
@@ -358,12 +357,6 @@ namespace CelesteMusicPlayer
 
             _lastSyncedPlayingState = playing;
             string glyph = playing ? "\uE769" : "\uE768";   // E769 = 暂停，E768 = 播放
-            if (PlayPauseIcon != null)
-            {
-            }
-            if (FloatingPlayPauseIcon != null)
-            {
-            }
 
             try
             {
@@ -642,7 +635,6 @@ namespace CelesteMusicPlayer
                 }
 
                 CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(start));
-                RedrawProgressStyle();
 
                 // 波形：就绪态也解码一份，别等到点播放才出现
                 _waveformPath = null;

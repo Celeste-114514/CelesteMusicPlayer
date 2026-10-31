@@ -147,9 +147,6 @@ namespace CelesteMusicPlayer
             {
                 double gr = grDb > 0f ? grDb : 0.0;
 
-                if (DspCompGrText != null)
-                {
-                }
 
                 _dspCompGrHistory.Add(gr);
                 while (_dspCompGrHistory.Count > CompGrHistoryMax)
@@ -211,9 +208,6 @@ namespace CelesteMusicPlayer
             double totalLinear = compOn ? (1.0 - mix) + mix * wetLinear : 1.0;
             double inDb = outDb - 20.0 * Math.Log10(Math.Max(totalLinear, 1e-9));
 
-            if (DspCompInText != null)
-            {
-            }
 
             DrawDspCompInputMeterBar(hasSignal ? inDb : double.NegativeInfinity);
         }

@@ -71,9 +71,6 @@ namespace CelesteMusicPlayer
                 if (AudioChainCloseStoryboard != null && AudioChainOverlayHost.Visibility == Visibility.Visible)
                 {
                     // 订阅去重：每次收起都 += 会叠加 handler
-                    if (_audioChainCloseCompleted != null)
-                    {
-                    }
                     _audioChainCloseCompleted = (_, _) =>
                     {
                         AudioChainOverlayHost.Visibility = Visibility.Collapsed;

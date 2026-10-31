@@ -36,23 +36,14 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (OpraStatusText != null)
-                {
-                }
 
                 OpraStatus status = await _opra.EnsureLoadedAsync(refresh: false);
-                if (OpraStatusText != null)
-                {
-                }
 
                 // 数据库就绪才铺品牌墙（厂商与型号数都来自这个库）
                 BuildOpraVendorWall();
             }
             catch (Exception ex)
             {
-                if (OpraStatusText != null)
-                {
-                }
             }
         }
 

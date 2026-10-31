@@ -137,9 +137,6 @@ public sealed partial class MainWindow
         private void SetAbLoopHint(string text)
         {
             _abLoopHint = text;
-            if (AbLoopHintText != null)
-            {
-            }
         }
 
         /// <summary>弹出面板时刷新 AB 页的读数与按钮态。</summary>
@@ -352,9 +349,6 @@ public sealed partial class MainWindow
                 ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
                 // 按设备记忆 DSP 配置档：开关与提示同步
-                if (DeviceDspMemoryToggle != null)
-                {
-                }
 
                 // ASIO 卡顿排查提醒（2026-09-24 KA13 实测定案：驱动缓冲 5.8ms + USB 电源管理=几秒一卡；
                 // 喂料器内置 4s ring 已排除备货问题，故选 ASIO 时常显此条，切换模式即时可查）
@@ -594,9 +588,6 @@ public sealed partial class MainWindow
             try
             {
                 _hotplugNoticeTimer?.Stop();
-                if (AudioDeviceHotplugText != null)
-                {
-                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }

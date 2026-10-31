@@ -49,21 +49,9 @@ namespace CelesteMusicPlayer
             _audioFxLoading = true;
             try
             {
-                if (RoomIrPathBox != null)
-                {
-                }
 
-                if (RoomIrGainSlider != null)
-                {
-                }
 
-                if (RoomIrEnabledToggle != null)
-                {
-                }
 
-                if (RoomTrimSlider != null)
-                {
-                }
             }
             finally
             {
@@ -211,9 +199,6 @@ namespace CelesteMusicPlayer
 
         private void RoomIrStatus(string text)
         {
-            if (RoomIrLoadStatusText != null)
-            {
-            }
         }
     }
 }

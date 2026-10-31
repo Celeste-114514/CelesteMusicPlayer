@@ -180,12 +180,6 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = true;
                 UpdateWaveformTimerForPlaybackState(false);
                 MediaSession.SetStatus(MediaPlaybackStatus.Paused);
-                if (PlayPauseIcon != null)
-                {
-                }
-                if (FloatingPlayPauseIcon != null)
-                {
-                }
 
                 // 任务栏缩略图按钮：暂停 → 显示"播放"图标（提示用户点播放）
                 _taskbarButtons?.UpdatePlayPause(false);
@@ -203,12 +197,6 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 UpdateWaveformTimerForPlaybackState(true);
                 MediaSession.SetStatus(MediaPlaybackStatus.Playing);
-                if (PlayPauseIcon != null)
-                {
-                }
-                if (FloatingPlayPauseIcon != null)
-                {
-                }
 
                 // 任务栏缩略图按钮：播放中 → 显示"暂停"图标（提示用户点暂停）
                 _taskbarButtons?.UpdatePlayPause(true);
@@ -320,7 +308,6 @@ namespace CelesteMusicPlayer
             _seekGestureConsumed = true;
             try
             {
-                SeekToSliderValue();
             }
             finally
             {
@@ -329,59 +316,8 @@ namespace CelesteMusicPlayer
         }
 
 
-
-
-        private void SeekToSliderValue()
-        {
-            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
-            {
-                try
-                {
-                    // 进度条上是"原歌曲时间"，引擎吃的是（可能被 atempo 拉伸的）WAV 时间
-                    _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value / TempoScale()));
-                    // seek 会丢弃无缝源里已预加载的下一首（位置已变，续接会错位）。
-                    // 重挂下一首，避免 seek 后播到尾时因 _next 为空而无法无缝续接。
-                    _ = Session.PreloadNextAsync();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-                // 用户点击进度条定位后：跳转并暂停（早期可选「跳转并继续播放」，该设置已删除，行为固定）。
-                if (_audioEngine.IsPlaying)
-                {
-                    _audioEngine.Pause();
-                    _isEnginePaused = true;
-                    UpdateWaveformTimerForPlaybackState(false);
-                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
-                    if (PlayPauseIcon != null)
-                    {
-                    }
-
-                }
-
-                return;
-            }
-
-            MediaPlayer? player = GetPlayer();
-            if (player?.Source == null)
-            {
-                // 启动就绪态：还没有播放会话，直接 return 会让"拖进度条"完全没反应。
-                // 记下位置起播（起播后是否暂停按设置走），跟播放中拖进度条的手感一致。
-                bool pauseAfter = true;
-                StartPlaybackFromPendingPosition(ProgressSlider.Value, pauseAfter);
-                return;
-            }
-
-            try
-            {
-                player.PlaybackSession.Position = TimeSpan.FromSeconds(ProgressSlider.Value);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
         private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
         {
-            UpdateVolumeIcon(e.NewValue);
 
             // 共享模式：MediaPlayer 数字音量（跟随用户）。
             MediaPlayer? player = GetPlayer();
@@ -406,7 +342,6 @@ namespace CelesteMusicPlayer
                 ScheduleVolumeSave(e.NewValue);
             }
 
-            DrawVolumeStyle();
         }
 
 
@@ -432,29 +367,6 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.Write($"[音量] 去抖写盘 = {v:0.##}");
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        private void UpdateVolumeIcon(double volumePercent)
-        {
-            if (VolumeIcon == null)
-            {
-                return;
-            }
-
-            // E74F mute / E992 low / E993 mid / E767 high
-            if (volumePercent <= 0.5)
-            {
-            }
-            else if (volumePercent < 34)
-            {
-            }
-            else if (volumePercent < 67)
-            {
-            }
-            else
-            {
-            }
         }
 
 
@@ -590,9 +502,6 @@ namespace CelesteMusicPlayer
                 ApplyCategoryViewData();
             }
 
-            if (NowPlayingText != null)
-            {
-            }
 
             // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
             _taskbarButtons?.UpdateFavorite(fav);
@@ -764,9 +673,6 @@ namespace CelesteMusicPlayer
             {
                 // E768=播放，E769=暂停
                 bool playing = sender.PlaybackState == MediaPlaybackState.Playing;
-                if (FloatingPlayPauseIcon != null)
-                {
-                }
                 UpdateWaveformTimerForPlaybackState(playing);
                 _desktopLyricsWindow?.SetPlaybackPaused(!playing && sender.PlaybackState != MediaPlaybackState.Opening);
             });
@@ -920,16 +826,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-        // =====================================================================
-        // 右侧：正在播放信息 / 波形 / 歌词
-        // =====================================================================
-
-                private void ProgressStyleCanvas_SizeChanged(dynamic sender, dynamic e)
-        {
-            RedrawProgressStyle();
-        }
-
         /// <summary>
         /// Margin 变化是否超过"布局还在动"的阈值（2px）。
         /// 2026-10-16 探针实测：启动补校存在 ±1px 自激极限环（补量帧与 0.5px 写入阈值
@@ -979,51 +875,6 @@ namespace CelesteMusicPlayer
 
         private void TransportInfoPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
         {
-        }
-
-
-        /// <summary>按设置的样式重绘进度条(4 种可切换)。</summary>
-        private void RedrawProgressStyle()
-        {
-            if (ProgressStyleCanvas == null || ProgressSlider == null)
-            {
-                return;
-            }
-
-            // 极客模式：进度条由字符块（GeekProgressText）接管，波形 / 频谱柱等自绘样式一律让位。
-            // 这里必须拦住 —— 波形加载完成 / 窗口缩放 / 改配色都会触发重绘，
-            // 不拦的话每次重绘都把波形画布重新顶出来，盖在字符进度条上（用户实测"波形一直还在"）。
-            if (GeekUiStyleCached)
-            {
-                ProgressStyleCanvas.Children.Clear();
-                return;
-            }
-
-            bool waveform = _waveformProgress;
-            if (!waveform)
-            {
-                // 默认样式:恢复系统进度条(主题色跟随主题设置)
-                ProgressStyleCanvas.Children.Clear();
-                return;
-            }
-
-            // 波形进度条:底层 Slider 透明(交互保留),自绘画布显示波形
-
-            double max = ProgressSlider.Maximum;
-            double ratio = max > 0 ? ProgressSlider.Value / max : 0;
-            ratio = Math.Clamp(ratio, 0, 1);
-
-            var canvas = ProgressStyleCanvas;
-            canvas.Children.Clear();
-            double w = canvas.ActualWidth;
-            double h = canvas.ActualHeight;
-            if (w <= 0 || h <= 0)
-            {
-                return;
-            }
-
-            Color accent = ResolveAccentColor();
-            DrawWaveformStyle(canvas, w, h, ratio, accent);
         }
 
 
@@ -1374,132 +1225,8 @@ namespace CelesteMusicPlayer
         }
 
 
-                /// <summary>自绘音量条:恒定波形竖线样式(已填充主题色/未填充灰色),无重影。</summary>
-        private void DrawVolumeStyle()
-        {
-            if (VolumeStyleCanvas == null || VolumeSlider == null)
-            {
-                return;
-            }
-
-            var canvas = VolumeStyleCanvas;
-            canvas.Children.Clear();
-
-            // 极客模式：音量显示成字符条（VOL ███░░░），自绘竖线一律不画。
-            // 但必须铺一层几乎全透明的矩形当点击靶 —— 拖动处理器全挂在这块画布的 Pointer 事件上，
-            // Canvas 自身 Background=null 不接受命中，没靶就拖不动（用户实测"音量条完全动不了"）。
-            if (GeekUiStyleCached)
-            {
-                double gw = canvas.ActualWidth;
-                double gh = canvas.ActualHeight;
-                if (gw > 1 && gh > 1)
-                {
-                    canvas.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle
-                    {
-                        Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)),
-                        Width = gw,
-                        Height = gh
-                    });
-                }
-
-                return;
-            }
-
-            double w = canvas.ActualWidth;
-            double h = canvas.ActualHeight;
-            if (w <= 1 || h <= 1)
-            {
-                return;
-            }
-
-            // 走统一的强调色入口（极客=磷光色 / 令牌皮肤=主题文件 Accent.Solid / 其余=设置里的强调色）。
-            // 早先这里直接读 ThemeColorService.CurrentAccent，绕过了那一层，所以令牌皮肤下音量条
-            // 不跟着主题走（用户实测"音量条颜色没变"）。
-            Color accent = ResolveAccentBrush() is SolidColorBrush accentSolid
-                ? accentSolid.Color
-                : ThemeColorService.CurrentAccent;
-            double ratio = VolumeSlider.Maximum > 0 ? VolumeSlider.Value / VolumeSlider.Maximum : 0;
-            ratio = Math.Clamp(ratio, 0, 1);
-
-            const int n = 28;
-            double barW = w / n;
-            var filledBrush = new SolidColorBrush(accent);
-            var emptyBrush = new SolidColorBrush(Color.FromArgb(90, 150, 150, 150));
-            double filledEdge = w * ratio;
-
-            for (int i = 0; i < n; i++)
-            {
-                // 恒定高度竖线(无起伏)
-                double bh = Math.Max(3, h * 0.85);
-                var rect = new Shapes.Rectangle
-                {
-                    Width = Math.Max(1, barW - 1),
-                    Height = bh,
-                    RadiusX = 1,
-                    RadiusY = 1,
-                    Fill = (i + 0.5) * barW <= filledEdge ? filledBrush : emptyBrush
-                };
-                Canvas.SetLeft(rect, i * barW);
-                Canvas.SetTop(rect, (h - bh) / 2);
-                canvas.Children.Add(rect);
-            }
-        }
-
-
-        /// <summary>音量条点击/拖动定位。</summary>
-        private void VolumeStyleCanvas_PointerPressed(dynamic sender, dynamic e)
-        {
-            SetVolumeFromPointer(e);
-            try
-            {
-                VolumeStyleCanvas.CapturePointer(e.Pointer);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        private void VolumeStyleCanvas_PointerMoved(dynamic sender, dynamic e)
-        {
-            if (VolumeStyleCanvas.PointerCaptures != null && VolumeStyleCanvas.PointerCaptures.Count > 0)
-            {
-                SetVolumeFromPointer(e);
-            }
-        }
-
-
-        private void VolumeStyleCanvas_PointerReleased(dynamic sender, dynamic e)
-        {
-            try
-            {
-                VolumeStyleCanvas.ReleasePointerCapture(e.Pointer);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        private void SetVolumeFromPointer(PointerRoutedEventArgs e)
-        {
-            try
-            {
-                // HiFi 独占/ASIO：默认音量条固定 100% 不动——调 DAC 硬件旋钮或系统端点音量（bit-perfect 保真）；
-                // 设置页开启「HiFi 软件音量」后允许拖动（DSP 采样级衰减，失去 bit-perfect，徽标有提示）。
-                if (IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked())
-                {
-                    VolumeSlider.Value = VolumeSlider.Maximum;
-                    return;
-                }
-
-                double px = e.GetCurrentPoint(VolumeStyleCanvas).Position.X;
-                double ratio = Math.Clamp(px / Math.Max(1, VolumeStyleCanvas.ActualWidth), 0, 1);
-                VolumeSlider.Value = ratio * VolumeSlider.Maximum; // 触发 ValueChanged -> 音量
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
         private void VolumeStyleCanvas_SizeChanged(dynamic sender, dynamic e)
         {
-            DrawVolumeStyle();
         }
 
 
@@ -1548,7 +1275,6 @@ namespace CelesteMusicPlayer
         {
             // 保留旧波形:停止/切歌时进度条静态显示上次波形,不闪占位
             _waveformPath = null;
-            RedrawProgressStyle();
             _nowPlayingPath = null;
             _currentPlayingItem = null;   // 停止/清空：权威记录一起清，别再按旧下标猜
             ResetNowPlayingArtistAlbumLinks();
@@ -1640,9 +1366,6 @@ namespace CelesteMusicPlayer
             try
             {
                 string? outFmt = _audioEngine?.ActualOutputFormat;
-                if (NowPlayingAudioInfoText != null)
-                {
-                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
@@ -1809,9 +1532,6 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (NowPlayingPaneContent != null)
-                {
-                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
@@ -2043,13 +1763,7 @@ namespace CelesteMusicPlayer
 
                     UpdateWaveformTimerForPlaybackState(true);
                     MediaSession.SetStatus(MediaPlaybackStatus.Playing);
-                    if (PlayPauseIcon != null)
-                    {
-                    }
 
-                    if (FloatingPlayPauseIcon != null)
-                    {
-                    }
 
                     _taskbarButtons?.UpdatePlayPause(true);
                 }
@@ -2060,13 +1774,7 @@ namespace CelesteMusicPlayer
                     _isEnginePaused = true;
                     UpdateWaveformTimerForPlaybackState(false);
                     MediaSession.SetStatus(MediaPlaybackStatus.Paused);
-                    if (PlayPauseIcon != null)
-                    {
-                    }
 
-                    if (FloatingPlayPauseIcon != null)
-                    {
-                    }
 
                     _taskbarButtons?.UpdatePlayPause(false);
                 }
@@ -2478,13 +2186,7 @@ namespace CelesteMusicPlayer
                     _isEnginePaused = true;
                     UpdateWaveformTimerForPlaybackState(false);
                     MediaSession.SetStatus(MediaPlaybackStatus.Paused);
-                    if (PlayPauseIcon != null)
-                    {
-                    }
 
-                    if (FloatingPlayPauseIcon != null)
-                    {
-                    }
 
                     _taskbarButtons?.UpdatePlayPause(false);
                 }
@@ -2565,9 +2267,6 @@ namespace CelesteMusicPlayer
                 UpdateNowPlayingOutputFormat();
                 UpdateSignalChainDisplay();
                 Journal.RecordStart(item);
-                if (PlayPauseIcon != null)
-                {
-                }
 
                 // 引擎桥接：时长 / 进度条 / 波形（变速时进度条按"原歌曲时间"：WAV 时长 × 倍率）
                 double tempoScale = TempoScale();
@@ -2808,7 +2507,6 @@ namespace CelesteMusicPlayer
             StartupLog.Write("波形回调: " + (wave?.Length > 0 ? "有数据" : "空") + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
             if (_waveformProgress)
             {
-                RedrawProgressStyle();
             }
         
             }

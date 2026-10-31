@@ -107,12 +107,6 @@ public sealed partial class MainWindow
                 // ⚠ 传元素本身而不是 this：MainWindow 继承 Window，不是 FrameworkElement，
                 //   拿不到 Resources。资源字典挂在 RootShell 上，从后代元素往上能找到。
                 // 专辑详情页封面圆角：XAML 原本写死 CornerRadius="14"，主题盖不掉
-                if (AlbumDetailCoverBorder != null)
-                {
-                }
-                if (ArtistSongsFrostPanel != null)
-                {
-                }
             }
             catch (Exception ex) { StartupLog.WriteException("RefreshDetailPagesForTheme", ex); }
         }

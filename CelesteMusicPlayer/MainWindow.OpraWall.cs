@@ -118,17 +118,11 @@ namespace CelesteMusicPlayer
                 List<OpraVendor> vendors = _opra.GetTopVendors(14);
                 if (vendors.Count == 0)
                 {
-                    if (OpraVendorWallNote != null)
-                    {
-                    }
 
                     return;
                 }
 
 
-                if (OpraVendorWallNote != null)
-                {
-                }
             }
             catch (Exception caught)
             {
@@ -230,9 +224,6 @@ namespace CelesteMusicPlayer
                 if (corr?.Curve.Bands == null)
                 {
                     canvas.Children.Clear();
-                    if (OpraPreviewNote != null)
-                    {
-                    }
 
                     return;
                 }

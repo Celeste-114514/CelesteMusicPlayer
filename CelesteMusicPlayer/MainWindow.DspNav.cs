@@ -191,9 +191,6 @@ namespace CelesteMusicPlayer
             // IrReady = 已选 IR 且文件还在盘上（原来只看路径非空，文件被删时也会照样开起来）
             if (!FirParameters.IrReady)
             {
-                if (RoomClipRiskText != null)
-                {
-                }
 
                 return;
             }
@@ -317,9 +314,6 @@ namespace CelesteMusicPlayer
             // 面板初始化这一步就是模型的首次装载点（进入 FIR 页时 LoadRoomCorrectionIntoPanel 会再装一次，幂等）
             FirParameters.Load(RoomCorrectionStore.Load());
 
-            if (RoomTrimSlider != null)
-            {
-            }
 
             UpdateRoomTrimLabel();
         }

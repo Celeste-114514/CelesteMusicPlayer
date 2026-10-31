@@ -264,7 +264,6 @@ public sealed partial class MainWindow
         {
             try
             {
-                DispatcherQueue.TryEnqueue(RedrawProgressStyle);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
         }

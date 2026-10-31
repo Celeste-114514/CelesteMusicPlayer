@@ -50,7 +50,6 @@ public sealed partial class MainWindow
                     }
                 }
 
-                SeekToSliderValue();
             }
             finally
             {

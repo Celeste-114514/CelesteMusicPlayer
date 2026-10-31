@@ -37,9 +37,6 @@ namespace CelesteMusicPlayer
             }
 
             bool show = _albumDetailDsdFiles.Count > 0;
-            if (AlbumDetailPreloadPanel != null)
-            {
-            }
 
             if (AlbumDetailPreloadHint == null)
             {
@@ -150,17 +147,8 @@ namespace CelesteMusicPlayer
 
         private void SetPreloadBusy(bool busy)
         {
-            if (AlbumDetailPreloadText != null)
-            {
-            }
 
-            if (AlbumDetailPreloadButton != null)
-            {
-            }
 
-            if (AlbumDetailPreloadClearButton != null)
-            {
-            }
         }
 
     }

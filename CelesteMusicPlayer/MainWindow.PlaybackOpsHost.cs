@@ -89,14 +89,8 @@ public sealed partial class MainWindow
 
         private void ClearAlbumArtBackground()
         {
-            if (AlbumArtBackgroundImage != null)
-            {
-            }
 
             // 压暗层跟着归零：只清封面图不清 Scrim 的话，53% 深色 Border 会残留继续压暗窗口
-            if (AlbumArtBackgroundScrim != null)
-            {
-            }
         }
 
         private async Task ApplyAlbumArtBackgroundAsync(byte[]? coverBytes, string forPath)
@@ -161,9 +155,6 @@ public sealed partial class MainWindow
                 return;
             }
 
-            if (AlbumArtBackgroundScrim != null)
-            {
-            }
         }
 
         /// <summary>波形(Poweramp)：波形条已播主题色/未播灰色，当前位置竖线。</summary>
