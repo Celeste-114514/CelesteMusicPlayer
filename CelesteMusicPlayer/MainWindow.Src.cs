@@ -75,7 +75,6 @@ namespace CelesteMusicPlayer
         internal void RefreshSrcSessionState()
         {
             // 链路图上的源/目标采样率就来自这段会话描述，一起刷
-            RedrawSrcChain();
         }
 
         /// <summary>刷新右侧状态文字：关闭 / 已开启。</summary>

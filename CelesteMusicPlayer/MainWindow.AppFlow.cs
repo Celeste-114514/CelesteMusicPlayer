@@ -127,17 +127,6 @@ namespace CelesteMusicPlayer
             bool fav = !string.IsNullOrWhiteSpace(_nowPlayingPath)
                 && (TrackStatsStore.Get(_nowPlayingPath)?.IsFavorite ?? false);
 
-            if (FavoriteButtonIcon != null)
-            {
-                ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
-            }
-
-            // 极客模式：图标被字符 ♡/♥ 盖着 —— 心形也要跟着喜欢状态变（空心/实心红）。
-            if (GeekUiStyleCached)
-            {
-                SetGeekFavoriteState(fav);
-            }
-
             // 任务栏缩略图按钮：把当前曲目的收藏状态同步到 thumbar
             // （启动恢复上次播放时，thumbar 加载完成就会用对的图标）
             _taskbarButtons?.UpdateFavorite(fav);
@@ -208,28 +197,6 @@ namespace CelesteMusicPlayer
             // “托盘图标已没、主程序却还停好几秒”。Environment.Exit(0) 是进程级强杀，
             // 立即终止所有线程与窗口，干净利落。
             Environment.Exit(0);
-        }
-        // 极客收藏状态（2026-10-31 从 MainWindow.GeekShell.cs 搬来）：操作极客 ASCII 按钮标签（占位控件），随 UpdateFavoriteButtonUi 一起。
-
-        /// <summary>
-        /// 喜欢状态变化时同步心形键：♡ 空心 / ♥ 实心红 —— 形状加颜色双重区分，
-        /// 和经典模式"实心红心"的语义一致。
-        /// </summary>
-        internal void SetGeekFavoriteState(bool fav)
-        {
-            TextBlock? label = FavoriteButton != null
-                               && _geekAsciiButtons.TryGetValue(FavoriteButton, out GeekButtonBackup? backup)
-                ? backup.Label
-                : null;
-            if (label == null)
-            {
-                return;
-            }
-
-            label.Text = fav ? "♥" : "♡";
-            label.Foreground = fav
-                ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0x4D, 0x4D))
-                : new SolidColorBrush(PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor));
         }
 
         // 定时停止族 + 全局热键 + 字段（2026-10-31 从 MainWindow.Features.cs 搬来）

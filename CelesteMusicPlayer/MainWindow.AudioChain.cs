@@ -29,53 +29,6 @@ namespace CelesteMusicPlayer
         /// <summary>打开动画的兜底复查定时器（只跑一次，用完即弃）。</summary>
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _chainOpenFallbackTimer;
 
-        private void HideAudioChainPanel()
-        {
-            try
-            {
-
-                // 先停刷新再收动画：收起期间不要再抓快照
-                AudioChainPanel?.StopLiveRefresh();
-
-                // 上次打开动画若还没跑完（或兜底复查还没触发），先停掉，
-                // 否则兜底会在收起之后又把面板拉回屏幕内。
-                try
-                {
-                    _chainOpenFallbackTimer?.Stop();
-                    _chainOpenFallbackTimer = null;
-                    AudioChainOpenStoryboard?.Stop();
-                }
-                catch (Exception caught)
-                {
-                    StartupLog.WriteException("MainWindow.HideAudioChainPanel.StopOpen", caught);
-                }
-
-                if (AudioChainCloseStoryboard != null && AudioChainOverlayHost.Visibility == Visibility.Visible)
-                {
-                    // 订阅去重：每次收起都 += 会叠加 handler
-                    _audioChainCloseCompleted = (_, _) =>
-                    {
-                    };
-
-                    try
-                    {
-                    }
-                    catch (Exception sbEx)
-                    {
-                        StartupLog.Write("[链路] 收起动画 Begin 失败，直接折叠: " + sbEx.Message);
-                    }
-                }
-                else
-                {
-                }
-                StartupLog.Write($"[链路] 收起完成 可见={AudioChainOverlayHost.Visibility}");
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.HideAudioChainPanel", caught);
-            }
-        }
-
         // ─────────────────────────────────────────────────────────────
         // B4：真实事件接线（2026-10-17）
         //

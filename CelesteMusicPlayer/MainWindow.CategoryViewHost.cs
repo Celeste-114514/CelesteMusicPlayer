@@ -51,7 +51,6 @@ public sealed partial class MainWindow
                     _playlistViewSource = _queue.Items;
                     // 播放列表默认不排序：保持添加顺序（后添加批次在前，批内相对顺序不变）
                     RenumberCollection(_queue.Items);
-                    ScrollUserPlaylistToPlaying();
                     break;
 
                 case "Albums":
@@ -171,35 +170,6 @@ public sealed partial class MainWindow
             UpdateLibrarySearchUi();
         }
 
-        /// <summary>
-        /// 切到「播放队列」页面时，把列表滚到正在播放的那首歌并高亮它。
-        /// ItemsSource 刚赋值时 ListView 还没完成布局，ScrollIntoView 会静默失效，
-        /// 所以用 DispatcherQueue 延迟到布局完成后执行；无正在播放的曲目则不滚动。
-        /// </summary>
-        private void ScrollUserPlaylistToPlaying()
-        {
-            if (PlaylistView == null || _queue.Items == null || _queue.Items.Count == 0)
-            {
-                return;
-            }
-
-            int index = _queue.Index;
-            if (index < 0 || index >= _queue.Items.Count)
-            {
-                return;
-            }
-
-            PlaylistItem playing = _queue.Items[index];
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (!string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-            });
-        }
-
         private async Task RefreshGenreYearViewAsync()
         {
             List<ArtistEntry> entries = await Task.Run(() =>
@@ -227,31 +197,6 @@ public sealed partial class MainWindow
             }
         }
 
-        private Brush ResolveNavCapsuleBorderBrush()
-        {
-            // 经典界面：Application.Resources 里的这些键取到的是"系统主题"那一份色值，
-            // 与经典模式选的浅色/深色不一定一致（跟随系统时更明显），所以这里直接按经典主题给色。
-            if (FrostedGlass.ClassicMode != null)
-            {
-                return new SolidColorBrush(FrostedGlass.ClassicMode == "Light"
-                    ? Color.FromArgb(28, 0, 0, 0)
-                    : Color.FromArgb(46, 255, 255, 255));
-            }
-
-            if (Application.Current.Resources.TryGetValue("ControlStrokeColorDefaultBrush", out object? brushObj)
-                && brushObj is Brush brush)
-            {
-                return brush;
-            }
-
-            if (Application.Current.Resources.TryGetValue("CardStrokeColorDefaultBrush", out object? card)
-                && card is Brush c)
-            {
-                return c;
-            }
-
-            return new SolidColorBrush(Color.FromArgb(60, 128, 128, 128));
-        }
 
         // W13 第三十四刀：收藏/最常听/评分视图
 
@@ -389,7 +334,6 @@ public sealed partial class MainWindow
         /// <summary>刷新评分分类：按 _ratingFilter 过滤媒体库歌曲并填充列表。</summary>
         private void ApplyRatingCategory()
         {
-            UpdateRatingFilterHighlight();
 
             var col = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>();
             foreach (PlaylistItem track in _playlist)
@@ -410,24 +354,5 @@ public sealed partial class MainWindow
             SetPlaylistEmptyHint(col.Count == 0, _ratingFilter >= 0
                 ? (_ratingFilter == 0 ? "没有未评分的歌曲" : "没有 " + _ratingFilter + " 星评分的歌曲")
                 : "还没有给任何歌曲评分");
-        }
-
-        private void UpdateRatingFilterHighlight()
-        {
-            var accent = ResolveAccentBrush();
-            var fg = ColorHelper.ResolveContrastingForeground(accent);
-            var idleBg = ResolveCapsuleFillBrush();
-            var border = ResolveNavCapsuleBorderBrush();
-            (Button Btn, int Val)[] maps =
-            {
-                (RatingFilter0Button, 0), (RatingFilter1Button, 1), (RatingFilter2Button, 2),
-                (RatingFilter3Button, 3), (RatingFilter4Button, 4), (RatingFilter5Button, 5)
-            };
-            foreach (var (btn, val) in maps)
-            {
-                bool active = val == _ratingFilter;
-                if (active) { btn.Background = accent; btn.Foreground = fg; btn.BorderThickness = new Thickness(0); }
-                else { btn.Background = idleBg; btn.ClearValue(Control.ForegroundProperty); btn.BorderThickness = new Thickness(1); btn.BorderBrush = border; }
-            }
         }
     }

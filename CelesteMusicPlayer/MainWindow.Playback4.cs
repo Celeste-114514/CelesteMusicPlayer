@@ -202,7 +202,6 @@ namespace CelesteMusicPlayer
         {
             _orderResolver.Order = order;
             ApplyPlaybackOrderToPlayer();
-            UpdatePlaybackOrderButtonUi();
             if (persist)
             {
                 AppSettingsStore.Update(s => s.PlaybackOrder = order.ToString());
@@ -218,48 +217,6 @@ namespace CelesteMusicPlayer
             }
 
             player.IsLoopingEnabled = _orderResolver.Order == PlaybackOrder.TrackLoop;
-        }
-
-        private void UpdatePlaybackOrderButtonUi()
-        {
-            bool trackOnce = _orderResolver.Order == PlaybackOrder.TrackOnce;
-
-            (string glyph, string name) = _orderResolver.Order switch
-            {
-                PlaybackOrder.Sequential => ("\uE8FD", "顺序播放"),
-                PlaybackOrder.Random => ("\uE8B1", "随机播放"),
-                PlaybackOrder.ListLoop => ("\uE8EE", "列表循环"),
-                PlaybackOrder.TrackLoop => ("\uE8ED", "单曲循环"),
-                PlaybackOrder.TrackOnce => ("\uE72A", "单曲播放"),
-                _ => ("\uE8EE", "列表循环")
-            };
-
-            if (!trackOnce)
-            {
-            }
-
-            ToolTipService.SetToolTip(PlaybackOrderButton, name + "（左键切换，右键选择）");
-        }
-
-        // =====================================================================
-        // 主区域：播放列表 / 右侧 可拖分割线
-        // =====================================================================
-
-        private double GetPlaylistColumnsViewportWidth()
-        {
-            double border = PlaylistListBorder.ActualWidth;
-            if (border > 0)
-            {
-                // Header Margin="4,4,4,4"
-                return Math.Max(0, border - 8);
-            }
-
-            if (PlaylistHeaderGrid.ActualWidth > 0)
-            {
-                return PlaylistHeaderGrid.ActualWidth;
-            }
-
-            return PlaylistColumn.ActualWidth > 0 ? Math.Max(0, PlaylistColumn.ActualWidth - 24) : 0;
         }
 
         // =====================================================================
