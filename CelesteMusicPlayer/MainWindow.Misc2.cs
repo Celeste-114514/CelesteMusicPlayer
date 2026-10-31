@@ -166,59 +166,8 @@ namespace CelesteMusicPlayer
         // 播放列表列：可拖分割线
         // =====================================================================
 
-        private void ColumnSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            if (sender is not FrameworkElement splitter || splitter.Tag is not string pair)
-            {
-                return;
-            }
-
-            _isDraggingColumnSplitter = true;
-            _columnSplitPair = pair;
-            _columnSplitStartX = e.GetCurrentPoint(PlaylistHeaderGrid).Position.X;
-
-            GetColumnWidths(pair, out _columnLeftStartWidth, out _columnRightStartWidth);
-            splitter.CapturePointer(e.Pointer);
-            e.Handled = true;
-        }
 
 
-        private void ColumnSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            if (!_isDraggingColumnSplitter || _columnSplitPair == null)
-            {
-                return;
-            }
-
-            double delta = e.GetCurrentPoint(PlaylistHeaderGrid).Position.X - _columnSplitStartX;
-
-            const double minLeft = 48;
-            const double minRight = 40;
-
-            double left = Math.Max(minLeft, _columnLeftStartWidth + delta);
-            double right = Math.Max(minRight, _columnRightStartWidth - delta);
-            double total = _columnLeftStartWidth + _columnRightStartWidth;
-
-            if (left + right > total)
-            {
-                right = total - left;
-            }
-
-            if (right < minRight)
-            {
-                right = minRight;
-                left = total - right;
-            }
-
-            if (left < minLeft)
-            {
-                left = minLeft;
-                right = total - left;
-            }
-
-            SetColumnWidths(_columnSplitPair, left, right);
-            e.Handled = true;
-        }
 
 
         private void ColumnSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)

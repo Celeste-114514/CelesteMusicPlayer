@@ -28,113 +28,12 @@ namespace CelesteMusicPlayer
         /// </summary>
         private EventHandler<object>? _audioChainCloseCompleted;
 
-        /// <summary>
-        /// B5：面板实际宽度。默认 420，窗口不够宽时收到「窗口宽 - 40」，
-        /// 免得窄窗口下面板贴满整屏、内容被挤。
-        /// </summary>
-        private double ComputeChainPanelWidth()
-        {
-            double hostWidth = RootShell?.ActualWidth ?? 0;
-            if (hostWidth <= 80)
-            {
-                return AudioChainPanelWidth;
-            }
 
-            return Math.Min(AudioChainPanelWidth, hostWidth - 40);
-        }
-
-        /// <summary>把算出来的宽度同步给开/合两个动画（XAML 里的 420 是默认值，会被这里覆盖）。</summary>
-        private void ApplyChainPanelWidthToStoryboards(double width)
-        {
-            try
-            {
-                if (AudioChainOpenStoryboard?.Children.Count > 0
-                    && AudioChainOpenStoryboard.Children[0] is Microsoft.UI.Xaml.Media.Animation.DoubleAnimation open)
-                {
-                    open.From = width;
-                }
-
-                if (AudioChainCloseStoryboard?.Children.Count > 0
-                    && AudioChainCloseStoryboard.Children[0] is Microsoft.UI.Xaml.Media.Animation.DoubleAnimation close)
-                {
-                    close.To = width;
-                }
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.ApplyChainPanelWidthToStoryboards", caught);
-            }
-        }
 
         /// <summary>打开动画的兜底复查定时器（只跑一次，用完即弃）。</summary>
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _chainOpenFallbackTimer;
 
-        /// <summary>
-        /// 兜底：面板说"已打开"但还在屏幕外（动画没跑起来）时，直接把它落到位。
-        /// 这是"第二次点击打不出来"的最后一道保险 —— 宁可没有滑动动画，也不能看不见。
-        /// </summary>
-        private void ScheduleChainOpenFallback()
-        {
-            try
-            {
-                _chainOpenFallbackTimer?.Stop();
-                _chainOpenFallbackTimer = null;
 
-                var timer = DispatcherQueue.CreateTimer();
-                timer.Interval = TimeSpan.FromMilliseconds(400);
-                timer.Tick += (_, _) =>
-                {
-                    timer.Stop();
-                    try
-                    {
-                        if (AudioChainOverlayHost?.Visibility != Visibility.Visible || AudioChainPanelTransform == null)
-                        {
-                            return;
-                        }
-
-                        if (AudioChainPanelTransform.TranslateX <= 1)
-                        {
-                            return; // 动画正常，什么都不做
-                        }
-
-                        StartupLog.Write($"[链路] 兜底落位：动画没跑起来，TranslateX={AudioChainPanelTransform.TranslateX} → 0");
-                        AudioChainPanelTransform.TranslateX = 0;
-                    }
-                    catch (Exception caught)
-                    {
-                        StartupLog.WriteException("MainWindow.ChainOpenFallback", caught);
-                    }
-                };
-                _chainOpenFallbackTimer = timer;
-                timer.Start();
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.ScheduleChainOpenFallback", caught);
-            }
-        }
-
-        /// <summary>
-        /// 音频链路面板入口（2026-10-17 起：标题栏右上角按钮；播放页那个同名按钮已隐藏）。
-        /// 按钮当开关用：再点一次收起。
-        /// </summary>
-        private void AudioChainButton_Click(object sender, RoutedEventArgs e)
-        {
-            StartupLog.Write($"[链路] 按钮点击 当前可见={(AudioChainOverlayHost?.Visibility.ToString() ?? "null")}");
-            if (AudioChainOverlayHost == null)
-            {
-                return;
-            }
-
-            // 已经开着就什么都不做（2026-10-17 用户实测：再点一次面板消失，被当成"点不出来"）。
-            // 关闭走三处：面板右上角 X、点面板外的遮罩、再点本按钮之外的任何关闭动作。
-            if (AudioChainOverlayHost.Visibility == Visibility.Visible)
-            {
-                return;
-            }
-
-            OpenAudioChainPanel();
-        }
 
         private void AudioChainScrim_Tapped(object sender, TappedRoutedEventArgs e) => HideAudioChainPanel();
 
@@ -143,26 +42,6 @@ namespace CelesteMusicPlayer
             ShowWebPage("dsp");
         }
 
-        /// <summary>
-        /// 清掉上一次「收起动画」的收尾：退订它的 Completed 并 Stop 动画。
-        /// 打开面板前必须调，否则那条迟到的 Completed 会把刚打开的面板又折叠掉。
-        /// </summary>
-        private void CancelPendingChainClose()
-        {
-            try
-            {
-                if (_audioChainCloseCompleted != null && AudioChainCloseStoryboard != null)
-                {
-                }
-
-                _audioChainCloseCompleted = null;
-                AudioChainCloseStoryboard?.Stop();
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.CancelPendingChainClose", caught);
-            }
-        }
 
         private void HideAudioChainPanel()
         {

@@ -232,39 +232,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistSongSortButton_Click(object sender, RoutedEventArgs e)
-        {
-            // 点击循环切换三种排序：标题 -> 专辑（标题）-> 专辑（时间）-> 标题
-            _artistSongSortMode = _artistSongSortMode switch
-            {
-                ArtistSongSortMode.Title => ArtistSongSortMode.AlbumTitleThenTrack,
-                ArtistSongSortMode.AlbumTitleThenTrack => ArtistSongSortMode.AlbumYearThenTrack,
-                _ => ArtistSongSortMode.Title
-            };
-
-            ArtistSongSortButton.Content = _artistSongSortMode switch
-            {
-                ArtistSongSortMode.AlbumTitleThenTrack => "排序：专辑（标题）",
-                ArtistSongSortMode.AlbumYearThenTrack => "排序：专辑（时间）",
-                _ => "排序：标题"
-            };
-
-            RebuildArtistTracks();
-        }
 
 
-        private void ArtistTrackListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-        {
-            if (_isMultiSelectMode)
-            {
-                return;
-            }
-
-            if (ArtistTrackListView.SelectedItem is PlaylistItem track)
-            {
-                PlayPlaylistItem(track);
-            }
-        }
 
 
         private void ArtistTrackListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
@@ -298,47 +267,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistTrackListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            PlaylistItem? song = null;
-            if (e.OriginalSource is DependencyObject source)
-            {
-                song = VisualTreeWalker.FindPlaylistItem(source);
-                if (song == null)
-                {
-                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
-                    if (container != null)
-                    {
-                        song = ArtistTrackListView.ItemFromContainer(container) as PlaylistItem;
-                    }
-                }
-            }
-
-            if (song == null)
-            {
-                return;
-            }
-
-            // 右键也先选中，显示主题色圆角
-            if (!_isMultiSelectMode)
-            {
-                ArtistTrackListView.SelectedItem = song;
-            }
-
-            _contextMenuSong = song;
-            var flyout = BuildPlaylistItemContextMenu(song, false);
-
-            if (e.OriginalSource is FrameworkElement fe)
-            {
-                flyout.ShowAt(fe, e.GetPosition(fe));
-            }
-            else
-            {
-                flyout.ShowAt(ArtistTrackListView, e.GetPosition(ArtistTrackListView));
-            }
-
-            e.Handled = true;
-        }
 
 
         /// <summary>从曲目集合汇总专辑条目（封面优先音轨 1）</summary>
@@ -623,18 +551,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AlbumTrackListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-        {
-            if (_isMultiSelectMode)
-            {
-                return;
-            }
-
-            if (AlbumTrackListView.SelectedItem is PlaylistItem track)
-            {
-                PlayPlaylistItem(track);
-            }
-        }
 
 
         private void AlbumTrackListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
@@ -658,46 +574,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AlbumTrackListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            PlaylistItem? song = null;
-            if (e.OriginalSource is DependencyObject source)
-            {
-                song = VisualTreeWalker.FindPlaylistItem(source);
-                if (song == null)
-                {
-                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
-                    if (container != null)
-                    {
-                        song = AlbumTrackListView.ItemFromContainer(container) as PlaylistItem;
-                    }
-                }
-            }
-
-            if (song == null)
-            {
-                return;
-            }
-
-            if (!_isMultiSelectMode)
-            {
-                AlbumTrackListView.SelectedItem = song;
-            }
-
-            _contextMenuSong = song;
-            var flyout = BuildPlaylistItemContextMenu(song, false);
-
-            if (e.OriginalSource is FrameworkElement fe)
-            {
-                flyout.ShowAt(fe, e.GetPosition(fe));
-            }
-            else
-            {
-                flyout.ShowAt(AlbumTrackListView, e.GetPosition(AlbumTrackListView));
-            }
-
-            e.Handled = true;
-        }
 
 
         // =====================================================================
@@ -956,32 +832,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>点击播放列表空白区取消当前选中（从主题色背景恢复常态）。</summary>
-        private void PlaylistList_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            if (_isMultiSelectMode)
-            {
-                return;
-            }
-
-            // 若点击落在某个列表项内，保留选中
-            Microsoft.UI.Xaml.DependencyObject? origin = e.OriginalSource as Microsoft.UI.Xaml.DependencyObject;
-            while (origin != null)
-            {
-                if (origin is ListViewItem)
-                {
-                    return;
-                }
-
-                origin = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(origin);
-            }
-
-            // 点空白：取消选中
-            if (PlaylistView.SelectedItem != null)
-            {
-                PlaylistView.SelectedItem = null;
-            }
-        }
 
         /// <summary>拖拽重排后更新歌曲序号（针对当前显示的集合），并强制刷新使序号立即生效。</summary>
         private void PlaylistView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
@@ -1013,81 +863,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-        {
-            if (_isMultiSelectMode)
-            {
-                return;
-            }
-
-            if (PlaylistView.SelectedItem is not PlaylistItem item)
-            {
-                return;
-            }
-
-            // 播放列表界面：按当前顺序播放，不把歌曲提前到最前
-            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
-            {
-                int index = FindUserPlaylistIndex(item.FilePath);
-                if (index >= 0)
-                {
-                    PlayUserPlaylistAt(index);
-                }
-
-                return;
-            }
-
-            PlayPlaylistItem(item);
-        }
 
 
-        private void PlaylistView_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            if (PlaylistListBorder.Visibility != Visibility.Visible)
-            {
-                return;
-            }
-
-            PlaylistItem? song = null;
-            if (e.OriginalSource is DependencyObject source)
-            {
-                song = VisualTreeWalker.FindPlaylistItem(source);
-                if (song == null)
-                {
-                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
-                    if (container != null)
-                    {
-                        song = PlaylistView.ItemFromContainer(container) as PlaylistItem;
-                    }
-                }
-            }
-
-            if (song == null)
-            {
-                return;
-            }
-
-            _contextMenuSong = song;
-
-            // 右键也先选中，主题色圆角与左键一致
-            if (!_isMultiSelectMode)
-            {
-                PlaylistView.SelectedItem = song;
-            }
-
-            var flyout = BuildPlaylistItemContextMenu(song, string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal));
-
-            if (e.OriginalSource is FrameworkElement fe)
-            {
-                flyout.ShowAt(fe, e.GetPosition(fe));
-            }
-            else
-            {
-                flyout.ShowAt(PlaylistView, e.GetPosition(PlaylistView));
-            }
-
-            e.Handled = true;
-        }
 
 
         /// <summary>构建歌曲右键菜单（所有歌曲列表视图共用）。inUserPlaylist 为 true 时含用户播放列表专属项。</summary>
@@ -1276,36 +1053,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>从播放队列窗口清空整个播放列表（不弹确认）。</summary>
-        internal void ClearUserPlaylistPublicFromQueue()
-        {
-            try
-            {
-                _queue.Items.Clear();
-                _queue.Index = -1;
-                if (PlaylistView.ItemsSource == _queue.Items || PlaylistView.ItemsSource != null)
-                {
-                    ApplyCategoryViewData();
-                }
-
-                StopEngineIfActive();
-                MediaPlayer? p = GetPlayer();
-                if (p != null)
-                {
-                    try
-                    {
-                        p.Source = null;
-                    }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-                }
-
-                ResetNowPlayingArtistAlbumLinks();
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("ClearQueue", ex);
-            }
-        }
 
 
         internal void NotifyCurrentPlaylistWindow()
@@ -1453,20 +1200,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private IReadOnlyList<PlaylistItem> GetMultiSelectSongSource(ListView target)
-        {
-            if (target == ArtistTrackListView)
-            {
-                return _artistTracks;
-            }
-
-            if (target == AlbumTrackListView)
-            {
-                return _albumTracks;
-            }
-
-            return GetActiveSongCollection();
-        }
 
 
         private void UpdateUserPlaylistActionBarVisibility()
@@ -1477,73 +1210,9 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ExitSongMultiSelectUiOnly()
-        {
-            if (_multiSelectTargetList == null)
-            {
-                return;
-            }
-
-            ListView target = _multiSelectTargetList;
-            SetListSelectionMode(target, ListViewSelectionMode.Single);
-
-            if (target == PlaylistView && _playlistItemDefaultStyle != null)
-            {
-                PlaylistView.ItemContainerStyle = _playlistItemDefaultStyle;
-            }
-            else if (target == ArtistTrackListView && _artistTrackItemDefaultStyle != null)
-            {
-                ArtistTrackListView.ItemContainerStyle = _artistTrackItemDefaultStyle;
-            }
-            else if (target == AlbumTrackListView && _albumTrackItemDefaultStyle != null)
-            {
-                AlbumTrackListView.ItemContainerStyle = _albumTrackItemDefaultStyle;
-            }
-
-            ApplyAccentSelectionResources(target);
-            _multiSelectTargetList = null;
-        }
 
 
-        private void SetPlaylistSelectionMode(ListViewSelectionMode mode)
-            => SetListSelectionMode(PlaylistView, mode);
 
-        private void MultiSelectPrimaryActionButton_Click(object sender, RoutedEventArgs e)
-        {
-            var selected = GetSelectedMultiSelectSongs();
-            if (selected.Count == 0)
-            {
-                return;
-            }
-
-            bool isUserPlaylist = _multiSelectTargetList == PlaylistView
-                && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
-            bool isNamedPlaylistDetail = _multiSelectTargetList == PlaylistDetailListView;
-            bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
-                || _multiSelectTargetList == ArtistTrackListView;
-            if (isUserPlaylist)
-            {
-                RemoveSongsFromUserPlaylist(selected);
-            }
-            else if (isNamedPlaylistDetail)
-            {
-                // 命中单详情页多选 → 从当前命名单删除勾选的歌
-                RemoveSongsFromCurrentPlaylistDetail(selected);
-            }
-            else if (isDetailSongList)
-            {
-                // 专辑/艺术家/专辑艺术家详情页多选 → 主按钮「添加至播放队列」；
-                // 「添加到播放列表」由右下角副按钮（MultiSelectAddToPlaylistButton）负责。
-                AddSongsToUserPlaylist(selected);
-            }
-            else
-            {
-                // 其它视图多选：添加到播放队列
-                AddSongsToUserPlaylist(selected);
-            }
-
-            ExitMultiSelectMode();
-        }
 
 
         private void MultiSelectAddToPlaylistButton_Click(object sender, RoutedEventArgs e)
@@ -2405,21 +2074,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void RefreshSongListSelectionChrome(ListView list)
-        {
-            if (ReferenceEquals(list, ArtistTrackListView))
-            {
-                RefreshArtistTrackSelectionChrome();
-            }
-            else if (ReferenceEquals(list, AlbumTrackListView))
-            {
-                RefreshAlbumTrackSelectionChrome();
-            }
-            else
-            {
-                RefreshPlaylistSelectionChrome();
-            }
-        }
 
 
         private void RefreshAlbumTrackSelectionChrome()

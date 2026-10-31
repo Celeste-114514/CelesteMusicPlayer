@@ -236,38 +236,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>压缩器预设：按现成口径一键铺开参数，避免用户面对七条滑杆无从下手。</summary>
-        private void DspCompPreset_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button b || b.Tag is not string tag)
-            {
-                return;
-            }
-
-            // (阈值, 比率, 启动, 释放, 拐点, 补偿, 干湿%)
-            (double threshold, double ratio, double attack, double release, double knee, double makeup, double mix) preset =
-                tag switch
-                {
-                    "gentle" => (-24.0, 2.0, 20.0, 200.0, 12.0, 0.0, 100.0),
-                    "medium" => (-18.0, 4.0, 10.0, 120.0, 6.0, 0.0, 100.0),
-                    "heavy" => (-12.0, 8.0, 3.0, 60.0, 3.0, 3.0, 100.0),
-                    // 人声：比中速更柔、补偿一点点把齿音之外的部分托回来
-                    "vocal" => (-20.0, 3.0, 8.0, 150.0, 8.0, 1.5, 100.0),
-                    // 乐器/打击：启动快、压缩比高，压住瞬态但不拖尾
-                    "drums" => (-14.0, 6.0, 2.0, 80.0, 3.0, 1.0, 100.0),
-                    // 总线：几乎不压，只做兜底粘合并保留动态
-                    "bus" => (-22.0, 2.5, 30.0, 300.0, 12.0, 0.0, 100.0),
-                    _ => (-18.0, 4.0, 10.0, 120.0, 6.0, 0.0, 100.0)
-                };
-
-            DspCompThresholdSlider.Value = preset.threshold;
-
-            PushDspRackToEngine();
-
-            // 预设一次改写七条滑杆，每条的 ValueChanged 都会触发一次重画；
-            // 这里最后统一再画一次即可（Redraw 是全清重建，重复调用无害）。
-            RedrawDspCompTransferCurve();
-        }
 
         // 压缩器每拍刷新（仅本页可见时轮询）：压缩量读数 + 8 秒折线 + 入口电平。
         // 绘制全部交给 MainWindow.DspComp.cs，这里只负责把内核读数取出来递过去。
@@ -355,31 +323,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void DspFieldPreset_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button b || b.Tag is not string tag)
-            {
-                return;
-            }
-
-            // (宽度%, 中间 dB, 两侧 dB)
-            (double width, double center, double side) preset = tag switch
-            {
-                "wide" => (130.0, 0.0, 0.0),
-                "vocal" => (100.0, 3.0, 0.0),
-                "mono" => (0.0, 0.0, 0.0),
-                // 氛围感：两侧抬 3dB 再拉宽，混响和声场会明显往外扩
-                "ambient" => (140.0, 0.0, 3.0),
-                _ => (100.0, 0.0, 0.0)
-            };
-
-            DspFieldToggle.IsOn = true;
-            DspFieldWidthSlider.Value = preset.width;
-            DspFieldSideSlider.Value = preset.side;
-
-            PushDspRackToEngine();
-            RedrawDspFieldRing();
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 事件：声道矩阵
@@ -433,38 +376,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void DspMatrixPreset_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button b || b.Tag is not string tag)
-            {
-                return;
-            }
-
-            // (左→左, 右→左, 左→右, 右→右)
-            (double ll, double rl, double lr, double rr) preset = tag switch
-            {
-                "swap" => (0.0, 1.0, 1.0, 0.0),
-                "mono" => (0.5, 0.5, 0.5, 0.5),
-                "karaoke" => (1.0, -1.0, -1.0, 1.0),
-                // 加宽：把对侧以反相、小比例混回来，抵消一部分左右共同的成分（≈ 削弱中间、放大两侧）。
-                // 系数刻意压在 1.25 以内，超过就容易让中间塌陷、人声失真。
-                "widen" => (1.25, -0.25, -0.25, 1.25),
-                "leftonly" => (1.0, 0.0, 0.0, 0.0),
-                "rightonly" => (0.0, 0.0, 0.0, 1.0),
-                _ => (1.0, 0.0, 0.0, 1.0)
-            };
-
-            DspMatrixToggle.IsOn = true;
-            DspMatrixLlSlider.Value = preset.ll;
-            DspMatrixRlSlider.Value = preset.rl;
-            DspMatrixLrSlider.Value = preset.lr;
-            DspMatrixRrSlider.Value = preset.rr;
-
-            PushDspRackToEngine();
-
-            // 流图会跟着四个系数变，没必要等滑杆各自的 ValueChanged 慢慢重画
-            RedrawDspMatrixFlow();
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 机架编排（链路全景视图）—— 行模型 DspRackRow 见本文件底部顶层类

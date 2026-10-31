@@ -62,98 +62,9 @@ namespace CelesteMusicPlayer
         // 拖动交互
         // ─────────────────────────────────────────────────────────────
 
-        private void DspFieldRing_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            if (!_dspRackReady || DspFieldRingCanvas == null)
-            {
-                return;
-            }
 
-            try
-            {
-                _dspFieldDragging = true;
-                _dspFieldSuppressPush = true;
-                DspFieldRingCanvas.CapturePointer(e.Pointer);
-                ApplyDspFieldDrag(e.GetCurrentPoint(DspFieldRingCanvas).Position);
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.DspFieldRing_PointerPressed", caught);
-            }
-        }
 
-        private void DspFieldRing_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            if (!_dspFieldDragging || DspFieldRingCanvas == null)
-            {
-                return;
-            }
 
-            try
-            {
-                ApplyDspFieldDrag(e.GetCurrentPoint(DspFieldRingCanvas).Position);
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.DspFieldRing_PointerMoved", caught);
-            }
-        }
-
-        private void DspFieldRing_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (!_dspFieldDragging)
-            {
-                return;
-            }
-
-            _dspFieldDragging = false;
-            _dspFieldSuppressPush = false;
-
-            try
-            {
-                DspFieldRingCanvas?.ReleasePointerCapture(e.Pointer);
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.DspFieldRing_PointerReleased.Capture", caught);
-            }
-
-            // 松手才真正落盘 + 下发：拖动过程中已经画好了，这里补最后一次
-            PushDspRackToEngine();
-        }
-
-        /// <summary>
-        /// 把指针位置翻译成三个参数：横向 → 宽度，纵向 → 中间/两侧的偏向。
-        /// 圆环本身容许上下溢出，位置先按半径归一化再 clamp，指针跑到外面也不会出怪值。
-        /// </summary>
-        private void ApplyDspFieldDrag(Windows.Foundation.Point pt)
-        {
-            var (cx, cy, r) = GetDspFieldRingGeometry();
-            if (r <= 1)
-            {
-                return;
-            }
-
-            double nx = Math.Clamp((pt.X - cx) / r, -1.0, 1.0);
-            double ny = Math.Clamp((cy - pt.Y) / r, -1.0, 1.0); // 向上为正
-
-            double width = Math.Clamp((nx + 1.0) * 100.0, 0.0, 200.0);
-            double tilt = ny * FieldDragTiltDb;
-
-            if (DspFieldWidthSlider != null)
-            {
-                DspFieldWidthSlider.Value = width;
-            }
-
-            if (DspFieldCenterSlider != null)
-            {
-            }
-
-            if (DspFieldSideSlider != null)
-            {
-                DspFieldSideSlider.Value = Math.Clamp(-tilt, DspFieldSideSlider.Minimum, DspFieldSideSlider.Maximum);
-            }
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 绘制 + 读数

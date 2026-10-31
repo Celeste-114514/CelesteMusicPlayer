@@ -163,20 +163,5 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void AlbumDetailPreloadClearButton_Click(object sender, RoutedEventArgs e)
-        {
-            int n = 0;
-            foreach (string f in _albumDetailDsdFiles)
-            {
-                if (DsdPreloadService.DeleteFor(f))
-                {
-                    n++;
-                }
-            }
-
-            if (AlbumDetailPreloadHint != null)
-            {
-            }
-        }
     }
 }

@@ -140,23 +140,6 @@ namespace CelesteMusicPlayer
             RoomIrStatus("已清除。");
         }
 
-        private void RoomIrEnabledToggle_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (!_roomIrUiReady || RoomIrEnabledToggle == null)
-            {
-                return;
-            }
-
-            try
-            {
-                // 没有 IR 就不允许开：开了也是空卷积，白占算力还让人以为生效了
-                ImportExtraParameterInput(sender);
-            }
-            catch (InvalidOperationException ex)
-            {
-                RoomIrStatus(ex.Message);
-            }
-        }
 
         private void RoomIrGainSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {

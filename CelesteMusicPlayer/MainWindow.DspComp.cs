@@ -127,17 +127,6 @@ namespace CelesteMusicPlayer
             RedrawDspCompGrHistory();
         }
 
-        private void DspCompMeterMode_Toggled(object sender, RoutedEventArgs e)
-        {
-            // XAML 里写了 IsOn="True" 初值 + Toggled 绑定 → 解析期会就地触发一次，
-            // 此时 DspCompPeakToggle 自己都可能还没连上，守卫挡掉后由 Tank 首拍补齐。
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            _dspCompMeterShowsPeak = DspCompPeakToggle?.IsOn ?? true;
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 每拍刷新：压缩量 + 入口电平

@@ -458,22 +458,6 @@ namespace CelesteMusicPlayer
 
         // ---------- 余量快捷预设 ----------
 
-        private void DspHeadroomPreset_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button b || b.Tag is not string tag || !double.TryParse(tag, out double db))
-            {
-                return;
-            }
-
-            if (AudioFxSafetyHeadroomSlider == null)
-            {
-                return;
-            }
-
-            AudioFxSafetyHeadroomSlider.Value = Math.Clamp(db, AudioFxSafetyHeadroomSlider.Minimum, AudioFxSafetyHeadroomSlider.Maximum);
-            ApplyDspToEngine();
-            UpdateDspNavIndicators();
-        }
 
         // ---------- FIR 快捷 trim / 安全启用 ----------
 

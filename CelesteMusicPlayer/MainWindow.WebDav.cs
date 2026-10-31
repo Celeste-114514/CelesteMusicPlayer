@@ -252,44 +252,6 @@ namespace CelesteMusicPlayer
         // 右侧详情：当前文件夹里的歌曲
         // =====================================================================
 
-        /// <summary>双击文件夹 / 点箭头：列出该网络文件夹里的音频文件。</summary>
-        private async void LoadWebDavFolderSongs(FolderBrowserItem item)
-        {
-            if (MediaDetailsHeader == null || MediaDetailsList == null)
-            {
-                return;
-            }
-
-            WebDavLocation? loc = GetWebDavLocation();
-            if (loc == null)
-            {
-                return;
-            }
-
-            string folderPath = item.IsFolder ? item.RemotePath : GetRemoteParent(item.RemotePath);
-            string header = item.IsFolder ? item.FullPath : folderPath;
-
-
-            try
-            {
-                List<PlaylistItem> songs = await Task.Run(async () =>
-                {
-                    using WebDavClient client = loc.CreateClient();
-                    IReadOnlyList<WebDavEntry> entries = await client.ListAsync(folderPath);
-                    return WebDavBrowseRules.BuildSongList(loc, entries, folderPath, AudioExtensions, CreatePlaylistItemFromPath);
-                });
-
-                for (int i = 0; i < songs.Count; i++)
-                {
-                    songs[i].Index = i + 1;
-                }
-
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.WebDav.cs", caught);
-            }
-        }
 
         // =====================================================================
         // 播放：先下载到缓存，再走现有播放链路

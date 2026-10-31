@@ -136,22 +136,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void OpraVendorWall_ItemClick(object sender, ItemClickEventArgs e)
-        {
-            if (e.ClickedItem is not OpraVendorChip chip)
-            {
-                return;
-            }
-
-            if (OpraSearchBox != null)
-            {
-            }
-
-            if (OpraSearchButton != null)
-            {
-                OpraSearchButton_Click(OpraSearchButton, new RoutedEventArgs());
-            }
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 最近用过 / 收藏
@@ -193,55 +177,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void OpraRecentList_ItemClick(object sender, ItemClickEventArgs e)
-        {
-            if (e.ClickedItem is not OpraRecentEntry entry)
-            {
-                return;
-            }
 
-            // 历史条目只记住了型号和曲线 ID，型号本体还在 OPRA 库里 —— 直接按型号名搜一遍，
-            // 搜不到就说明本地缓存被清过或该条已被上游下架，如实告诉用户。
-            if (!string.IsNullOrWhiteSpace(entry.ProductName) && OpraSearchBox != null)
-            {
-                OpraSearchButton_Click(OpraSearchButton ?? new Button(), new RoutedEventArgs());
-
-                if (OpraEqStatusText != null)
-                {
-                }
-            }
-        }
-
-        private void OpraFavoriteButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_opraPreviewEq == null || _opraPreviewProduct == null)
-            {
-                return;
-            }
-
-            try
-            {
-                OpraHistoryItem item = new(
-                    _opraPreviewEq.EqId,
-                    _opraPreviewProduct.ProductId,
-                    _opraPreviewProduct.Name,
-                    _opraPreviewProduct.VendorName,
-                    _opraPreviewEq.Author,
-                    _opraPreviewEq.BandCount,
-                    _opraPreviewEq.PreampDb);
-
-                bool nowFavorite = OpraHistoryStore.ToggleFavorite(item);
-                if (OpraFavoriteButton != null)
-                {
-                }
-
-                RefreshOpraRecentList();
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.OpraFavoriteButton_Click", caught);
-            }
-        }
 
         /// <summary>应用成功后把这条记进「最近用过」（收藏不动）。</summary>
         private void NoteOpraApplied(OpraCorrection corr)
@@ -257,66 +193,7 @@ namespace CelesteMusicPlayer
         // 徽章 + 曲线预览
         // ─────────────────────────────────────────────────────────────
 
-        /// <summary>
-        /// 选中一条曲线后更新徽章并画预览。
-        /// AutoEq 的判断只能靠作者字段里是否含 "autoeq" —— OPRA 库没有单独的来源字段，
-        /// 这是一条保守的字符串匹配：命中就标，不命中不硬猜。
-        /// </summary>
-        private void UpdateOpraPreview(OpraSearchResult product, OpraProductEqSummary eq)
-        {
-            _opraPreviewProduct = product;
-            _opraPreviewEq = eq;
 
-            try
-            {
-                bool autoEq = IsCommunityAuthor(eq.Author);
-
-                if (OpraAutoEqBadge != null)
-                {
-                }
-
-                // 来源徽章由 UpdateOpraSourceBadge 统一刷新（含「点此筛选」文案与选中态）
-                UpdateOpraSourceBadge();
-
-                if (OpraFavoriteButton != null)
-                {
-                }
-
-                RedrawOpraPreview();
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.UpdateOpraPreview", caught);
-            }
-        }
-
-        private void ClearOpraPreview()
-        {
-            _opraPreviewEq = null;
-            _opraPreviewProduct = null;
-            _opraSourceFilter = null;
-
-            if (OpraAutoEqBadge != null)
-            {
-            }
-
-            if (OpraSampleBadge != null)
-            {
-            }
-
-            if (OpraFavoriteButton != null)
-            {
-            }
-
-            if (OpraPreviewCanvas != null)
-            {
-                OpraPreviewCanvas.Children.Clear();
-            }
-
-            if (OpraPreviewNote != null)
-            {
-            }
-        }
 
         private void OpraPreviewCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
         {

@@ -166,8 +166,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ApplyPlaylistItemSelectionChrome(ListViewItem container, PlaylistItem song)
-            => ApplySongListItemSelectionChrome(PlaylistView, container, song);
 
         // =====================================================================
         // 底部控制按钮
@@ -331,24 +329,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            // 波形进度条必须随播放位置实时重绘,不能被 UI 更新标志拦截(否则播放中波形停住/错误)
-            if (_waveformProgress)
-            {
-                RedrawProgressStyle();
-            }
-
-            if (_isUpdatingProgressUi)
-            {
-                return;
-            }
-
-            if (_isUserSeeking)
-            {
-                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(e.NewValue));
-            }
-        }
 
 
         private void SeekToSliderValue()
@@ -1967,29 +1947,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>悬停超链接：显示下划线（无主题色，正常文字色 + 悬停下划线标识可点击）。</summary>
-        private void NowPlayingArtistLink_PointerEntered(object sender, PointerRoutedEventArgs e)
-        {
-            if (NowPlayingArtistText != null) NowPlayingArtistText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
-        }
 
 
-        private void NowPlayingArtistLink_PointerExited(object sender, PointerRoutedEventArgs e)
-        {
-            if (NowPlayingArtistText != null) NowPlayingArtistText.TextDecorations = Windows.UI.Text.TextDecorations.None;
-        }
 
 
-        private void NowPlayingAlbumLink_PointerEntered(object sender, PointerRoutedEventArgs e)
-        {
-            if (NowPlayingAlbumText != null) NowPlayingAlbumText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
-        }
 
 
-        private void NowPlayingAlbumLink_PointerExited(object sender, PointerRoutedEventArgs e)
-        {
-            if (NowPlayingAlbumText != null) NowPlayingAlbumText.TextDecorations = Windows.UI.Text.TextDecorations.None;
-        }
 
 
         /// <summary>重置艺术家/专辑超链接为空占位（未播放时禁用）。</summary>
@@ -2010,33 +1973,6 @@ namespace CelesteMusicPlayer
         // （LegacyControls 造的那个 Button 只被设置 IsEnabled，没人订阅），属于死代码；
         // 新外壳的艺术家详情在 artists.js 里，走网页导航。
 
-        /// <summary>点击专辑超链接：收起播放面板并跳转到对应专辑详情页。</summary>
-        private void NowPlayingAlbumLinkButton_Click(dynamic sender, dynamic e)
-        {
-            string albumName = NowPlayingAlbumText?.Text?.Trim() ?? "";
-            if (string.IsNullOrWhiteSpace(albumName))
-            {
-                return;
-            }
-
-            string artistName = NowPlayingArtistText?.Text?.Trim() ?? "";
-            AlbumEntry? entry = _albums.FirstOrDefault(
-                a => string.Equals(a.Name, albumName, StringComparison.OrdinalIgnoreCase));
-            if (entry == null)
-            {
-                entry = BuildAlbumEntriesFromTracks(_playlist).FirstOrDefault(
-                    a => string.Equals(a.Name, albumName, StringComparison.OrdinalIgnoreCase));
-            }
-            if (entry == null)
-            {
-                entry = new AlbumEntry { Name = albumName, Artist = artistName };
-            }
-
-            // 从播放面板跳转：先切到「专辑」分类并真正显示视图根，再打开详情，左侧分类与右侧面板同步
-            _currentCategory = "Albums";
-            ApplyCategoryViewData();
-            DispatcherQueue.TryEnqueue(() => OpenAlbumDetail(entry!, fromArtist: false));
-        }
 
 
         private void UpdateNowPlayingArtistAlbumText(PlaylistItem item)

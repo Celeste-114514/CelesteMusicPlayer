@@ -229,11 +229,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaybackOrderButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            e.Handled = true;
-            ShowPlaybackOrderMenu(PlaybackOrderButton, e.GetPosition(PlaybackOrderButton));
-        }
 
 
         private void ShowPlaybackOrderMenu(FrameworkElement target, Windows.Foundation.Point position)

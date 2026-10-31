@@ -213,36 +213,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void OutputBufferCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                int idx = OutputBufferCombo?.SelectedIndex ?? -1;
-                if (idx < 0 || idx >= OutputBufferOptions.Length)
-                {
-                    return;
-                }
-
-                int ms = OutputBufferOptions[idx].Ms;
-                if (OutputBufferHintText != null)
-                {
-                }
-
-                AppSettingsState s = AppSettingsStore.Load();
-                if (s.OutputBufferMs != ms)
-                {
-                    s.OutputBufferMs = ms;
-                    AppSettingsStore.Save(s);
-                }
-
-                _audioEngine?.SetOutputBufferMs(ms);
-                StartupLog.Write("[输出缓冲] 设置为 " + ms + " ms（下一首生效）");
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
-            }
-        }
 
         #endregion
     }

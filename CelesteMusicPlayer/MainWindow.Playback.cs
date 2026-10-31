@@ -435,16 +435,6 @@ namespace CelesteMusicPlayer
         private Brush CreateNowPlayingStyleAcrylicBrush()
             => FrostedGlass.CreatePanelBrush(ResolveUiBaseTintColor());
 
-        /// <summary>
-        /// 深色 Tint 的 Acrylic：提高霜化/模糊感，色调跟整体 UI，避免发白。
-        /// 应用于播放信息页内容面板（底层），后续由封面动态背景覆盖。
-        /// </summary>
-        private void ApplyNowPlayingCardAcrylic()
-        {
-            if (NowPlayingPaneContent != null)
-            {
-            }
-        }
 
 
         /// <summary>外围阴影（由动态背景/遮罩统一处理，无独立阴影层）。</summary>
@@ -910,45 +900,6 @@ namespace CelesteMusicPlayer
 
         private MediaPlayer? GetPlayer() => _mediaPlayer ?? PlayerElement?.MediaPlayer;
 
-        /// <summary>汉堡菜单：选择文件 / 文件夹 / 重新扫描</summary>
-        private void SelectLocalAudioButton_Click(object sender, RoutedEventArgs e)
-        {
-            var flyout = new MenuFlyout
-            {
-                Placement = FlyoutPlacementMode.Bottom
-            };
-
-            var fileItem = new MenuFlyoutItem { Text = "选择文件…" };
-            fileItem.Icon = new FontIcon { Glyph = "\uE710" }; // Add
-            fileItem.Click += OpenFileButton_Click;
-
-            var folderItem = new MenuFlyoutItem { Text = "选择文件夹…" };
-            folderItem.Icon = new FontIcon { Glyph = "\uE8B7" }; // Folder
-            folderItem.Click += OpenFolderButton_Click;
-
-            // 「重新扫描本地文件」菜单项 2026-10-31 移除：这个原生菜单只挂在已停用的窗口上
-            // （CurrentPlaylistWindow 在 csproj 里 Compile Remove），运行时点不到。
-            // 重扫逻辑本身还在（媒体库监听会调），只是不再从这个死菜单入口进。
-
-            flyout.Items.Add(fileItem);
-            flyout.Items.Add(folderItem);
-            flyout.Items.Add(new MenuFlyoutSeparator());
-
-            var mediaLibItem = new MenuFlyoutItem { Text = "媒体库" };
-            mediaLibItem.Icon = new FontIcon { Glyph = "\uE838" }; // MusicLibrary
-            mediaLibItem.Click += (_, _) => ShowWebPage("settings");
-            flyout.Items.Add(mediaLibItem);
-
-            var settingsItem = new MenuFlyoutItem { Text = "选项设置" };
-            settingsItem.Icon = new FontIcon { Glyph = "\uE713" };
-            settingsItem.Click += (_, _) => ShowWebPage("settings");
-            flyout.Items.Add(settingsItem);
-
-            flyout.ShowAt(SelectLocalAudioButton, new FlyoutShowOptions
-            {
-                Placement = FlyoutPlacementMode.Bottom
-            });
-        }
 
 
         // ---------------------------------------------------------------------
@@ -1691,28 +1642,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistDetailListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-        {
-            // 仅当实际点到歌曲行时才播放（空白区/容器双击不触发整列表播放）
-            PlaylistItem? song = null;
-            if (e.OriginalSource is DependencyObject source)
-            {
-                song = VisualTreeWalker.FindPlaylistItem(source);
-                if (song == null)
-                {
-                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
-                    if (container != null)
-                    {
-                        song = PlaylistDetailListView.ItemFromContainer(container) as PlaylistItem;
-                    }
-                }
-            }
-
-            if (song != null && !string.IsNullOrEmpty(_currentPlaylistDetail) && !string.IsNullOrEmpty(song.FilePath))
-            {
-                PlayNamedPlaylistFromTrack(_currentPlaylistDetail, song.FilePath);
-            }
-        }
 
 
         /// <summary>命中单详情双击/指定某首先：把命名单载入当前队列并定位播放该首。</summary>
@@ -1740,67 +1669,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistDetailListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            var song = (e.OriginalSource as FrameworkElement)?.DataContext as PlaylistItem;
-            if (song == null) return;
-            var flyout = BuildPlaylistItemContextMenu(song, false);
-            (e.OriginalSource as FrameworkElement)?.DispatcherQueue.TryEnqueue(() => flyout.ShowAt(PlaylistDetailListView, e.GetPosition(PlaylistDetailListView)));
-        }
 
 
-        private void PlaylistWallGridView_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            PlaylistCardViewModel? vm = (e.OriginalSource as FrameworkElement)?.DataContext as PlaylistCardViewModel;
-            if (vm == null)
-            {
-                return;
-            }
-
-            var flyout = new MenuFlyout();
-
-            var rename = new MenuFlyoutItem { Text = "重命名", Icon = new FontIcon { Glyph = "\uE8AC" } };
-            rename.Click += async (_, _) => await RenamePlaylistFromWallAsync(vm);
-            flyout.Items.Add(rename);
-            var addToQueue = new MenuFlyoutItem { Text = "添加到播放队列", Icon = new FontIcon { Glyph = "\uE710" } };
-            addToQueue.Click += (_, _) => AddNamedPlaylistToQueue(vm.Name);
-            flyout.Items.Add(addToQueue);
-            var delete = new MenuFlyoutItem { Text = "删除", Icon = new FontIcon { Glyph = "\uE74D" } };
-            delete.Click += (_, _) =>
-            {
-                if (!string.Equals(vm.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
-                {
-                    NamedPlaylistStore.Delete(vm.Name);
-                    PlaylistLibraryService.ClearCustomCover(vm.Name);
-                    PlaylistLibraryService.Refresh();
-                    ApplyPlaylistWallCategory();
-                }
-            };
-            flyout.Items.Add(delete);
-            var exportOne = new MenuFlyoutItem { Text = "导出（m3u8）", Icon = new FontIcon { Glyph = "\uE896" } };
-            exportOne.Click += async (_, _) => await ExportOnePlaylistAsync(vm);
-            flyout.Items.Add(exportOne);
-            var multi = new MenuFlyoutItem { Text = "多选", Icon = new FontIcon { Glyph = "\uE8B1" } };
-            multi.Click += (_, _) => EnterPlaylistWallMultiSelect(vm);
-            flyout.Items.Add(multi);
-            flyout.Items.Add(new MenuFlyoutSeparator());
-
-            var local = new MenuFlyoutItem { Text = "设置封面（本地图片…）", Icon = new FontIcon { Glyph = "\uE710" } };
-            local.Click += async (_, _) => await SetPlaylistCoverFromLocalAsync(vm);
-            flyout.Items.Add(local);
-            var web = new MenuFlyoutItem { Text = "从网络搜索封面…", Icon = new FontIcon { Glyph = "\uE774" } };
-            web.Click += async (_, _) => await SetPlaylistCoverFromWebAsync(vm);
-            flyout.Items.Add(web);
-            var restore = new MenuFlyoutItem { Text = "恢复默认（首曲封面）", Icon = new FontIcon { Glyph = "\uE74D" } };
-            restore.Click += (_, _) =>
-            {
-                PlaylistLibraryService.ClearCustomCover(vm.Name);
-                ApplyPlaylistWallCategory();
-            };
-            flyout.Items.Add(restore);
-
-            flyout.ShowAt(PlaylistWallGridView, e.GetPosition(PlaylistWallGridView));
-        }
 
 
         private async System.Threading.Tasks.Task SetPlaylistCoverFromLocalAsync(PlaylistCardViewModel vm)
@@ -1882,10 +1752,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void EnterPlaylistWallMultiSelect(PlaylistCardViewModel anchor)
-        {
-            AttachRangeMultiSelect(PlaylistWallGridView);
-        }
 
 
         private void ExitPlaylistWallMultiSelect()
@@ -1896,32 +1762,8 @@ namespace CelesteMusicPlayer
 
         private void PlaylistWallMultiExitButton_Click(object sender, RoutedEventArgs e) => ExitPlaylistWallMultiSelect();
 
-        private void PlaylistWallMultiAddToQueue_Click(object sender, RoutedEventArgs e)
-        {
-            var selected = PlaylistWallGridView.SelectedItems.OfType<PlaylistCardViewModel>().ToList();
-            foreach (var vm in selected)
-            {
-                AddNamedPlaylistToQueue(vm.Name);
-            }
-            ExitPlaylistWallMultiSelect();
-        }
 
 
-        private void PlaylistWallMultiDelete_Click(object sender, RoutedEventArgs e)
-        {
-            var selected = PlaylistWallGridView.SelectedItems.OfType<PlaylistCardViewModel>().ToList();
-            foreach (var vm in selected)
-            {
-                if (!string.Equals(vm.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
-                {
-                    NamedPlaylistStore.Delete(vm.Name);
-                    PlaylistLibraryService.ClearCustomCover(vm.Name);
-                }
-            }
-            PlaylistLibraryService.Refresh();
-            ApplyPlaylistWallCategory();
-            ExitPlaylistWallMultiSelect();
-        }
 
 
         private async System.Threading.Tasks.Task SetPlaylistCoverFromWebAsync(PlaylistCardViewModel vm)
@@ -2217,115 +2059,10 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>双击文件夹或点箭头：枚举该文件夹内歌曲并填充右侧详情区。</summary>
-        private void LoadMediaFolderSongs(FolderBrowserItem item)
-        {
-            if (MediaDetailsHeader == null || MediaDetailsList == null)
-            {
-                return;
-            }
 
 
-            // 后台线程枚举+读取标签，避免大文件夹卡 UI
-
-            string loadedPath = item.FullPath;
-            bool isFolder = item.IsFolder;
-            _ = System.Threading.Tasks.Task.Run(() =>
-            {
-                string[] paths = isFolder
-                    ? LibraryFolderScan.AudioFiles(loadedPath).ToArray()
-                    : (System.IO.File.Exists(loadedPath) ? new[] { loadedPath } : Array.Empty<string>());
-
-                var songs = new List<PlaylistItem>();
-                foreach (string path in paths)
-                {
-                    if (!System.IO.File.Exists(path))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        PlaylistItem p = CreatePlaylistItemFromPath(path);
-                        songs.Add(p);
-                    }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-                }
-
-                // 按专辑真实顺序（Disc → Track）排列，避免纯文件名字母序把第 1 首排到别处
-                songs = LibraryFolderScan.OrderAlbumTracks(songs);
-
-                for (int i = 0; i < songs.Count; i++)
-                {
-                    songs[i].Index = i + 1;
-                }
-
-                return songs;
-            }).ContinueWith(t =>
-            {
-                try
-                {
-                    var songs = t.Result;
-                    DispatcherQueue.TryEnqueue(() =>
-                    {
-                        if (MediaDetailsList == null || MediaDetailsHeader == null)
-                        {
-                            return;
-                        }
-
-                        if (MediaOptionsButton != null)
-                        {
-                        }
-
-                    });
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            }, System.Threading.Tasks.TaskScheduler.Default);
-        }
 
 
-        /// <summary>询问是否把歌曲移入回收站并从磁盘删除。</summary>
-        private async System.Threading.Tasks.Task DeleteMediaSongWithConfirmAsync(PlaylistItem song)
-        {
-            try
-            {
-                var dialog = new ContentDialog
-                {
-                    Title = "从媒体库中删除",
-                    Content = $"确定要把该歌曲移动到回收站并从磁盘删除吗？\n\n{song.FilePath}",
-                    PrimaryButtonText = "删除",
-                    CloseButtonText = "取消",
-                    DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = Content.XamlRoot
-                };
-                ColorHelper.ApplyDialogAccent(dialog);
-                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
-                {
-                    await DeleteSongFromDiskAsync(song);
-                    // 重新加载当前详情列表（后台）
-                    if (FolderBrowserView.SelectedItem is FolderBrowserItem f)
-                    {
-                        LoadMediaFolderSongs(f);
-                    }
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        private void RefreshMediaSongSelectionChrome()
-        {
-            if (MediaDetailsList == null)
-            {
-                return;
-            }
-
-            var realized = FindRealizedListViewContainers(MediaDetailsList);
-            foreach ((ListViewItem c, PlaylistItem s) in realized)
-            {
-                ApplyMediaSongSelectionChrome(MediaDetailsList, c, s);
-            }
-        }
 
 
         private static List<(ListViewItem, PlaylistItem)> FindRealizedListViewContainers(ListView list)
@@ -2413,63 +2150,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>多选删除：询问后把选中的歌曲移到回收站并从磁盘删除。</summary>
-        private async System.Threading.Tasks.Task DeleteMediaSongsConfirmAsync(IReadOnlyList<PlaylistItem> songs)
-        {
-            try
-            {
-                if (songs.Count == 0)
-                {
-                    return;
-                }
-
-                var dialog = new ContentDialog
-                {
-                    Title = "从媒体库中删除",
-                    Content = $"确定要把选中的 {songs.Count} 个文件移动到回收站并从磁盘删除吗？",
-                    PrimaryButtonText = "删除",
-                    CloseButtonText = "取消",
-                    DefaultButton = ContentDialogButton.Close,
-                    XamlRoot = Content.XamlRoot
-                };
-                ColorHelper.ApplyDialogAccent(dialog);
-                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-                {
-                    return;
-                }
-
-                foreach (PlaylistItem s in songs)
-                {
-                    await DeleteSongFromDiskAsync(s);
-                }
-
-                // 重新加载当前详情列表
-                if (FolderBrowserView.SelectedItem is FolderBrowserItem f)
-                {
-                    LoadMediaFolderSongs(f);
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
 
 
-        /// <summary>把单曲加入播放队列末尾。</summary>
-        private System.Threading.Tasks.Task AddToUserPlaylistBack(PlaylistItem song)
-        {
-            try
-            {
-                _queue.Items.Add(song);
-                RenumberCollection(_queue.Items);
-                if (_currentCategory == "UserPlaylist")
-                {
-                    PlaylistView.ItemsSource = null;
-                    PlaylistView.ItemsSource = _queue.Items;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            return System.Threading.Tasks.Task.CompletedTask;
-        }
 
 
         private PlaylistItem? EnsureTrackInLibrary(string filePath)

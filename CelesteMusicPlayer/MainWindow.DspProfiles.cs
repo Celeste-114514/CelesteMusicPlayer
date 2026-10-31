@@ -348,11 +348,6 @@ namespace CelesteMusicPlayer
             UpdateDspProfileButtons();
         }
 
-        /// <summary>「保存为方案」：把当前整套设置存成新方案；同名则覆盖更新。</summary>
-        private void DspProfileSave_Click(object sender, RoutedEventArgs e)
-        {
-            SaveDspProfileCore(DspProfileNameBox?.Text ?? string.Empty);
-        }
 
         /// <summary>保存方案核心（网页「音效处理」页直接调，name 由调用方给）。</summary>
         internal void SaveDspProfileCore(string rawName)
