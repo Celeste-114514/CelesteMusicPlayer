@@ -1178,51 +1178,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        // 悬浮进度条交互：复用真实进度条的拖拽 / 跳转逻辑
-        private void NowPlayingProgressSlider_PointerPressed(dynamic sender, dynamic e)
-        {
-            _isUserSeeking = true;
-            _seekGestureConsumed = false;
-        }
-
-        private void NowPlayingProgressSlider_PointerReleased(dynamic sender, dynamic e)
-            => EndNowPlayingSeekGesture();
-
-        private void NowPlayingProgressSlider_PointerCaptureLost(dynamic sender, dynamic e)
-            => EndNowPlayingSeekGesture();
-
-        /// <summary>
-        /// 页内进度条：一次拖动只跳转一次（PointerReleased + PointerCaptureLost 都会触发，
-        /// 重复 seek 会卡顿并重复触发下一首无缝预加载 —— 就是"顿一下响两声"的来源）。
-        /// </summary>
-        private void EndNowPlayingSeekGesture()
-        {
-            if (!_isUserSeeking || _seekGestureConsumed)
-            {
-                _isUserSeeking = false;
-                return;
-            }
-
-            _seekGestureConsumed = true;
-            try
-            {
-                if (NowPlayingProgressSlider != null && ProgressSlider != null)
-                {
-                    double target = NowPlayingProgressSlider.Value;
-                    if (Math.Abs(ProgressSlider.Value - target) >= 0.01)
-                    {
-                        ProgressSlider.Value = target;
-                    }
-                }
-
-                SeekToSliderValue();
-            }
-            finally
-            {
-                _isUserSeeking = false;
-            }
-        }
-
         private void NowPlayingProgressSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
             if (_floatingMirror)
