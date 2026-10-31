@@ -58,7 +58,6 @@ namespace CelesteMusicPlayer
 
         // 面板读取完成标志（InitDspNav 里置 true）：
         // 在此之前任何 handler 都不准回写——否则 XAML 默认值会在存档读取前覆盖用户设置
-        private bool _dspRackReady;
 
         // 压缩器 GR 轮询（仅压缩器页可见时跑）
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dspCompGrTimer;
@@ -760,27 +759,8 @@ namespace CelesteMusicPlayer
         // 口径沿用既有约定：并非"开关打开"就算，而是真的对声音产生影响才算。
         // ─────────────────────────────────────────────────────────────
 
-        private bool DspCompActive()
-        {
-            return CompParameters.Current.Enabled && CompParameters.Current.Mix > 0.001;
-        }
 
-        private bool DspFieldActive()
-        {
-            return FieldParameters.Current.Enabled
-                && (Math.Abs(FieldParameters.Current.Width - 1.0) > 0.005
-                    || Math.Abs(FieldParameters.Current.CenterGainDb) > 0.05
-                    || Math.Abs(FieldParameters.Current.SideGainDb) > 0.05);
-        }
 
-        private bool DspMatrixActive()
-        {
-            return MatrixParameters.Current.Enabled
-                && (Math.Abs(MatrixParameters.Current.LeftToLeft - 1.0) > 0.005
-                    || Math.Abs(MatrixParameters.Current.RightToLeft) > 0.005
-                    || Math.Abs(MatrixParameters.Current.LeftToRight) > 0.005
-                    || Math.Abs(MatrixParameters.Current.RightToRight - 1.0) > 0.005);
-        }
 
         /// <summary>机架页始终视为"在看"，不点亮"生效"（顺序不是效果开关）。</summary>
         private bool DspRackOrderIsDefault() => RackParameters.IsDefault;

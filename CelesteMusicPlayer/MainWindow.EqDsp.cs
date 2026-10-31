@@ -105,83 +105,6 @@ namespace CelesteMusicPlayer
         // 音效面板是否已完成读写盘的加载。启动阶段(未真正进入面板)控件以 XAML 默认值
         // (限幅器 IsOn=True 等)加载会触发 Toggled/SelectionChanged，若此时允许 ApplyDspToEngine
         // 会把默认的"打开"状态保存到盘，覆盖用户上次关闭的设置 —— 必须用该标志屏蔽。
-        private bool _audioFxPanelReady;
-
-        // ---- ECHO 化增强状态：撤销/重做、A/B 对比、实时频谱背景 ----
-        private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];
-        private DispatcherQueueTimer? _eqSpectrumTimer;
-        private bool _eqSpectrumOn = true;
-
-        /// <summary>首次进入音效面板时构建 EQ 滑杆与预设 / 单声道下拉。</summary>
-        private void EnsureAudioFxUiBuilt()
-        {
-            if (_audioFxEqBuilt)
-            {
-                return;
-            }
-
-            _audioFxEqBuilt = true;
-
-            // 曲线画布有尺寸后再绘制（首次进入在布局完成后重画）
-            AudioFxEqCurveCanvas.SizeChanged -= AudioFxEqCurve_SizeChanged;
-            AudioFxEqCurveCanvas.SizeChanged += AudioFxEqCurve_SizeChanged;
-
-            if (AudioFxEqPresetCombo != null)
-            {
-                AudioFxEqPresetCombo.Items.Clear();
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "平坦", Tag = "flat" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "古典", Tag = "classical" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "流行", Tag = "pop" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "爵士", Tag = "jazz" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "摇滚", Tag = "rock" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "柔和", Tag = "soft" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "低音增强", Tag = "bass" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "自定义…", Tag = "custom" });
-                // 用户预设（含分隔 + 各命名预设）
-                var userPresets = EqUserPresetStore.Load();
-                if (userPresets.Count > 0)
-                {
-                    AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "—— 我的预设 ——", IsEnabled = false });
-                    foreach (var p in userPresets)
-                    {
-                        AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "★ " + (string.IsNullOrWhiteSpace(p.PresetName) ? "未命名" : p.PresetName), Tag = p.PresetId });
-                    }
-                }
-
-                // 删除我的预设（长按/右键除名）
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "管理（删除）我的预设…", Tag = "manage" });
-            }
-
-            if (AudioFxEqBandTypeCombo != null)
-            {
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "峰值 (Peak)", Tag = EqFilterType.Peaking });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低架 (Low Shelf)", Tag = EqFilterType.LowShelf });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高架 (High Shelf)", Tag = EqFilterType.HighShelf });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低通 (Low Pass)", Tag = EqFilterType.LowPass });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高通 (High Pass)", Tag = EqFilterType.HighPass });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "切除 (Notch)", Tag = EqFilterType.Notch });
-            }
-
-            if (AudioFxChannelMonoCombo != null)
-            {
-                AudioFxChannelMonoCombo.Items.Clear();
-                AddMonoComboItem("off", "关闭（立体声）");
-                AddMonoComboItem("left", "只用左声道");
-                AddMonoComboItem("right", "只用右声道");
-                AddMonoComboItem("sum", "左右求和");
-            }
-
-            AudioFxEqBandFreqSlider.Minimum = Math.Log10(20) / Math.Log10(2); // ~4.32 (log2)
-            AudioFxEqBandFreqSlider.Maximum = Math.Log10(20000) / Math.Log10(2); // ~14.29
-
-            if (AudioFxRgModeCombo != null)
-            {
-                AudioFxRgModeCombo.Items.Clear();
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "关闭", Tag = ReplayGainMode.Off });
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "单曲 (Track)", Tag = ReplayGainMode.Track });
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "专辑 (Album)", Tag = ReplayGainMode.Album });
-            }
-        }
 
 
         /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ。</summary>
@@ -2167,6 +2090,82 @@ namespace CelesteMusicPlayer
             finally
             {
                 _closePromptOpen = false;
+            }
+        }
+        // 频谱带缓存与音效面板构建（2026-10-31 误切归还）。
+
+        private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];
+        private DispatcherQueueTimer? _eqSpectrumTimer;
+        private bool _eqSpectrumOn = true;
+
+        /// <summary>首次进入音效面板时构建 EQ 滑杆与预设 / 单声道下拉。</summary>
+        private void EnsureAudioFxUiBuilt()
+        {
+            if (_audioFxEqBuilt)
+            {
+                return;
+            }
+
+            _audioFxEqBuilt = true;
+
+            // 曲线画布有尺寸后再绘制（首次进入在布局完成后重画）
+            AudioFxEqCurveCanvas.SizeChanged -= AudioFxEqCurve_SizeChanged;
+            AudioFxEqCurveCanvas.SizeChanged += AudioFxEqCurve_SizeChanged;
+
+            if (AudioFxEqPresetCombo != null)
+            {
+                AudioFxEqPresetCombo.Items.Clear();
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "平坦", Tag = "flat" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "古典", Tag = "classical" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "流行", Tag = "pop" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "爵士", Tag = "jazz" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "摇滚", Tag = "rock" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "柔和", Tag = "soft" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "低音增强", Tag = "bass" });
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "自定义…", Tag = "custom" });
+                // 用户预设（含分隔 + 各命名预设）
+                var userPresets = EqUserPresetStore.Load();
+                if (userPresets.Count > 0)
+                {
+                    AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "—— 我的预设 ——", IsEnabled = false });
+                    foreach (var p in userPresets)
+                    {
+                        AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "★ " + (string.IsNullOrWhiteSpace(p.PresetName) ? "未命名" : p.PresetName), Tag = p.PresetId });
+                    }
+                }
+
+                // 删除我的预设（长按/右键除名）
+                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "管理（删除）我的预设…", Tag = "manage" });
+            }
+
+            if (AudioFxEqBandTypeCombo != null)
+            {
+                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "峰值 (Peak)", Tag = EqFilterType.Peaking });
+                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低架 (Low Shelf)", Tag = EqFilterType.LowShelf });
+                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高架 (High Shelf)", Tag = EqFilterType.HighShelf });
+                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低通 (Low Pass)", Tag = EqFilterType.LowPass });
+                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高通 (High Pass)", Tag = EqFilterType.HighPass });
+                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "切除 (Notch)", Tag = EqFilterType.Notch });
+            }
+
+            if (AudioFxChannelMonoCombo != null)
+            {
+                AudioFxChannelMonoCombo.Items.Clear();
+                AddMonoComboItem("off", "关闭（立体声）");
+                AddMonoComboItem("left", "只用左声道");
+                AddMonoComboItem("right", "只用右声道");
+                AddMonoComboItem("sum", "左右求和");
+            }
+
+            AudioFxEqBandFreqSlider.Minimum = Math.Log10(20) / Math.Log10(2); // ~4.32 (log2)
+            AudioFxEqBandFreqSlider.Maximum = Math.Log10(20000) / Math.Log10(2); // ~14.29
+
+            if (AudioFxRgModeCombo != null)
+            {
+                AudioFxRgModeCombo.Items.Clear();
+                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "关闭", Tag = ReplayGainMode.Off });
+                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "单曲 (Track)", Tag = ReplayGainMode.Track });
+                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "专辑 (Album)", Tag = ReplayGainMode.Album });
             }
         }
     }
