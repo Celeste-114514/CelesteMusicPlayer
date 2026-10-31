@@ -1198,7 +1198,8 @@ namespace CelesteMusicPlayer
                 flyout.Items.Add(wallItem);
             }
 
-            AppendPlaylistContextFeatureItems(flyout, song, inUserPlaylist);
+            // 原生播放列表右键菜单已停用（右键入口在 CurrentPlaylistWindow，该文件 Compile Remove），
+            // 2026-10-31 不再追加这组功能项；新外壳的行右键走网页自己的菜单。
 
             var deleteDiskItem = new MenuFlyoutItem { Text = "从磁盘删除（回收站）" };
             deleteDiskItem.Icon = new FontIcon { Glyph = "\uE74D" };

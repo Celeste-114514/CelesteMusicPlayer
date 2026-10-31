@@ -942,13 +942,12 @@ namespace CelesteMusicPlayer
             folderItem.Icon = new FontIcon { Glyph = "\uE8B7" }; // Folder
             folderItem.Click += OpenFolderButton_Click;
 
-            var rescanItem = new MenuFlyoutItem { Text = "重新扫描本地文件" };
-            rescanItem.Icon = new FontIcon { Glyph = "\uE72C" }; // Refresh
-            rescanItem.Click += RescanLocalLibraryButton_Click;
+            // 「重新扫描本地文件」菜单项 2026-10-31 移除：这个原生菜单只挂在已停用的窗口上
+            // （CurrentPlaylistWindow 在 csproj 里 Compile Remove），运行时点不到。
+            // 重扫逻辑本身还在（媒体库监听会调），只是不再从这个死菜单入口进。
 
             flyout.Items.Add(fileItem);
             flyout.Items.Add(folderItem);
-            flyout.Items.Add(rescanItem);
             flyout.Items.Add(new MenuFlyoutSeparator());
 
             var mediaLibItem = new MenuFlyoutItem { Text = "媒体库" };
