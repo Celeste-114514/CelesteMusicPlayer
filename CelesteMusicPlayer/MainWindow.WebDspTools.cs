@@ -47,7 +47,7 @@ namespace CelesteMusicPlayer
             {
                 module,
                 session = _audioEngine?.LevelMeterChannels > 0,
-                src = SrcSessionStateText?.Text ?? "",
+                src = _audioEngine?.SrcStateDescription ?? "",
                 srcTarget = AppSettingsStore.Load().SrcTargetHz,
                 headroom = ExtraParameters.Safety.HeadroomDb,
                 limiter = ExtraParameters.Safety.EnableLimiter,

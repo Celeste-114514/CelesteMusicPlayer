@@ -204,7 +204,7 @@ namespace CelesteMusicPlayer
                 AddIf(DspActiveMatrix, "矩阵");
                 AddIf(DspActiveFir, "FIR");
 
-                string src = SrcSessionStateText?.Text ?? "";
+                string src = _audioEngine?.SrcStateDescription ?? "";
                 return new
                 {
                     session = channels > 0,

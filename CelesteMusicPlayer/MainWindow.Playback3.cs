@@ -930,7 +930,6 @@ namespace CelesteMusicPlayer
 
             UpdateNowPlayingArtistAlbumText(item);
             UpdateTransportNowPlaying(item, null, coverKnown: false);
-            _ = UpdateAudioInfoTextAsync(item.FilePath);
 
             byte[]? coverBytes = await Task.Run(() => ExtractCoverBytes(item.FilePath));
             if (_nowPlayingPath != item.FilePath)

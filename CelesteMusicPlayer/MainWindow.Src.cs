@@ -20,12 +20,9 @@ namespace CelesteMusicPlayer
                 AppSettingsState saved = AppSettingsStore.Load();
                 SrcParameters.Load(saved.SrcTargetHz, saved.SrcQuality, saved.SrcDither);
 
-                FillLabelCombo(SrcRateCombo, DspSrcParameters.RateLabels);
                 UpdateSrcStateText(SrcParameters.TargetHz);
 
-                FillLabelCombo(SrcQualityCombo, DspSrcParameters.QualityLabels);
 
-                FillLabelCombo(SrcDitherCombo, DspSrcParameters.DitherLabels);
 
                 RefreshSrcSessionState();
             }
@@ -35,16 +32,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>下拉框选项只是模型的投影：清空重填文案，值仍由 SelectedIndex 指向模型下标。</summary>
-        private static void FillLabelCombo(ComboBox? combo, string[] labels)
-        {
-            if (combo == null) return;
-            combo.Items.Clear();
-            foreach (string label in labels)
-            {
-                combo.Items.Add(label);
-            }
-        }
 
         /// <summary>把模型里的升频参数落盘并下发引擎。网页命令与页头电源开关走这一条（含全部三项）。</summary>
         private void ApplySrcSettings()

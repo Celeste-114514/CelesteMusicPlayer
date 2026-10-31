@@ -410,7 +410,6 @@ public sealed partial class MainWindow
                         if ((done & 15) == 0)
                         {
                             int d = done;
-                            DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"扫描 {Math.Min(d, total)}/{total}");
                         }
                     }
                 });
@@ -418,7 +417,6 @@ public sealed partial class MainWindow
                 // CUE 分轨展开（设置关时原样返回）：一个整轨文件 → N 轨
                 built = CueTrackExpansion.Expand(built);
 
-                DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"扫描完成，共 {built.Count} 首");
                 foreach (PlaylistItem item in built)
                 {
                     _playlist.Add(item);
@@ -620,8 +618,7 @@ public sealed partial class MainWindow
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var known = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-            PlaylistBuildResult built = await BuildPlaylistItemsAsync(paths, known,
-                (d, t) => DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"加载 {System.Math.Min(d, t)}/{t}"));
+            PlaylistBuildResult built = await BuildPlaylistItemsAsync(paths, known);
 
             bool rebounded = ReferenceEquals(_playlistViewSource, _playlist);
             if (rebounded)

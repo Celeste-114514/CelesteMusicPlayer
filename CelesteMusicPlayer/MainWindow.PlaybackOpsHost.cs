@@ -150,22 +150,6 @@ public sealed partial class MainWindow
 
         }
 
-        /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
-        private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)
-        {
-            try
-            {
-                string? info = await System.Threading.Tasks.Task.Run(() => AudioInfoFormatter.Format(path));
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (NowPlayingAudioInfoText != null && string.Equals(_nowPlayingPath, path, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                    }
-                });
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
         /// <summary>引擎开播淡入（约 320ms 渐入到当前音量）。</summary>
         private async Task FadeInEngineAsync()
         {
