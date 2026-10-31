@@ -116,7 +116,6 @@ namespace CelesteMusicPlayer
                     inner.ActiveProfile = target.Name;
                 });
                 ProfileCoordinator.Apply(target.Name, DspProfileCoordinator.Fingerprint(fresh));
-                RefreshDspProfileUi();
                 UpdateDspNavIndicators();
                 return WebDspProfilesPayload();
             }
@@ -135,7 +134,6 @@ namespace CelesteMusicPlayer
                 {
                     ProfileCoordinator.Clear();
                 }
-                RefreshDspProfileUi();
                 UpdateDspNavIndicators();
                 return WebDspProfilesPayload();
             }

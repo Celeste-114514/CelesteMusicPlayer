@@ -78,8 +78,6 @@ namespace CelesteMusicPlayer
                                           or "ShowNavGenre" or "ShowNavYear"))
                         ApplySettingsLive(state);
 
-                    if (ids.Any(id => id.StartsWith("ShowPlaylist", StringComparison.Ordinal) || id == "PlaylistDensity"))
-                        SyncHeaderColumnsFromState();
                 }
                 catch (Exception caught) { StartupLog.WriteException("MainWindow.SettingsHost.cs", caught); }
             }).ConfigureAwait(true);

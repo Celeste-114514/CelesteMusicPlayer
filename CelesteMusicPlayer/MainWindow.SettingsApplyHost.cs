@@ -53,18 +53,6 @@ public sealed partial class MainWindow
             });
         }
 
-        // ---- 表头列宽同步（设置/启动恢复共用）----
-
-        private void SyncHeaderColumnsFromState()
-        {
-            var w = PlaylistColumnWidths.Instance;
-            SetColumnWidthIfChanged(HeaderTitleCol, w.Title);
-            SetColumnWidthIfChanged(HeaderArtistCol, w.Artist);
-            SetColumnWidthIfChanged(HeaderAlbumCol, w.Album);
-            SetColumnWidthIfChanged(HeaderYearCol, w.Year);
-            SetColumnWidthIfChanged(HeaderDurationCol, w.Duration);
-        }
-
         // W13 第三十四刀：设置实时应用（扩展）
 
         internal void ApplyExtendedSettingsLive(AppSettingsState settings)
@@ -72,7 +60,6 @@ public sealed partial class MainWindow
             // 歌词与桌面歌词设置最先应用，避免被其它子系统的异常阻断
             try
             {
-                ApplyLyricPanelFromSettings(settings);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -157,7 +144,6 @@ public sealed partial class MainWindow
             try
             {
                 Windows.UI.Color accent2 = ResolveAccentColor();
-                ThemeColorService.ApplySliderAccent(ProgressSlider, accent2);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -178,11 +164,6 @@ public sealed partial class MainWindow
 
             try
             {
-                ApplyAccentSelectionResources(AlbumGridView);
-                ApplyAccentSelectionResources(AlbumTrackListView);
-                ApplyAccentSelectionResources(ArtistTrackListView);
-                ApplyAccentSelectionResources(ArtistAlbumGridView);
-                ApplyAccentSelectionResources(FolderBrowserView);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -275,56 +256,6 @@ public sealed partial class MainWindow
 
             // 网络音乐库：配了地址才显示（名字取显示名，没填就用主机名）
             ApplyWebDavNavEntry(settings);
-        }
-
-        private void ApplyLyricPanelFromSettings(AppSettingsState settings)
-        {
-
-            TextAlignment align = settings.LyricAlign switch
-            {
-                "Left" => TextAlignment.Left,
-                "Right" => TextAlignment.Right,
-                "Auto" => TextAlignment.Center,
-                _ => TextAlignment.Center
-            };
-
-            // 主歌词字体：随设置即时换（字号走末尾的强制重排，按距离分档）
-            FontFamily? mainLyricFont = string.IsNullOrWhiteSpace(settings.MainLyricFontFamily)
-                ? null
-                : new FontFamily(settings.MainLyricFontFamily);
-            foreach (var child in LyricsPanel.Children)
-            {
-                if (child is TextBlock tb)
-                {
-                    tb.TextAlignment = align;
-                }
-                else if (child is Grid lyricRow)
-                {
-                    // 每行是 Grid → Border（圆角框）→ 歌词 TextBlock：对齐要下钻两层
-                    foreach (var inner in lyricRow.Children)
-                    {
-                        if (inner is Border frame && frame.Child is TextBlock rowText)
-                        {
-                            rowText.TextAlignment = align;
-                            // 同上：未选字体时不要赋 null（会抛 "Unknown" is not a valid value）
-                            if (mainLyricFont != null)
-                            {
-                                rowText.FontFamily = mainLyricFont;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 主歌词字号变更：强制重排（SyncLyricsToPosition 按距离套用四档字号）
-            if (_lyricTextBlocks.Count > 0
-                && (_appliedMainLyricFontSize != settings.MainLyricFontSize
-                    || _appliedMainLyricFontFamily != (settings.MainLyricFontFamily ?? string.Empty)))
-            {
-                _appliedMainLyricFontSize = settings.MainLyricFontSize;
-                _appliedMainLyricFontFamily = settings.MainLyricFontFamily ?? string.Empty;
-                SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero, force: true);
-            }
         }
 
         private void ApplySpectrumVisibilityFromSettings(AppSettingsState settings)
@@ -511,7 +442,6 @@ public sealed partial class MainWindow
                     // 关 = 窗口给纯色底。面板卡片始终不透明，与本开关无关。
                     if (settings.EnableFrostedGlass)
                     {
-                        RootShell.ClearValue(Grid.BackgroundProperty);
                         FrostedGlass.ApplyWindowBackdrop(this);
                     }
                     else
@@ -549,7 +479,6 @@ public sealed partial class MainWindow
                 else
                 {
                     FrostedGlass.ClassicMode = null;
-                    RootShell.ClearValue(Grid.BackgroundProperty);
                     _cachedMultiSelectFrostBrush = null;
 
                     // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）

@@ -662,16 +662,10 @@ namespace CelesteMusicPlayer
             // "添加至播放队列"透明）。按钮的 Height/Padding/CornerRadius 在 XAML 里都有，
             // 删掉调用即恢复 E4 样式与 XAML 属性，无需替代逻辑。
             _playlistViewSource = _playlist;
-            ApplyAccentSelectionResources(AlbumGridView);
-            ApplyAccentSelectionResources(AlbumTrackListView);
             {
                 if (FolderBrowserView.ActualWidth > 0) RefreshFolderBrowserSelectionChrome();
             };
-            ApplyAccentSelectionResources(ArtistTrackListView);
-            ApplyAccentSelectionResources(ArtistAlbumGridView);
-            ApplyAccentSelectionResources(FolderBrowserView);
 
-            SyncHeaderColumnsFromState();
             // 启动默认页面：读设置「启动后进入」（默认 播放队列 = UserPlaylist；非法值回退播放队列）
             string startupCategory = AppSettingsStore.Load().StartupCategory;
             if (!AppSettingsStore.ValidStartupCategories.Contains(startupCategory))

@@ -86,7 +86,6 @@ namespace CelesteMusicPlayer
 
 
             // 先备好方案页状态（徽章/圆点要用协调器里的生效方案名），再统一刷指示
-            RefreshDspProfileUi();
             UpdateDspNavIndicators();
             if (_dspPageIndex < 0)
             {

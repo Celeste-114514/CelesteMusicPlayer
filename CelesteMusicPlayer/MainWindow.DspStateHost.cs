@@ -483,68 +483,10 @@ public sealed partial class MainWindow
         internal Brush DspAccentBrush()
             => GeekDspAccentColor() is Color accent ? new SolidColorBrush(accent) : ResolveAccentBrush();
 
-        /// <summary>
-        /// 模块页徽章的配色（state: "on" = 生效中，其余 = 未启用）。
-        /// 「已旁路」的琥珀警示色不在本函数里 —— 语义色不参与主题化，否则就失去警示作用了。
-        /// 极客下「生效中」改走磷光，等价于其它皮肤里这块由主题色负责强调的效果；
-        /// 字形也要跟着改：极客是暗界面、默认前景是白的，浅底上会糊成一团，所以显式钉一层深色。
-        /// </summary>
-        private void SetDspBadgeState(Border badge, TextBlock text, string state, string caption)
-        {
-            text.Text = caption;
 
-            Color on = Color.FromArgb(255, 0x3B, 0x6D, 0x11);
-            Color off = Color.FromArgb(255, 0xB4, 0xB2, 0xA9);
-
-            // 「已旁路」是语义警示色，不参与主题化（否则失去警示作用）
-            if (state == "bypassed")
-            {
-                badge.Background = new SolidColorBrush(Color.FromArgb(255, 0xC0, 0x7A, 0x1A));
-                text.Foreground = new SolidColorBrush(Color.FromArgb(255, 0xFF, 0xFF, 0xFF));
-                return;
-            }
-
-            if (GeekDspAccentColor() is Color phosphor)
-            {
-                if (state == "on")
-                {
-                    badge.Background = new SolidColorBrush(MixToward(phosphor, Colors.White, 0.72));
-                    text.Foreground = new SolidColorBrush(MixToward(phosphor, Colors.Black, 0.80));
-                    return;
-                }
-
-                off = Color.FromArgb(255, 0x4A, 0x4A, 0x42);
-            }
-
-            badge.Background = new SolidColorBrush(state == "on" ? on : off);
-            text.Foreground = null; // null = 回落主题默认前景
-        }
-
-        /// <summary>往目标色按比例混色（t=0 原色，t=1 目标色）。对齐 ThemeColorService 的 MixWithWhite / MixWithBlack。</summary>
-        private static Color MixToward(Color c, Color target, double t)
-            => Color.FromArgb(
-                255,
-                (byte)(c.R + (target.R - c.R) * t),
-                (byte)(c.G + (target.G - c.G) * t),
-                (byte)(c.B + (target.B - c.B) * t));
 
         // DSP 批 5：EQ 简单模式族与面板构建离壳
 
-        private static TextBlock MakeEqAxisLabel(string text, double x, double y, double width, TextAlignment align, Color color)
-        {
-            var tb = new TextBlock
-            {
-                Text = text,
-                FontSize = 10,
-                Foreground = new SolidColorBrush(color),
-                TextAlignment = align,
-                Width = width,
-                Height = 14
-            };
-            Canvas.SetLeft(tb, x);
-            Canvas.SetTop(tb, y);
-            return tb;
-        }
 
         /// <param name="restoreFromStore">true=从持久化恢复上次滑块值；false=清空（用于重置按钮）。</param>
         private void SyncAudioFxEqSimpleFromState(bool restoreFromStore = true)
@@ -698,7 +640,6 @@ public sealed partial class MainWindow
                 StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
                 SelectAudioFxMonoMode(ch.MonoMode);
                 // Crossfeed 已独立成页：强度和截止的两处读数要在加载时同步一次
-                RefreshDspXfeedLevelReadout();
                 RefreshCrossfeedCutoffReadout();
                 // 老存档没有这个字段 → 反序列化得到默认 700，正好等于旧版写死值，行为不变
 

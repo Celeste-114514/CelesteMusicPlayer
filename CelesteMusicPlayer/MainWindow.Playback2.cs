@@ -1172,53 +1172,6 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>
-        /// 隐藏系统默认选中底（方角），选中态改由模板内 SongRowChrome / AlbumRowChrome 圆角 Border 绘制。
-        /// </summary>
-        private void ApplyAccentSelectionResources(FrameworkElement host)
-        {
-            Brush transparent = new SolidColorBrush(Colors.Transparent);
-            Brush accent = ResolveAccentBrush();
-            Brush fg = ColorHelper.ResolveContrastingForeground(accent);
-
-            string[] backgroundKeys =
-            {
-                "ListViewItemBackgroundSelected",
-                "ListViewItemBackgroundSelectedPointerOver",
-                "ListViewItemBackgroundSelectedPressed",
-                "ListViewItemBackgroundSelectedDisabled",
-                "GridViewItemBackgroundSelected",
-                "GridViewItemBackgroundSelectedPointerOver",
-                "GridViewItemBackgroundSelectedPressed",
-                "GridViewItemBackgroundSelectedDisabled"
-            };
-
-            string[] foregroundKeys =
-            {
-                "ListViewItemForegroundSelected",
-                "ListViewItemForegroundSelectedPointerOver",
-                "ListViewItemForegroundSelectedPressed",
-                "GridViewItemForegroundSelected",
-                "GridViewItemForegroundSelectedPointerOver",
-                "GridViewItemForegroundSelectedPressed"
-            };
-
-            foreach (string key in backgroundKeys)
-            {
-                host.Resources[key] = transparent;
-            }
-
-            foreach (string key in foregroundKeys)
-            {
-                host.Resources[key] = fg;
-            }
-
-            // 关闭系统选中勾（多选时默认会出现在词条左侧）
-            host.Resources["ListViewItemSelectionCheckMarkVisualEnabled"] = false;
-            host.Resources["GridViewItemSelectionCheckMarkVisualEnabled"] = false;
-        }
-
-
-        /// <summary>
         /// 歌曲列表表头五词条：与「播放所有专辑」同色半透明底，操场形圆角（高 32 / 半径 16）。
         /// </summary>
         private void ApplyPlaylistHeaderChipStyle()

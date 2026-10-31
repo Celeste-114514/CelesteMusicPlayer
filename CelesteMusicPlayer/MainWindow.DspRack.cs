@@ -124,7 +124,6 @@ namespace CelesteMusicPlayer
         private void ApplyCompParameters()
         {
             RefreshDspCompReadouts();
-            RedrawDspCompTransferCurve();
             PushDspRackToEngine();
         }
 
@@ -141,7 +140,6 @@ namespace CelesteMusicPlayer
         private void ApplyFieldParameters()
         {
             RefreshDspFieldReadouts();
-            RedrawDspFieldRing();
             PushDspRackToEngine();
         }
 
@@ -156,7 +154,6 @@ namespace CelesteMusicPlayer
         private void ApplyMatrixParameters()
         {
             RefreshDspMatrixReadouts();
-            RedrawDspMatrixFlow();
             PushDspRackToEngine();
         }
 

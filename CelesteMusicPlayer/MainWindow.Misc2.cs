@@ -125,7 +125,6 @@ namespace CelesteMusicPlayer
             w.Album = album;
             w.Year = year;
             w.Duration = duration;
-            SyncHeaderColumnsFromState();
             if (HeaderEndPadCol != null
                 && (!HeaderEndPadCol.Width.IsAbsolute
                     || Math.Abs(HeaderEndPadCol.Width.Value - endPad) >= 0.5))

@@ -1604,15 +1604,6 @@ namespace CelesteMusicPlayer
         }
         // 列宽工具与悬停提示（2026-10-31 从 MainWindow.Misc2.cs 搬来）。
 
-        private static void SetColumnWidthIfChanged(ColumnDefinition column, double width)
-        {
-            if (column.Width.IsAbsolute && Math.Abs(column.Width.Value - width) < 0.5)
-            {
-                return;
-            }
-
-            column.Width = new GridLength(width);
-        }
 
         private void HideHoverTip()
         {

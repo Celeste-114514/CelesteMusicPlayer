@@ -586,7 +586,6 @@ public sealed partial class MainWindow
             // 音量条(自绘)/进度条
             try
             {
-                ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
