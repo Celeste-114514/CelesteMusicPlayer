@@ -23,16 +23,14 @@ public sealed partial class MainWindow
         string operation = msg.GetProperty("operation").GetString() ?? "roots";
         if (operation == "add")
         {
-            if (_webBrowseBusy) throw new InvalidOperationException("请先完成当前操作。");
-            _webBrowseBusy = true;
-            try
+            // 和曲目动作共用同一把锁（WebOperationGate）：两个选择器不能同时弹出来。
+            using (IDisposable lease = _webBusy.TryEnter() ?? throw new InvalidOperationException("请先完成当前操作。"))
             {
                 var picker = new FolderPicker(); picker.FileTypeFilter.Add("*");
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, NativeMainWebWindow.HandleOf(host));
                 var folder = await picker.PickSingleFolderAsync();
                 if (folder != null) await AddFolderToLibraryAsync(folder.Path);
             }
-            finally { _webBrowseBusy = false; }
             operation = "roots";
         }
         if (operation == "roots") return await Folders.RootsAsync(_browseFolderPath);
