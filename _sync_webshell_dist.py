@@ -32,8 +32,9 @@ def md5(path):
 # ---- 起飞前自检：源必须是自包含 publish 目录，否则同步出来的 dist 就是「混合目录」 ----
 PREFLIGHT = [
     ("publish 目录存在", os.path.isdir(SRC)),
-    ("exe 是自包含外壳(>250KB)", os.path.isfile(os.path.join(SRC, "CelesteMusicPlayer.exe"))
-     and os.path.getsize(os.path.join(SRC, "CelesteMusicPlayer.exe")) > 250000),
+    # 实测：net10 自包含外壳约 208–214KB，框架依赖外壳约 150–160KB，故阈值取 190KB
+    ("exe 是自包含外壳(>190KB)", os.path.isfile(os.path.join(SRC, "CelesteMusicPlayer.exe"))
+     and os.path.getsize(os.path.join(SRC, "CelesteMusicPlayer.exe")) > 190000),
     ("带 hostfxr.dll", os.path.isfile(os.path.join(SRC, "hostfxr.dll"))),
     ("带 coreclr.dll", os.path.isfile(os.path.join(SRC, "coreclr.dll"))),
 ]
