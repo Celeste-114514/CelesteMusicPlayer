@@ -102,3 +102,54 @@ AppFlow 2 / ExternalFile 2 / WebBrowseActions 2 / WebTags 2。
   `Exit*MultiSelectUiOnly`/`ConfigureMultiSelectPrimaryAction`/`UpdateLibrarySearchUi`/`ResolveCellDetailText`）
   闭包 24 个成员、牵连 Geek 搜索占位符 + 曲库筛选 + 选中框刷新——要连搜索域一起打包才划算。
 - 极客播放状态三件闭包 79 个成员——必须整片极客域一起做，不适合小刀。
+
+---
+
+# 批 12（用户拍板）：极客皮肤整体删除，128 → 118
+
+用户指示：「极客皮肤是指原 UI 中的极客皮肤吗，新外壳我暂时不想设计一个极客皮肤，能不能直接删掉相关」。
+
+## 先分清两个「极客」
+
+| 名称 | 是什么 | 处置 |
+|---|---|---|
+| **旧极客皮肤** | 原生界面的 `UiStyleMode="Geek"`：近黑底、等宽字、直角、磷光色、终端表格、顶部链路读数 | **已整体删除** |
+| 网页「极客预设」 | 新外壳 24 个外观预设之一（`preset-geek.css` + `geek-readout.js` 顶部 OUT/FMT/FLAG/BUF 读数） | **保留**——这是外观预设，不是旧皮肤；用户未要求删 |
+
+## 删了什么（提交 `ae2c431`，净 -4,290 行）
+
+- 6 个页面文件：GeekShell(881) / GeekNowPlaying(393) / GeekDsp(317) / GeekTables(306) / GeekTransport(289) / GeekBrowse(269)
+- 极客终端页 `MainWindow.Terminal.cs`(761)
+- `GeekWindowSkin.cs`(309)：二级窗口跟随皮肤
+- UiTheme.cs -675 行：`ApplyGeekChrome` 及其 13 个下游（等宽字体树刷、按钮直角、详情页封面直角、
+  专辑卡方角、顶部读数定时器、行内细节重塑、导航字形替换…）
+- 播放域：`SetGeekPlayKeyState` / `UpdateGeekVolumeText` / `SetGeekPlaybackOrderKey` /
+  `ApplyGeekRowDetailChrome` 四处调用点
+- FrostedGlass：`"Geek"` 主题分支、近黑面板/根底色、二级窗口皮肤调用
+- 设置层：`UiStyleMode` 选项去掉「Geek|极客终端」；校验白名单去掉 `"Geek"`
+  （老存档自动归一到 `ClassicSystem`）
+
+## 怎么保证不炸
+
+1. **先预演再动手**：把 8 个文件临时移出项目编译一次，只有 **20 处唯一错误** →
+   证明极客是「高内聚」的，可以整块删，不是想象中 500+ 处牵连。
+2. `IsGeekUiStyleActive()` 改成恒 `false`，保留函数名 → 全项目约 40 处 `if (geek)` 自动走经典分支，
+   不用逐个改调用点；随后再按文件把死分支剥掉。
+3. 行为替换：`SetLibrarySearchBasePrompt` 随 GeekBrowse 删除，改成就地写
+   `LibrarySearchBox.PlaceholderText`（经典路径本来就是这么干的）。
+
+## 验证
+
+Rebuild 0 错误（警告 530 → 505）；publish DLL **2,978,304** 字节 / 269 文件（比上版少 41KB，
+对应删掉的 3,000 行）；接口回归 failures+jsErrors 空、exitCode 0；
+实播 `ok=true`、pos 8.11。出货已同步，回退件 `dist/web-ui-20261028-pre-geek-removal-20261031`。
+
+## 账面
+
+**118 错**：Playback.cs 42 / Playback2 28 / Playback3 16 / xaml.cs 16 / SettingsHost 6 /
+Playback4 2 / AppFlow 2 / ExternalFile 2 / WebBrowseActions 2 / WebTags 2。
+壳清单 17 → **11 个文件**（6 个 Geek 文件彻底消失）。
+
+⚠ 遗留（不影响功能，属死代码）：`SettingsWindow.xaml.cs` / `SettingsPanelControl.xaml.cs` 里
+还有极客下拉项与磷光色设置（这两个是已停用的旧原生设置窗口，入口早已改成切面板）；
+`AppSettingsStore.GeekPhosphorColor` 字段与 `PhosphorColor()` 仍在，等旧界面整体退休时一并清。
