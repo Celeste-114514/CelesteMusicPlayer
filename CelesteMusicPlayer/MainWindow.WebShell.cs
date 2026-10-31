@@ -14,8 +14,11 @@ namespace CelesteMusicPlayer
     {
         private WebShellWindow? _webShellWindow;
 
-        /// <summary>主界面 WebView2 的环境句柄。桌面歌词的合成宿主复用它，免得再起一个浏览器进程。</summary>
-        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? WebShellEnvironment => _webShellWindow?.WebViewEnvironment;
+        /// <summary>
+        /// ⚠ 桌面歌词**不能**复用主界面的 CoreWebView2Environment：它在自己的专用线程上，
+        /// 跨线程碰这个对象会让 CLR 报 0x80131506 直接杀进程。它自己按同样的参数另建一个
+        /// （同一份用户数据目录，WebView2 会复用同一个浏览器进程），见 WebDesktopLyricsOverlay.Initialize。
+        /// </summary>
 
         // Activate is still required to load the legacy playback owner, but its
         // first native frame must never become a visible second window.

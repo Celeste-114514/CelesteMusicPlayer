@@ -2,8 +2,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Threading;
 using Microsoft.Web.WebView2.Core;
 using WinRT;
 
@@ -40,7 +42,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     private delegate IntPtr WndProcDelegate(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
 
     private readonly MainWindow _owner;
-    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
+    private Windows.System.DispatcherQueueTimer? _timer;
     private IntPtr _hwnd;
     private double _scale = 1;
     private double _widthDip = 900, _heightDip = 230;
@@ -52,17 +54,29 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     private Windows.UI.Composition.ContainerVisual? _webVisual;
 
     // —— WebView2 ——
+    private CoreWebView2Environment? _environment;
     private CoreWebView2CompositionController? _controller;
     private CoreWebView2? _core;
 
     private IReadOnlyList<LyricLine> _lines = Array.Empty<LyricLine>();
     private bool _ready, _disposed, _closing, _paused, _wanted, _locked, _settingsApplied, _trackingLeave, _initializing;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _envRetry;
+    private Windows.System.DispatcherQueueTimer? _envRetry;
     private string _direction = "";
     private AppSettingsState _settings = AppSettingsStore.Load();
     private string _lastConfig = "";
 
-    public Func<TimeSpan>? PositionProvider { get; set; }
+    // —— 专用线程 ——
+    // 窗口、合成树、WebView2 全部绑在 _queue 所属的那个线程上，本类的状态也只在该线程读写。
+    // 对外的公开方法一律编组过去（原因见 EnsureLyricsThread 的注释）。
+    private Windows.System.DispatcherQueue? _queue;
+
+    private volatile Func<TimeSpan>? _positionProvider;
+
+    public Func<TimeSpan>? PositionProvider
+    {
+        get => _positionProvider;
+        set => _positionProvider = value;
+    }
     public event Action? ClosedByUser;
     public bool IsLocked => _locked;
     public bool IsVisible => !_disposed && _hwnd != IntPtr.Zero && IsWindowVisible(_hwnd);
@@ -72,15 +86,59 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     public WebDesktopLyricsOverlay(MainWindow owner)
     {
         _owner = owner;
-        // 只应当存在一个歌词窗：多开就是两层字叠在一起（点开关 + 启动项同时命中时撞出来过）。
-        lock (WindowGate)
+
+        // 创建必须落在「自带系统级 DispatcherQueue」的专用线程上，见 EnsureLyricsThread 的注释。
+        Windows.System.DispatcherQueue queue = EnsureLyricsThread();
+        _queue = queue;
+
+        Exception? failure = null;
+        using (var ready = new ManualResetEventSlim(false))
         {
-            if (Instances.Count > 0)
+            if (!queue.TryEnqueue(() =>
             {
-                StartupLog.Write("[桌面歌词] 已有 " + Instances.Count + " 个实例，先收掉再建");
-                foreach (var stale in Instances.Values.ToList()) stale.Close();
+                try { CreateWindowAndComposition(); }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                    // 创建失败要把窗口收干净，别把裸窗口留成孤儿
+                    try { if (_hwnd != IntPtr.Zero) DestroyWindow(_hwnd); } catch { /* 已经在失败路径上 */ }
+                    lock (WindowGate) { if (_hwnd != IntPtr.Zero) Instances.Remove(_hwnd); }
+                    _hwnd = IntPtr.Zero;
+                }
+                finally { ready.Set(); }
+            }))
+            {
+                throw new InvalidOperationException("桌面歌词线程已停止，无法创建窗口");
+            }
+
+            // 构造必须同步完成：调用方紧接着就要 ApplySettings / SetSavedPosition / Show。
+            if (!ready.Wait(TimeSpan.FromSeconds(15)))
+            {
+                throw new InvalidOperationException("桌面歌词窗口创建超时");
             }
         }
+
+        if (failure != null)
+        {
+            StartupLog.WriteException("DesktopLyrics.Create", failure);
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
+
+    /// <summary>窗口 + 合成树 + WebView2 的创建（只在桌面歌词线程上跑）。</summary>
+    private void CreateWindowAndComposition()
+    {
+        // 只应当存在一个歌词窗：多开就是两层字叠在一起（点开关 + 启动项同时命中时撞出来过）。
+        // ⚠ 不能在持有 WindowGate 的时候关旧窗：关闭会走 DestroyWindow → WM_DESTROY，
+        //    那条路径要拿同一把锁，跨线程等待会直接死锁。所以先取快照，再在锁外收。
+        List<WebDesktopLyricsOverlay> stale;
+        lock (WindowGate) stale = Instances.Values.ToList();
+        if (stale.Count > 0)
+        {
+            StartupLog.Write("[桌面歌词] 已有 " + stale.Count + " 个实例，先收掉再建");
+            foreach (WebDesktopLyricsOverlay old in stale) old.Close();
+        }
+
         EnsureWindowClass();
         _hwnd = CreateWindowExW(WsExTopmost | WsExToolWindow | WsExNoActivate | WsExNoRedirectionBitmap,
             _className!, "Celeste 桌面歌词", WsPopup, 0, 0, 900, 230, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
@@ -91,46 +149,46 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         if (_scale <= 0 || double.IsNaN(_scale)) _scale = 1;
         ResizeForDirection(placeDefault: true);
 
-        try
+        // Windows.UI.Composition 要求当前线程上有「系统级」DispatcherQueue —— 这正是本类
+        // 单独起一个线程的理由（主线程那个 Microsoft.UI.Dispatching 是手写 Win32 泵，不算数）。
+        _compositor = new Windows.UI.Composition.Compositor();
+        var interop = _compositor.As<ICompositorDesktopInterop>();
+        interop.CreateDesktopWindowTarget(_hwnd, true, out IntPtr targetPtr);
+        _target = WinRT.MarshalInterface<Windows.UI.Composition.Desktop.DesktopWindowTarget>.FromAbi(targetPtr);
+        // 两层结构不能省：直接挂到 target 上的根视觉，它的 Size 是被窗口决定的、设了也不算数，
+        // 于是网页宿主视觉量出来是 0×0 —— 表现就是"什么都不画"，而且 SendMouseInput 会报
+        // "值超出范围"（命中区就是 0×0）。所以根容器用相对尺寸铺满，网页宿主单独给绝对尺寸。
+        _root = _compositor.CreateContainerVisual();
+        _root.RelativeSizeAdjustment = System.Numerics.Vector2.One;
+        _target.Root = _root;
+        _webVisual = _compositor.CreateContainerVisual();
+        _webVisual.Size = new System.Numerics.Vector2((float)_widthDip, (float)_heightDip);
+        _root.Children.InsertAtTop(_webVisual);
+        // 排障用：设了 CELESTE_DL_SOLID=1 就在网页底下铺半透明红。
+        // 有红块=合成链路通了、问题在网页；没红块=合成链路没通。别删，下次还靠它分辨。
+        if (Environment.GetEnvironmentVariable("CELESTE_DL_SOLID") == "1")
         {
-            _compositor = new Windows.UI.Composition.Compositor();
-            var interop = _compositor.As<ICompositorDesktopInterop>();
-            interop.CreateDesktopWindowTarget(_hwnd, true, out IntPtr targetPtr);
-            _target = WinRT.MarshalInterface<Windows.UI.Composition.Desktop.DesktopWindowTarget>.FromAbi(targetPtr);
-            // 两层结构不能省：直接挂到 target 上的根视觉，它的 Size 是被窗口决定的、设了也不算数，
-            // 于是网页宿主视觉量出来是 0×0 —— 表现就是"什么都不画"，而且 SendMouseInput 会报
-            // "值超出范围"（命中区就是 0×0）。所以根容器用相对尺寸铺满，网页宿主单独给绝对尺寸。
-            _root = _compositor.CreateContainerVisual();
-            _root.RelativeSizeAdjustment = System.Numerics.Vector2.One;
-            _target.Root = _root;
-            _webVisual = _compositor.CreateContainerVisual();
-            _webVisual.Size = new System.Numerics.Vector2((float)_widthDip, (float)_heightDip);
-            _root.Children.InsertAtTop(_webVisual);
-            // 排障用：设了 CELESTE_DL_SOLID=1 就在网页底下铺半透明红。
-            // 有红块=合成链路通了、问题在网页；没红块=合成链路没通。别删，下次还靠它分辨。
-            if (Environment.GetEnvironmentVariable("CELESTE_DL_SOLID") == "1")
-            {
-                var debug = _compositor.CreateSpriteVisual();
-                debug.Size = new System.Numerics.Vector2((float)_widthDip, (float)_heightDip);
-                debug.Brush = _compositor.CreateColorBrush(Windows.UI.Color.FromArgb(120, 255, 0, 0));
-                _root.Children.InsertAtTop(debug);
-            }
-        }
-        catch
-        {
-            // 合成目标建不起来就没有任何意义：别把裸窗口留成孤儿，交给上层去报错。
-            lock (WindowGate) Instances.Remove(_hwnd);
-            DestroyWindow(_hwnd);
-            _hwnd = IntPtr.Zero;
-            throw;
+            var debug = _compositor.CreateSpriteVisual();
+            debug.Size = new System.Numerics.Vector2((float)_widthDip, (float)_heightDip);
+            debug.Brush = _compositor.CreateColorBrush(Windows.UI.Color.FromArgb(120, 255, 0, 0));
+            _root.Children.InsertAtTop(debug);
         }
 
-        _timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+        _timer = _queue!.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(100);
-        _timer.Tick += (_, _) => Tick();
-        _envRetry = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+        _timer.Tick += (_, _) =>
+        {
+            // 定时器回调抛异常 = 进程直接死（没有上层能接），所以这里必须兜住。
+            try { Tick(); }
+            catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.Tick", ex); }
+        };
+        _envRetry = _queue.CreateTimer();
         _envRetry.Interval = TimeSpan.FromMilliseconds(300);
-        _envRetry.Tick += (_, _) => Initialize();
+        _envRetry.Tick += (_, _) =>
+        {
+            try { Initialize(); }
+            catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.Retry", ex); }
+        };
         _envRetry.Start();
         StartupLog.Write("[桌面歌词] 裸窗口已创建 hwnd=0x" + _hwnd.ToInt64().ToString("X") + " scale=" + _scale);
         Initialize();
@@ -178,12 +236,13 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                 EndDrag();
                 _envRetry?.Stop();
                 _disposed = true;
-                _timer.Stop();
+                _timer?.Stop();
                 lock (WindowGate) Instances.Remove(_hwnd);
                 _hwnd = IntPtr.Zero;
                 _controller?.Close();
                 _controller = null;
-                ClosedByUser?.Invoke();
+                // 事件订阅方（MainWindow）的状态都在主 UI 线程上，别在歌词线程里改。
+                _owner.RunOnUi(() => ClosedByUser?.Invoke());
                 return true;
         }
         if (message == 0x0215 /*WM_CAPTURECHANGED*/) _dragging = false;
@@ -254,15 +313,23 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     private async void Initialize()
     {
         if (_initializing || _disposed) return;
-        // 只复用主界面那个 WebView2 环境：同样是合成环境，省一个浏览器进程。
-        // 外壳可能比歌词晚就绪，所以拿不到时由重试定时器再来，而不是自己另建一个环境。
-        CoreWebView2Environment? env = _owner.WebShellEnvironment;
-        if (env == null) return;
         _initializing = true;
         _envRetry?.Stop();
         try
         {
-            _controller = await env.CreateCoreWebView2CompositionControllerAsync(_hwnd);
+            // 必须在**本线程**上建自己的环境：跨线程复用主界面那个 CoreWebView2Environment
+            // 会让 CLR 报 "Internal CLR error (0x80131506)" 直接杀进程（它不是敏捷对象）。
+            // 参数与主界面完全一致 → WebView2 复用同一个浏览器进程，不会多开一个。
+            if (_environment == null)
+            {
+                var options = new CoreWebView2EnvironmentOptions();
+                (string? profile, string? browserArgs) = NativeMainWebWindow.WebViewEnvironmentSpec();
+                if (!string.IsNullOrEmpty(browserArgs)) options.AdditionalBrowserArguments = browserArgs;
+                _environment = await CoreWebView2Environment.CreateAsync(null, profile, options);
+            }
+            if (_disposed) return;
+
+            _controller = await _environment.CreateCoreWebView2CompositionControllerAsync(_hwnd);
             if (_disposed) { _controller?.Close(); _controller = null; return; }
             if (_webVisual != null) _controller.RootVisualTarget = _webVisual;
             // 合成宿主也要靠 Bounds 定网页尺寸（官方文档要求）。只设这一项，IsVisible 之前一起加会崩。
@@ -320,18 +387,18 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
             using var doc = JsonDocument.Parse(e.WebMessageAsJson);
             switch (doc.RootElement.GetProperty("command").GetString())
             {
-                case "ready": _ready = true; StartupLog.Write("[桌面歌词] 页面就绪"); PublishLines(); ApplySettings(_settings); _timer.Start(); Tick(); break;
+                case "ready": _ready = true; StartupLog.Write("[桌面歌词] 页面就绪"); PublishLines(); ApplySettingsCore(_settings); _timer?.Start(); Tick(); break;
                 case "drag": StartDrag(); break;
                 case "drag-end": EndDrag(); break;
                 case "close": Close(); break;
                 case "lock": SetLocked(!_locked); break;
                 case "unlock": SetLocked(false); break;
-                case "play": MiniPlayerBridge.TogglePlayPause(); break;
-                case "previous": MiniPlayerBridge.Previous(); break;
-                case "next": MiniPlayerBridge.Next(); break;
+                case "play": _owner.RunOnUi(MiniPlayerBridge.TogglePlayPause); break;
+                case "previous": _owner.RunOnUi(MiniPlayerBridge.Previous); break;
+                case "next": _owner.RunOnUi(MiniPlayerBridge.Next); break;
                 case "stylePatch":
                     DesktopLyricStyles.Apply(doc.RootElement.GetProperty("changes"));
-                    ApplySettings(AppSettingsStore.Load());
+                    ApplySettingsCore(AppSettingsStore.Load());
                     break;
                 case "styleList": Post(new { kind = "styles", items = DesktopLyricStyles.List() }); break;
                 case "styleSave":
@@ -339,22 +406,18 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                     Post(new { kind = "styles", items = DesktopLyricStyles.List() }); break;
                 case "styleSelect":
                     DesktopLyricStyles.Select(doc.RootElement.GetProperty("id").GetString() ?? "");
-                    ApplySettings(AppSettingsStore.Load()); break;
+                    ApplySettingsCore(AppSettingsStore.Load()); break;
                 case "styleImport":
-                    var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add(".json");
-                    WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
-                    var input = await picker.PickSingleFileAsync();
-                    if (input != null) { DesktopLyricStyles.Import(input.Path); Post(new { kind = "styles", items = DesktopLyricStyles.List() }); }
+                    // Picker 必须回主 UI 线程开（歌词窗口这条线程不是 UI 线程），见 PickDesktopLyricStylePathAsync
+                    string? importPath = await _owner.PickDesktopLyricStylePathAsync(save: false);
+                    if (!string.IsNullOrEmpty(importPath)) { DesktopLyricStyles.Import(importPath!); Post(new { kind = "styles", items = DesktopLyricStyles.List() }); }
                     break;
                 case "styleExport":
-                    var savePicker = new Windows.Storage.Pickers.FileSavePicker();
-                    savePicker.FileTypeChoices.Add("桌面歌词样式", new[] { ".json" }); savePicker.SuggestedFileName = "celeste-lyrics-style";
-                    WinRT.Interop.InitializeWithWindow.Initialize(savePicker, _hwnd);
-                    var output = await savePicker.PickSaveFileAsync();
-                    if (output != null) await File.WriteAllTextAsync(output.Path, DesktopLyricStyles.Export());
+                    string? exportPath = await _owner.PickDesktopLyricStylePathAsync(save: true);
+                    if (!string.IsNullOrEmpty(exportPath)) await File.WriteAllTextAsync(exportPath!, DesktopLyricStyles.Export());
                     break;
                 case "resetPosition": ResizeForDirection(placeDefault: true); break;
-                case "settings": _owner.ShowWebPage("desktop-lyrics-settings"); break;
+                case "settings": _owner.RunOnUi(() => _owner.ShowWebPage("desktop-lyrics-settings")); break;
                 // 锁定 + 穿透时页面收不到任何输入，宿主自己盯着光标：指到解锁条上就临时撤掉穿透。
                 case "hintRect":
                     var hint = doc.RootElement;
@@ -368,8 +431,12 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     }
 
     // —————————————————— 对外接口（和原来的 XAML 版一致） ——————————————————
+    // 全部编组到桌面歌词线程：窗口、合成树、WebView2 都绑在那个线程上，
+    // 从主线程直接碰它们会撞 RPC_E_WRONG_THREAD（或者更隐蔽地画不出来）。
 
-    public void Show()
+    public void Show() => OnLyricsThread(ShowCore);
+
+    private void ShowCore()
     {
         if (_disposed) return;
         _wanted = true;
@@ -378,7 +445,9 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         Tick();
     }
 
-    public void Close()
+    public void Close() => OnLyricsThreadAndWait(CloseCore);
+
+    private void CloseCore()
     {
         if (_disposed || _closing) return;
         _closing = true; _wanted = false;
@@ -388,24 +457,23 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
 
     public void Dispose()
     {
-        if (_disposed) { ClosedByUser = null; return; }
         ClosedByUser = null;
-        Close();
+        OnLyricsThreadAndWait(CloseCore);
     }
 
     /// <summary>恢复上次位置，并夹进当前屏幕可见范围（换显示器或改分辨率后不至于跑到屏幕外）。</summary>
-    public void SetSavedPosition(int x, int y)
+    public void SetSavedPosition(int x, int y) => OnLyricsThread(() =>
     {
         int width = (int)Math.Round(_widthDip * _scale), height = (int)Math.Round(_heightDip * _scale);
         var area = WorkAreaFor(x, y);
         int maxX = Math.Max(area.Left, area.Right - width), maxY = Math.Max(area.Top, area.Bottom - height);
         SetWindowPos(_hwnd, IntPtr.Zero, Math.Clamp(x, area.Left, maxX), Math.Clamp(y, area.Top, maxY), width, height, SwpNoZOrder | SwpNoActivate);
-    }
+    });
 
-    public void SetLyrics(IReadOnlyList<LyricLine> lines) { _lines = lines; PublishLines(); }
+    public void SetLyrics(IReadOnlyList<LyricLine> lines) => OnLyricsThread(() => { _lines = lines; PublishLines(); });
     private void PublishLines() => Post(new { kind = "lyrics", lines = _lines.Select(l => new { t = l.Time.TotalSeconds, text = l.Text, romanization = l.Romanization, tr = l.IsTranslation, chars = l.CharTimes?.Select(t => t.TotalSeconds) }) });
-    public void Sync(TimeSpan time) => Post(new { kind = "clock", time = time.TotalSeconds, paused = _paused, rate = _owner.DesktopLyricsPlaybackRate });
-    public void SetPlaybackPaused(bool paused) { _paused = paused; Tick(); }
+    public void Sync(TimeSpan time) => OnLyricsThread(() => Post(new { kind = "clock", time = time.TotalSeconds, paused = _paused, rate = _owner.DesktopLyricsPlaybackRate }));
+    public void SetPlaybackPaused(bool paused) => OnLyricsThread(() => { _paused = paused; Tick(); });
 
     /// <summary>光标是否停在解锁条上 —— 决定这一刻要不要临时恢复鼠标事件，否则锁定穿透后解不开。</summary>
     private void UpdateHintHot()
@@ -426,14 +494,14 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         ApplyInput();
     }
 
-    public void SetLocked(bool locked)
+    public void SetLocked(bool locked) => OnLyricsThread(() =>
     {
         EndDrag();
         _locked = locked;
         if (!locked) _hintHot = false;
         Post(new { kind = "lock", locked });
         ApplyInput();
-    }
+    });
 
     /// <summary>穿透只能靠窗口扩展样式；合成宿主没有子窗口，所以改完必须让系统重算窗口框架。</summary>
     private void ApplyInput()
@@ -446,7 +514,9 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0, 0x37);
     }
 
-    public void ApplySettings(AppSettingsState s)
+    public void ApplySettings(AppSettingsState s) => OnLyricsThread(() => ApplySettingsCore(s));
+
+    private void ApplySettingsCore(AppSettingsState s)
     {
         // 「启动即锁定」只在第一次应用时取；之后用户手动解锁不该被别的设置改动重新锁上。
         if (!_settingsApplied) { _locked = s.DesktopLyricLockOnStart; _settingsApplied = true; }
@@ -555,10 +625,123 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     [DllImport("user32.dll")] private static extern IntPtr SetCapture(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();
 
+    // —————————————————— 专用线程 ——————————————————
+    //
+    // 为什么不能在主线程：Windows.UI.Composition 的 Compositor 要求**当前线程**上有系统级
+    // DispatcherQueue（CoreMessaging）。本程序自 W13 起用 NativeDispatcherQueue.cs 里的手写
+    // Win32 消息泵替换了 Windows App SDK 的 DispatcherQueue，主线程上并没有那个系统队列 ——
+    // 于是 new Compositor() 直接抛 UnauthorizedAccessException「拒绝访问 / The caller must
+    // initialize DispatcherQueue on this thread」。（日志证据：10-29 成功创建 32 次，
+    // 10-31 换宿主后 13 次全失败。）
+    //
+    // 解法：整块搬到系统提供的「专用线程」上 —— CreateOnDedicatedThread 会建一条线程，
+    // 线程上带真正的 DispatcherQueue 和它自己的消息循环。窗口、合成树、WebView2 全部归它，
+    // 对外接口一律编组过去。
+    //
+    // ⚠ 走过的弯路（别再踩）：不要试图自己起线程再调 CoreMessaging 的
+    // CreateDispatcherQueueForCurrentThread（DllImport 或显式 GetProcAddress 都一样）——
+    // 同一份代码 Debug 正常、Release 必 0xC0000005 崩进程，连 Main 第一行调用都会崩。
+
+    private static Windows.System.DispatcherQueue? s_queue;
+    private static readonly object ThreadGate = new();
+    private static Windows.System.DispatcherQueueController? s_controller;   // 必须留引用：控制器没了队列会被回收
+
+    private static Windows.System.DispatcherQueue EnsureLyricsThread()
+    {
+        lock (ThreadGate)
+        {
+            if (s_queue != null) return s_queue;
+
+            // 用系统自带的「专用线程」：这个 API 会建一条新线程，线程上有真正的
+            // DispatcherQueue 和它自己的消息循环 —— 正好满足 Windows.UI.Composition 的要求，
+            // 而不用去碰 CoreMessaging 的内部导出（那条路在 Release 下会 0xC0000005 崩进程）。
+            s_controller = Windows.System.DispatcherQueueController.CreateOnDedicatedThread();
+            Windows.System.DispatcherQueue queue = s_controller.DispatcherQueue;
+            if (queue == null)
+            {
+                throw new InvalidOperationException("系统专用线程没有返回 DispatcherQueue");
+            }
+
+            s_queue = queue;
+            // 在这条线程上装 SynchronizationContext：Initialize() 里的 await 才会回到它，
+            // 否则延续扔到线程池，WebView2 就会被跨线程碰。
+            queue.TryEnqueue(() => SynchronizationContext.SetSynchronizationContext(new QueueSynchronizationContext(queue)));
+            StartupLog.Write("[桌面歌词] 已取得系统专用线程队列");
+            return queue;
+        }
+    }
+
+    /// <summary>Windows.System.DispatcherQueue 版的 SynchronizationContext（项目里的 Microsoft.UI.Dispatching 是垫片，别混用）。</summary>
+    private sealed class QueueSynchronizationContext : SynchronizationContext
+    {
+        private readonly Windows.System.DispatcherQueue _queue;
+
+        public QueueSynchronizationContext(Windows.System.DispatcherQueue queue) => _queue = queue;
+
+        public override void Post(SendOrPostCallback d, object? state) => _queue.TryEnqueue(() =>
+        {
+            // 这里要是让异常冒到 CoreMessaging，整个进程会被干掉（async void 的未处理异常就走这条路）。
+            try { d(state); }
+            catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.SyncContext", ex); }
+        });
+
+        public override void Send(SendOrPostCallback d, object? state)
+        {
+            if (_queue.HasThreadAccess) { d(state); return; }
+            using var done = new ManualResetEventSlim(false);
+            _queue.TryEnqueue(() => { try { d(state); } finally { done.Set(); } });
+            done.Wait();
+        }
+
+        public override SynchronizationContext CreateCopy() => new QueueSynchronizationContext(_queue);
+    }
+
+    /// <summary>把动作投到桌面歌词线程（已经在那个线程上就直接执行）。</summary>
+    private void OnLyricsThread(Action action)
+    {
+        Windows.System.DispatcherQueue? queue = _queue;
+        if (queue == null || queue.HasThreadAccess)
+        {
+            try { action(); }
+            catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.OnThread", ex); }
+            return;
+        }
+
+        queue.TryEnqueue(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.OnThread", ex); }
+        });
+    }
+
+    /// <summary>同上但等它做完 —— 关闭窗口要用：调用方紧接着就认为窗口已经没了（否则进程会被它吊住）。</summary>
+    private void OnLyricsThreadAndWait(Action action)
+    {
+        Windows.System.DispatcherQueue? queue = _queue;
+        if (queue == null || queue.HasThreadAccess) { action(); return; }
+
+        using var done = new ManualResetEventSlim(false);
+        if (!queue.TryEnqueue(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.OnThread", ex); }
+            finally { done.Set(); }
+        }))
+        {
+            return;
+        }
+
+        if (!done.Wait(TimeSpan.FromSeconds(5)))
+        {
+            StartupLog.Write("[桌面歌词] 跨线程关闭超时（窗口可能还在）");
+        }
+    }
+
     // —————————————————— 结构体 / 导入 ——————————————————
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PointStruct { public int X, Y; }
+
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RectStruct { public int Left, Top, Right, Bottom; }

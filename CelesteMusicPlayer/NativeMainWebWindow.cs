@@ -55,6 +55,37 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, false);
     }
     internal static bool BackgroundVerification => Array.Exists(Environment.GetCommandLineArgs(), a => a == "--w7-background-test");
+
+    /// <summary>
+    /// 主界面 WebView2 用的用户数据目录（null = 默认目录；后台验证模式是临时目录）。
+    /// 桌面歌词在**自己的线程**上建独立环境时必须用同一个值，
+    /// 否则两个环境参数不一致 → 建环境直接失败（而且绝不能跨线程复用主线程的环境对象：
+    /// CoreWebView2Environment 不是敏捷对象，跨套间调用会让 CLR 报 0x80131506 直接杀进程）。
+    /// </summary>
+    internal static string? WebViewProfilePath { get; set; }
+
+    /// <summary>创建环境时的浏览器参数（后台验证要带调试端口），两个环境必须完全一致才能共用浏览器进程。</summary>
+    internal static string? WebViewBrowserArguments { get; set; }
+
+    /// <summary>
+    /// 建 WebView2 环境用的参数。主界面还没建环境时也能算出正确值，
+    /// 避免桌面歌词抢先建出一个参数不同的环境（那样就不能共用浏览器进程了）。
+    /// </summary>
+    internal static (string? Profile, string? Arguments) WebViewEnvironmentSpec()
+    {
+        if (WebViewProfilePath != null || WebViewBrowserArguments != null)
+        {
+            return (WebViewProfilePath, WebViewBrowserArguments);
+        }
+
+        if (BackgroundVerification)
+        {
+            return (System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Celeste-W7-" + Environment.ProcessId),
+                "--remote-debugging-port=9347 --remote-debugging-address=127.0.0.1");
+        }
+
+        return (null, null);
+    }
     internal DispatcherQueue DispatcherQueue { get; }
     internal AppWindow AppWindow { get; }
     internal static nint HandleOf(object host) => host is NativeMainWebWindow native ? native.Handle : host is Microsoft.UI.Xaml.Window service ? service.NativeHandle : WinRT.Interop.WindowNative.GetWindowHandle(host);
@@ -99,6 +130,9 @@ internal sealed class NativeWebViewPanel : System.Windows.Forms.Panel
         var options = new Microsoft.Web.WebView2.Core.CoreWebView2EnvironmentOptions();
         string? profile = null;
         if (NativeMainWebWindow.BackgroundVerification) { options.AdditionalBrowserArguments = "--remote-debugging-port=9347 --remote-debugging-address=127.0.0.1"; profile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Celeste-W7-" + Environment.ProcessId); }
+        // 记下参数：桌面歌词线程要照这套建自己的环境（同一份用户数据目录 → 共用浏览器进程）
+        NativeMainWebWindow.WebViewProfilePath = profile;
+        NativeMainWebWindow.WebViewBrowserArguments = options.AdditionalBrowserArguments;
         var env = await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null,profile,options);
         _controller = await env.CreateCoreWebView2ControllerAsync(Handle);
         _core = _controller.CoreWebView2;

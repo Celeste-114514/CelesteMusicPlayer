@@ -18,9 +18,29 @@ public sealed partial class MainWindow
 {
     // UI 线程的调度队列：**不要用 Window.DispatcherQueue 判断线程** ——
     // 在非 UI 线程上它会返回那个线程自己的队列，HasThreadAccess 于是误判成 true。
-    // 桌面歌词就是被这个坑到的（Compositor 构造报 DispatcherQueue 未初始化）。
+    // 判断「我是不是 UI 线程」只能跟这个启动时捕获的队列比。
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue =
         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
+    /// <summary>
+    /// 把动作切回主 UI 线程。后台线程（桌面歌词专用线程、WebView2 回调、定时器）
+    /// 要动宿主状态时走这里，别直接改字段或碰控件。
+    /// </summary>
+    internal void RunOnUi(Action action)
+    {
+        Microsoft.UI.Dispatching.DispatcherQueue? ui = _uiQueue;
+        if (ui == null || ui.HasThreadAccess)
+        {
+            action();
+            return;
+        }
+
+        ui.TryEnqueue(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.RunOnUi", ex); }
+        });
+    }
 
         // 视频背景「最小化暂停」：最小化时暂停解码省电，还原后继续
         [System.Runtime.InteropServices.DllImport("user32.dll")]

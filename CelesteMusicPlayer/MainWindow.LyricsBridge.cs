@@ -4,6 +4,7 @@ using Windows.Media.Playback;
 using Color = Windows.UI.Color;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
@@ -48,13 +49,8 @@ namespace CelesteMusicPlayer
         private void SetDesktopLyricsEnabled(bool enabled, bool persistPreference = true)
         {
             // ⚠ WebView2 的网页消息回调不在 UI 线程上（WebShellWindow.OnMessage）。
-            // 直接在这里构造桌面歌词会炸：Compositor 要求当前线程有 DispatcherQueue，
-            // 报「拒绝访问 / The caller must initialize DispatcherQueue on this thread」。
-            // 所以先把整个开关动作切回 UI 线程，再建窗口。
-            // 另注：这条守卫解决的是线程，不是根因。桌面歌词目前仍会在 Compositor 处报错，
-            // 根因是 NativeDispatcherQueue.cs 用手写 Win32 泵替掉了 Windows App SDK 的
-            // DispatcherQueue —— 进程里没有「真」队列，Windows.UI.Composition 起不来。
-            // 单独排期修，见 collab 战报「桌面歌词」一节。
+            // 先把开关动作切回 UI 线程：这里要动 _desktopLyricsWindow 等宿主状态、还要刷新角标。
+            // （窗口本身的创建/合成在桌面歌词自己的专用线程上，见 WebDesktopLyricsOverlay.EnsureLyricsThread。）
             var ui = _uiQueue;
             if (ui != null && !ui.HasThreadAccess)
             {
@@ -143,8 +139,47 @@ namespace CelesteMusicPlayer
             DispatcherQueue.TryEnqueue(UpdateDesktopLyricsBadge);
         }
 
-        private void UpdateDesktopLyricsBadge()
+        /// <summary>
+        /// 桌面歌词「样式导入 / 导出」的文件选择器。
+        /// 必须回到主 UI 线程开：桌面歌词窗口在自己的专用线程上跑（那个线程归系统所有、不是 UI 线程），
+        /// 直接在那里开 Picker 会因为缺 UI 线程 / STA 而挂住或抛异常。
+        /// 返回 null 表示用户取消或失败。
+        /// </summary>
+        internal Task<string?> PickDesktopLyricStylePathAsync(bool save)
         {
+            var tcs = new TaskCompletionSource<string?>();
+            RunOnUi(async () =>
+            {
+                try
+                {
+                    if (save)
+                    {
+                        var picker = new Windows.Storage.Pickers.FileSavePicker();
+                        picker.FileTypeChoices.Add("桌面歌词样式", new[] { ".json" });
+                        picker.SuggestedFileName = "celeste-lyrics-style";
+                        WinRT.Interop.InitializeWithWindow.Initialize(picker, _mainWindowHwnd);
+                        var file = await picker.PickSaveFileAsync();
+                        tcs.TrySetResult(file?.Path);
+                    }
+                    else
+                    {
+                        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                        picker.FileTypeFilter.Add(".json");
+                        WinRT.Interop.InitializeWithWindow.Initialize(picker, _mainWindowHwnd);
+                        var file = await picker.PickSingleFileAsync();
+                        tcs.TrySetResult(file?.Path);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("DesktopLyrics.Picker", ex);
+                    tcs.TrySetResult(null);
+                }
+            });
+            return tcs.Task;
+        }
+
+        private void UpdateDesktopLyricsBadge()        {
             if (DesktopLyricsStateBadge == null)
             {
                 return;
