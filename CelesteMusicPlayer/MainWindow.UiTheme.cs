@@ -315,9 +315,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>极客界面模式的设置值（设置项「界面风格」下拉里的「极客」）。</summary>
-        // UiStyleGeek 常量 2026-10-31 随 IsGeekUiStyleActive 一起搬到 MainWindow.Utilities.cs。
-        internal static void RefreshGeekUiStyleCache(bool geek) => _geekUiStyleCached = geek;
+        // 极客界面已移除：原 UiStyleGeek 常量与 IsGeekUiStyleActive 保留在 Utilities.cs，恒为 false。
        
         /// <summary>
         /// 最近一次 ApplyUiStyleMode 应用过的模式。设置页保存时对照它：
@@ -340,17 +338,14 @@ namespace CelesteMusicPlayer
 
                 string mode = settings.UiStyleMode;
                 bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
-                // 极客：与经典并列的不透明风格，但走终端那套视觉 —— 近黑底、等宽字、直角、技术读数。
-                bool geek = mode == UiStyleGeek;
-                bool opaque = classic || geek;
+                // 2026-10-31：极客皮肤已整体移除（用户拍板：新外壳不做极客皮肤）。
+                // 老存档里的 "Geek" 由 AppSettingsStore 归一到 ClassicSystem，这里不再有分支。
+                bool opaque = classic;
 
-                // 高频路径（列表行）读的是这个缓存值，风格一变立刻同步
-                RefreshGeekUiStyleCache(geek);
                 // 记录本次应用的模式：设置页保存时对照它判断要不要热切换（经典家族内互切不弹重启窗）
                 _lastAppliedUiStyleMode = mode;
 
-                bool darkClassic = geek
-                    || mode == "ClassicDark"
+                bool darkClassic = mode == "ClassicDark"
                     || (mode is "ClassicSystem"
                         && Application.Current.RequestedTheme == ElementTheme.Dark);
 
@@ -360,18 +355,13 @@ namespace CelesteMusicPlayer
                         ? ElementTheme.Default
                         : darkClassic ? ElementTheme.Dark : ElementTheme.Light;
                 }
-                // 极客专属外观（等宽字 / 直角 / 顶栏读数）：两个分支都要跑，切走时负责还原。
-                ApplyGeekChrome(geek);
-
-                // 二级窗口跟随：设置页 / 迷你播放器 / 各编辑窗口一起切极客皮肤或还原
-                GeekWindowSkin.RefreshAllOpen(geek);
 
                 if (opaque)
                 {
-                    // 只存归一化后的 "Light" / "Dark"（极客存 "Geek"）。
+                    // 只存归一化后的 "Light" / "Dark"。
                     // 早先这里存的是 "ClassicLight" / "ClassicDark"，和 FrostedGlass 内部判断的字符串对不上，
                     // 结果经典浅色界面下面板被一律涂成深灰 —— 也就是"浅色模式里一片深色底"的根因。
-                    FrostedGlass.ClassicMode = geek ? "Geek" : darkClassic ? "Dark" : "Light";
+                    FrostedGlass.ClassicMode = darkClassic ? "Dark" : "Light";
 
                     // 背板是否走毛玻璃由「外观设置」开关决定，经典 / 极客风格下同样生效：
                     // 开 = 窗口背板走亚克力透出壁纸（此时不能给不透明底，否则会把毛玻璃盖住）；
@@ -384,9 +374,7 @@ namespace CelesteMusicPlayer
                     else
                     {
                         SystemBackdrop = null;
-                        Color rootBg = geek
-                                ? Windows.UI.Color.FromArgb(255, 11, 15, 11)
-                                : darkClassic
+                        Color rootBg = darkClassic
                                     ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
                                     : Windows.UI.Color.FromArgb(255, 243, 243, 243);
                         RootShell.Background = new SolidColorBrush(rootBg);
@@ -514,450 +502,12 @@ namespace CelesteMusicPlayer
         }
 
         // =====================================================================
-        // 极客界面模式（设置「界面风格」里与图景 / 经典并列的第四种）
+        // 极客界面模式已于 2026-10-31 整体移除（用户拍板：新外壳不做极客皮肤）。
+        // 原实现（等宽字体 / 直角 / 顶栏读数 / 磷光色 / 终端表格）整块删除，
+        // 老存档的 "Geek" 由 AppSettingsStore 归一到 ClassicSystem。
         // =====================================================================
 
-        private DispatcherQueueTimer? _geekReadoutTimer;
-
-        /// <summary>
-        /// 极客界面专属外观：等宽字体 + 直角 + 顶栏实时输出读数。
-        /// geek=false 时逐项还原，退出极客模式不留残留。
-        /// 只动窗口根元素自己的资源字典和可视树 —— 绝不碰 Application.Current.Resources
-        ///（运行时改全局系统键会崩 0xc000027b）；强调色沿用设置里的主题色，不覆盖。
-        /// </summary>
-        private void ApplyGeekChrome(bool geek)
-        {
-            try
-            {
-                if (Content is not FrameworkElement root)
-                {
-                    return;
-                }
-
-                var mono = new Microsoft.UI.Xaml.Media.FontFamily("Consolas");
-
-                if (geek)
-                {
-                    // 元素级资源覆盖（不是全局资源）：新建的控件/文本走等宽、圆角归零。
-                    root.Resources["ContentControlThemeFontFamily"] = mono;
-                    root.Resources["ControlCornerRadius"] = new CornerRadius(0);
-                    root.Resources["OverlayCornerRadius"] = new CornerRadius(0);
-
-                    // 上面三行只管"自己读资源"的模板：运行时新建的按钮 / 文本、以及
-                    // Content 被代码改写后重新生成的 TextBlock 都吃不到 —— 这就是用户实测
-                    // "极客界面各个按钮还是微软雅黑"的原因。隐式样式按类型匹配，之后新建的
-                    // 元素自动命中；FontIcon 反向钉住符号字体，免得继承等宽后缺字变问号框。
-                    ApplyGeekImplicitFontStyles(root, mono);
-                }
-                else
-                {
-                    root.Resources.Remove("ContentControlThemeFontFamily");
-                    root.Resources.Remove("ControlCornerRadius");
-                    root.Resources.Remove("OverlayCornerRadius");
-                    ApplyGeekImplicitFontStyles(root, null);
-                }
-
-                // 资源只影响之后新建的元素，已在树上的这一批得手动刷一遍
-                ApplyFontToTree(root, geek ? mono : null);
-
-                if (GeekOutputReadout != null)
-                {
-                    GeekOutputReadout.Visibility = geek ? Visibility.Visible : Visibility.Collapsed;
-                }
-
-                // 右上角工具按钮：极客下直角。PlayAll 在 XAML 里写死 CornerRadius=16 的胶囊款，
-                // 主题资源盖不掉显式值，只能逐个改；非极客恢复原值（可来回切）。
-                ApplyGeekButtonCorner(PlayAllLibrarySongsButton, geek, 16);
-                ApplyGeekButtonCorner(SortFieldButton, geek, 4);
-                ApplyGeekButtonCorner(SortOrderButton, geek, 4);
-                ApplyGeekButtonCorner(ChangeSortButton, geek, 4);
-
-                // 右侧浏览区重塑：直角 / 细线 / 无药丸（真正把它做成终端风，而不是经典换皮）
-                ApplyGeekBrowseSkin(geek);
-
-                // 详情页面：用户拍板「专辑详情页保留原来的经典布局」—— 这里只动封面一处
-                ApplyGeekDetailPages(geek);
-
-                // 浏览墙的专辑卡封面方角 / 还原（跟着上面的风格开关一起走）
-                RefreshGeekAlbumCards();
-
-                // 左侧分类图标：极客下换成等宽符号 + 磷光单色（这是另一套结构，浏览区那个扫描覆盖不到）
-                ApplyNavGeekGlyphs(geek);
-
-                // C 区主区表格化：四视图纯文字表格（封面隐藏/列头/卡片墙换文字行）
-                ApplyGeekTables(geek);
-
-                // 底部播放条的命令行化：字符进度块 + "> 时间 / 总时长" + 磷光色 / CRT 扫描线
-                ApplyGeekTransport(geek);
-
-                // 极客布局：顶栏链路读数条 + 控制键 ASCII 化 + 音量字符条 + 状态灯
-                ApplyGeekShell(geek);
-
-                // 磷光色统一：播放条/顶栏字符键 + 播放歌曲信息页 + 歌词（跟随设置里的极客磷光色）
-                ApplyGeekNowPlaying(geek);
-
-                // 音效处理 DSP 面板的磷光色：把 ThemeColorService 那套 accent 资源键做成
-                // AudioFxBorder 上的元素级副本（极客下不能动全局资源，否则 0xc000027b）
-                ApplyGeekDsp(geek);
-
-                EnsureGeekReadoutTimer(geek);
-                if (geek)
-                {
-                    UpdateGeekReadout();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ApplyGeekChrome", caught); }
-        }
-
-        /// <summary>极客模式按钮直角化 / 还原。normalRadius 为非极客时的圆角。</summary>
-        private static void ApplyGeekButtonCorner(ButtonBase? button, bool geek, double normalRadius)
-        {
-            if (button == null)
-            {
-                return;
-            }
-
-            button.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(normalRadius);
-        }
-
-        /// <summary>
-        /// 专辑详情页的极客化 —— 用户拍板（2026-09-29）：**保留原来的经典布局**，不做字符表格 /
-        /// 取景框那套重做，只做两处最小改动：封面圆角磨平 + 详情页几个按钮改极客款。
-        /// 理由：极客皮肤「圆角一律归零」是硬规矩，而且圆角会把封面图跟角落一起裁掉，
-        /// 直角才是「整块图钉在面板上」的观感。XAML 里 CornerRadius 是写死的显式值，
-        /// 主题资源盖不掉，只能按元素改；原值走 GeekStore 备份，退出极客逐棵还原。
-        /// </summary>
-        private void ApplyGeekDetailPages(bool geek)
-        {
-            ApplyDetailCoverFrame(AlbumDetailCoverBorder, geek);
-
-            var hairline = new SolidColorBrush(GeekHairline);
-            ButtonBase?[] detailButtons =
-            {
-                AlbumDetailBackButton,
-                AlbumDetailPlayButton,
-                AlbumDetailAddToPlaylistButton,
-                AlbumDetailAddToNamedListButton,
-                AlbumDetailSubArtistLink,
-                AlbumDetailPreloadButton,
-                AlbumDetailPreloadClearButton,
-            };
-
-            foreach (ButtonBase? button in detailButtons)
-            {
-                if (button == null)
-                {
-                    continue;
-                }
-
-                if (geek)
-                {
-                    // 直角 + 极客细线描边（描边只在模板本来就画边线时才看得见，纯图标键不受影响）
-                    GeekStore(button, Control.CornerRadiusProperty, new CornerRadius(0));
-                    GeekStore(button, Control.BorderBrushProperty, hairline);
-                }
-                else
-                {
-                    GeekRestoreSubtree(button);
-                }
-            }
-        }
-
-        /// <summary>封面框：极客下直角 + 极客细线边框（有封面时本就是 0 厚度的"无框"，看不出线）。</summary>
-        private void ApplyDetailCoverFrame(Border? frame, bool geek)
-        {
-            if (frame == null)
-            {
-                return;
-            }
-
-            if (geek)
-            {
-                GeekStore(frame, Border.CornerRadiusProperty, new CornerRadius(0));
-                GeekStore(frame, Border.BorderBrushProperty, new SolidColorBrush(GeekHairline));
-            }
-            else
-            {
-                GeekRestoreSubtree(frame);
-            }
-        }
-
-        /// <summary>
-        /// 专辑浏览墙的一张卡：极客下把「封面那一圈圆角」磨成直角，其它（布局 / 文字 / 曲目数）一概不动
-        /// —— 用户拍板（2026-09-29）要的就是别的皮肤那种封面卡片的样子，只把封面改方角。
-        ///
-        /// 为什么挂在容器生成事件上而不是切皮肤那一刻遍历一遍：GridView 虚拟化会回收复用容器，
-        /// 那一刻遍历只管到已渲染出来的卡，之后滚动出来的新卡仍是 XAML 原值的圆角。
-        /// 同理这里**不走 GeekStore 备份** —— 容器会被复用、还原时机不可控，
-        /// 直接按「当前是不是极客」在两个值之间写死最稳（退出极客时同一事件会把经典值写回）。
-        /// </summary>
-        internal static void ApplyGeekAlbumCardFrame(DependencyObject cardRoot)
-        {
-            bool geek = IsGeekUiStyleActive();
-
-            if (cardRoot is GridViewItem container)
-            {
-                container.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(8);
-            }
-
-            var borders = new List<Border>();
-            CollectCardBorders(cardRoot, borders);
-
-            foreach (Border border in borders)
-            {
-                switch (border.Tag as string)
-                {
-                    case "AlbumRowChrome":
-                        border.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(8);
-                        break;
-                    case "AlbumCoverFrame":
-                        border.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(10);
-                        break;
-                    case "AlbumDsdBadge":
-                        border.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(0, 0, 8, 0);
-                        break;
-                }
-            }
-        }
-
-        /// <summary>
-        /// 切换皮肤时把**已经渲染出来**的专辑卡也刷一遍：容器事件只能管到"新创建/复用"的卡，
-        /// 切皮肤时如果列表项没变，GridView 不一定重建容器 —— 少了这一趟，
-        /// 屏幕上现存的卡会留着上一个皮肤的圆角。只遍历已渲染的子节点，网格再大也是 O(可见数)。
-        /// </summary>
-        private void RefreshGeekAlbumCards()
-        {
-            if (AlbumGridView?.ItemsPanelRoot is Panel panel)
-            {
-                foreach (UIElement child in panel.Children)
-                {
-                    ApplyGeekAlbumCardFrame(child);
-                }
-            }
-        }
-
-        /// <summary>把一张卡片子树里的 Border 收进清单（卡片结构简单，递归够用；不深拷贝）。</summary>
-        private static void CollectCardBorders(DependencyObject node, List<Border> sink)
-        {
-            if (node is Border border)
-            {
-                sink.Add(border);
-            }
-
-            int count = VisualTreeHelper.GetChildrenCount(node);
-            for (int i = 0; i < count; i++)
-            {
-                CollectCardBorders(VisualTreeHelper.GetChild(node, i), sink);
-            }
-        }
-
-        /// <summary>把字体刷到可视树上已有的 TextBlock / Control（font=null 表示还原）。</summary>
-        private static void ApplyFontToTree(DependencyObject node, Microsoft.UI.Xaml.Media.FontFamily? font)
-        {
-            // 图标字形用的是字体里的特殊符号位（PUA 区），Consolas 里根本没有这些字符 →
-            // 渲染成缺字的问号框（用户实测：播放键与右上角按钮变问号）。图标一律不换字体。
-            if (node is FontIcon or SymbolIcon)
-            {
-                return;
-            }
-
-            if (node is TextBlock tb)
-            {
-                if (font == null)
-                {
-                    tb.ClearValue(TextBlock.FontFamilyProperty);
-                }
-                else
-                {
-                    tb.FontFamily = font;
-                }
-            }
-            else if (node is Control c)
-            {
-                if (font == null)
-                {
-                    c.ClearValue(Control.FontFamilyProperty);
-                }
-                else if (!SubtreeHasIcon(c))
-                {
-                    // 含图标的控件不换字体：图标会继承父级字体，换成等宽就缺字变问号。
-                    // 它内部的文字部分由上面的 TextBlock 分支各自换，不受影响。
-                    c.FontFamily = font;
-                }
-            }
-
-            int count = VisualTreeHelper.GetChildrenCount(node);
-            for (int i = 0; i < count; i++)
-            {
-                ApplyFontToTree(VisualTreeHelper.GetChild(node, i), font);
-            }
-        }
-
-        /// <summary>图标字形字体：等宽字体里没有这些私有区字形，继承过去会缺字成问号框，反向下钉。</summary>
-        private static readonly Microsoft.UI.Xaml.Media.FontFamily GeekIconSymbolFont =
-            new("Segoe Fluent Icons, Segoe MDL2 Assets");
-
-        /// <summary>隐式样式要覆盖的类型清单（隐式样式的资源键就是类型本身）。漏了的类型换不到等宽。
-        /// 全部写全限定名：本文件同时 using 了 TagLib（里面有 TextBox 等同名类型），简写会报 CS0104 歧义。</summary>
-        private static readonly Type[] GeekFontStyleTargets =
-        {
-            typeof(Microsoft.UI.Xaml.Controls.TextBlock),
-            typeof(Microsoft.UI.Xaml.Controls.RichTextBlock),
-            typeof(Microsoft.UI.Xaml.Controls.TextBox),
-            typeof(Microsoft.UI.Xaml.Controls.AutoSuggestBox),
-            typeof(Microsoft.UI.Xaml.Controls.PasswordBox),
-            typeof(Microsoft.UI.Xaml.Controls.ButtonBase),
-            typeof(Microsoft.UI.Xaml.Controls.Button),
-            typeof(Microsoft.UI.Xaml.Controls.Primitives.ToggleButton),
-            typeof(Microsoft.UI.Xaml.Controls.Primitives.RepeatButton),
-            typeof(Microsoft.UI.Xaml.Controls.HyperlinkButton),
-            typeof(Microsoft.UI.Xaml.Controls.CheckBox),
-            typeof(Microsoft.UI.Xaml.Controls.RadioButton),
-            typeof(Microsoft.UI.Xaml.Controls.ComboBox),
-            typeof(Microsoft.UI.Xaml.Controls.ToggleSwitch),
-            typeof(Microsoft.UI.Xaml.Controls.AppBarButton),
-            typeof(Microsoft.UI.Xaml.Controls.MenuFlyoutItem),
-            typeof(Microsoft.UI.Xaml.Controls.ContentControl),
-        };
-
-        /// <summary>
-        /// 极客字体的隐式样式：mono 非空时给清单里每种类型挂一条「只设字体」的样式，null 时逐条摘掉。
-        /// 隐式样式只写字体这一个属性，不动控件默认模板；下面那棵树的遍历照旧负责已存在的元素。
-        /// </summary>
-        private static void ApplyGeekImplicitFontStyles(FrameworkElement root, Microsoft.UI.Xaml.Media.FontFamily? mono)
-        {
-            if (mono == null)
-            {
-                foreach (Type target in GeekFontStyleTargets)
-                {
-                    root.Resources.Remove(target);
-                }
-
-                root.Resources.Remove(typeof(Microsoft.UI.Xaml.Controls.FontIcon));
-                return;
-            }
-
-            foreach (Type target in GeekFontStyleTargets)
-            {
-                DependencyProperty? property =
-                    target == typeof(Microsoft.UI.Xaml.Controls.TextBlock) ? Microsoft.UI.Xaml.Controls.TextBlock.FontFamilyProperty
-                    : target == typeof(Microsoft.UI.Xaml.Controls.RichTextBlock) ? Microsoft.UI.Xaml.Controls.RichTextBlock.FontFamilyProperty
-                    : typeof(Microsoft.UI.Xaml.Controls.Control).IsAssignableFrom(target) ? Microsoft.UI.Xaml.Controls.Control.FontFamilyProperty
-                    : null;
-
-                if (property == null)
-                {
-                    continue;
-                }
-
-                var style = new Style(target);
-                style.Setters.Add(new Setter(property, mono));
-                root.Resources[target] = style;
-            }
-
-            // FontIcon 自己带 FontFamilyProperty（SymbolIcon 没有，MDL2 字形由系统兜底）
-            var iconStyle = new Style(typeof(Microsoft.UI.Xaml.Controls.FontIcon));
-            iconStyle.Setters.Add(new Setter(Microsoft.UI.Xaml.Controls.FontIcon.FontFamilyProperty, GeekIconSymbolFont));
-            root.Resources[typeof(Microsoft.UI.Xaml.Controls.FontIcon)] = iconStyle;
-        }
-
-        /// <summary>子树里是否有图标字形（决定这个控件能不能换等宽字体）。</summary>
-        private static bool SubtreeHasIcon(DependencyObject node)
-        {
-            if (node is FontIcon or SymbolIcon)
-            {
-                return true;
-            }
-
-            int count = VisualTreeHelper.GetChildrenCount(node);
-            for (int i = 0; i < count; i++)
-            {
-                if (SubtreeHasIcon(VisualTreeHelper.GetChild(node, i)))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        private void EnsureGeekReadoutTimer(bool enable)
-        {
-            if (_geekReadoutTimer == null)
-            {
-                DispatcherQueue queue = DispatcherQueue.GetForCurrentThread();
-                if (queue == null)
-                {
-                    return;
-                }
-
-                _geekReadoutTimer = queue.CreateTimer();
-                _geekReadoutTimer.Interval = TimeSpan.FromMilliseconds(1000);
-                _geekReadoutTimer.Tick += (s, a) =>
-                {
-                    UpdateGeekReadout();
-                    // 顶栏链路读数 / 音量字符条 / 状态灯同源刷新
-                    UpdateGeekShellTick();
-                };
-            }
-
-            if (enable)
-            {
-                _geekReadoutTimer.Start();
-            }
-            else
-            {
-                _geekReadoutTimer.Stop();
-            }
-        }
-
-        /// <summary>顶栏那行实时读数：输出格式 → 活跃 DSP → 峰值 / 削波。全是引擎真数据。</summary>
-        private void UpdateGeekReadout()
-        {
-            if (GeekOutputReadout == null || GeekOutputReadout.Visibility != Visibility.Visible)
-            {
-                return;
-            }
-
-            try
-            {
-                var parts = new List<string>();
-
-                string fmt = _audioEngine?.ActualOutputFormat ?? string.Empty;
-                if (!string.IsNullOrWhiteSpace(fmt))
-                {
-                    parts.Add(fmt);
-                }
-
-                string[] names = { "余量", "SRC", "EQ", "OPRA", "FIR", "声道", "RG" };
-                bool[] active = DspModuleActive();
-                var on = new List<string>();
-                for (int i = 0; i < names.Length && i < active.Length; i++)
-                {
-                    if (active[i])
-                    {
-                        on.Add(names[i]);
-                    }
-                }
-
-                parts.Add(on.Count == 0 ? "bit-perfect" : "DSP " + string.Join("›", on));
-
-                float peak = _audioEngine?.OutputPeakDbfs ?? float.NegativeInfinity;
-                if (!float.IsInfinity(peak))
-                {
-                    parts.Add("峰值 " + peak.ToString("0.0") + " dBFS");
-                }
-
-                int clip = _audioEngine?.OutputClipCount ?? 0;
-                if (clip > 0)
-                {
-                    parts.Add("削波 " + clip + " 次");
-                }
-
-                GeekOutputReadout.Text = string.Join("   ·   ", parts);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UpdateGeekReadout", caught); }
-        }
+        /// <summary>行选中款与容器圆角软化已整体搬到 MainWindow.SelectionChromeHost.cs（W13 第二十二刀）。</summary>
 
         /// <summary>经典界面专属：侧栏分类按钮图标按类别上彩色（媒体播放器风格）；classic=false 时还原主题前景色。</summary>
         private void ApplyClassicNavIconColors(bool classic)
@@ -1037,137 +587,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>行选中款与容器圆角软化已整体搬到 MainWindow.SelectionChromeHost.cs（W13 第二十二刀）。</summary>
 
-        /// <summary>
-        /// 行内细节按界面风格重塑（极客化浏览面板的行级部分）：
-        /// - Tag="FmtChip" 格式标签：极客下去掉药丸底/圆角/描边，变暗灰纯文本（终端曲目列表的味道）；
-        /// - Tag="RowCover" 行内封面：极客下保留（行首正方形封面框），只把圆角归零、描边换细线；
-        /// - Tag 以 "RowChrome" 结尾的行底板：极客下在行底补一条 1px 表格线，整页读起来是一张数据表；
-        /// - 行内其它圆角元素（选中块、标签底衬等）一并直角化。
-        /// 原值一律走 GeekStore 备份，退出极客时逐项还原（不再手写"经典原值"，避免还原值和模板对不上）。
-        /// 由各列表的行样式入口（ApplySongListItemSelectionChrome 等）在行实现/刷新时调用，
-        /// 因此列表虚拟化晚实现的行也能被覆盖。
-        /// </summary>
-        internal void ApplyGeekRowDetailChrome(FrameworkElement? root)
-        {
-            if (root == null)
-            {
-                return;
-            }
-
-            if (IsGeekUiStyleActive())
-            {
-                ApplyGeekRowDetailChromeInner(root);
-                return;
-            }
-
-            GeekRestoreSubtree(root);
-        }
-
-        /// <summary>极客行与行之间的表格线：半透明浅色细线。
-        /// 之前用不透明暗绿灰(#222A22)，在选中行的半透明白底上反而比背景更暗、看着像一条黑线（用户实测反馈）；
-        /// 改成低透明度白后，深底上是淡分隔、浅底上仍是淡线，任何底色都不会变黑。</summary>
-        private static readonly Color GeekRowRuleColor = Color.FromArgb(22, 0xFF, 0xFF, 0xFF);
-
-        private void ApplyGeekRowDetailChromeInner(DependencyObject node)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(node);
-            for (int i = 0; i < count; i++)
-            {
-                if (VisualTreeHelper.GetChild(node, i) is not DependencyObject child)
-                {
-                    continue;
-                }
-
-                if (child is Border b)
-                {
-                    string tag = b.Tag as string ?? string.Empty;
-
-                    if (tag == "FmtChip")
-                    {
-                        GeekStore(b, Border.CornerRadiusProperty, new CornerRadius(0));
-                        GeekStore(b, Border.BackgroundProperty, null);
-                        GeekStore(b, Border.BorderThicknessProperty, new Thickness(0));
-                        GeekStore(b, Border.PaddingProperty, new Thickness(0));
-                        if (b.Child is TextBlock chipText)
-                        {
-                            GeekStore(chipText, TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromArgb(255, 0x8B, 0x92, 0x86)));
-                            GeekStore(chipText, UIElement.OpacityProperty, 1.0);
-                        }
-                    }
-                    else if (tag == "RowCover")
-                    {
-                        // 用户决定（2026-09-29）：极客歌曲列表**保留封面** —— 行首放正方形封面框，
-                        // 只把圆角归零（其他皮肤维持各自的圆角款）。不再隐藏封面、也不再把列宽归零。
-                        GeekStore(b, Border.CornerRadiusProperty, new CornerRadius(0));
-                        GeekStore(b, Border.BorderBrushProperty, new SolidColorBrush(GeekHairline));
-                    }
-                    else
-                    {
-                        // 行内其它方块（选中块、评分底衬、播放中指示）一律直角
-                        if (b.CornerRadius != new CornerRadius(0)
-                            && !(b.Width > 0 && Math.Abs(b.Width - b.Height) < 0.5 && b.CornerRadius.TopLeft >= b.Width / 2 - 0.5))
-                        {
-                            GeekStore(b, Border.CornerRadiusProperty, new CornerRadius(0));
-                        }
-                    }
-
-                    if (tag.EndsWith("RowChrome", StringComparison.Ordinal))
-                    {
-                        EnsureGeekRowRule(b);
-                    }
-                }
-
-                ApplyGeekRowDetailChromeInner(child);
-            }
-        }
-
-        /// <summary>
-        /// 给一行底板补 1px 表格线（用 Tag="GeekRule" 认领，还原时按同 Tag 摘掉）。
-        /// 线钉在行容器的底边 —— 行容器常是 VerticalAlignment=Center（比行底板矮），
-        /// 线会被抬上来正好压住最后一行文字（用户实测：横线与歌曲信息重叠）。
-        /// 所以先把居中的容器拉伸到底板同高再钉线：行内子元素各自自带
-        /// VerticalAlignment=Center，内容不会被拉散；拉伸与还原都走 GeekStore。
-        /// </summary>
-        private void EnsureGeekRowRule(Border chrome)
-        {
-            if (chrome.Child is not Panel host)
-            {
-                return;
-            }
-
-            foreach (UIElement existing in host.Children)
-            {
-                if (existing is FrameworkElement existingElement && existingElement.Tag as string == "GeekRule")
-                {
-                    return;
-                }
-            }
-
-            if (host.VerticalAlignment == VerticalAlignment.Center)
-            {
-                GeekStore(host, FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Stretch);
-            }
-
-            Thickness padding = chrome.Padding;
-            var rule = new Border
-            {
-                Tag = "GeekRule",
-                Height = 1,
-                Background = new SolidColorBrush(GeekRowRuleColor),
-                VerticalAlignment = VerticalAlignment.Bottom,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                Margin = new Thickness(-padding.Left, 0, -padding.Right, 0),
-                IsHitTestVisible = false,
-            };
-
-            if (host is Grid grid)
-            {
-                Grid.SetRowSpan(rule, 99);
-                Grid.SetColumnSpan(rule, 99);
-            }
-
-            host.Children.Add(rule);
-        }
 
         // =====================================================================
         // 左侧导航条目：图标（经典 = 彩色 emoji / 背景图式 = 原单色字形）、
@@ -1219,7 +638,7 @@ namespace CelesteMusicPlayer
             try
             {
                 AppSettingsState settings = AppSettingsStore.Load();
-                bool emojiOn = settings.NavEmojiIcons && !IsGeekUiStyleActive();
+                bool emojiOn = settings.NavEmojiIcons;
 
                 foreach (NavItemRef item in NavItems)
                 {
@@ -1239,67 +658,8 @@ namespace CelesteMusicPlayer
                 {
                     LibraryNavInnerDivider.Visibility = classic ? Visibility.Visible : Visibility.Collapsed;
                 }
-
-                // 极客界面同样要抢一次：终端里的分类不该再露出 Fluent 字形
-                ApplyNavGeekGlyphs(IsGeekUiStyleActive());
             }
             catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.ApplyNavIconStyle", caught); }
-        }
-
-        /// <summary>
-        /// 极客界面的左侧分类图标：隐藏 Fluent 字形，换成等宽符号（磷光单色、固定宽度所以
-        /// 各条目的文字能严格对齐）。切回别的风格只隐藏不删 —— 元素是我在运行时插进
-        /// 按钮内容的容器里的，删了就没法再恢复原来的子元素顺序。
-        /// </summary>
-        private void ApplyNavGeekGlyphs(bool geek)
-        {
-            AppSettingsState settings = AppSettingsStore.Load();
-            Color phosphor = PhosphorColor(settings.GeekPhosphorColor);
-
-            // 图形图标模式：左栏不换等宽符号，保留和其他皮肤同一套图标，只把颜色刷成磷光色
-            bool iconMode = !string.Equals(settings.GeekIconStyle, "Glyph", StringComparison.Ordinal);
-
-            foreach (NavItemRef item in NavItems)
-            {
-                bool showSymbol = geek && !iconMode && item.GlyphHost != null && item.GeekSymbol.Length > 0;
-
-                if (showSymbol && item.Emoji != null)
-                {
-                    item.Emoji.Visibility = Visibility.Collapsed;
-                }
-
-                TextBlock? symbol = item.GeekGlyph;
-                if (showSymbol)
-                {
-                    symbol ??= BuildNavGeekGlyph(item);
-                }
-
-                if (symbol != null)
-                {
-                    item.GeekGlyph = symbol;
-                    symbol.Visibility = showSymbol ? Visibility.Visible : Visibility.Collapsed;
-                    if (showSymbol)
-                    {
-                        symbol.Foreground = new SolidColorBrush(phosphor);
-                    }
-                }
-
-                if (item.Glyph != null)
-                {
-                    bool emojiShown = item.Emoji != null && item.Emoji.Visibility == Visibility.Visible;
-                    item.Glyph.Visibility = (emojiShown || (symbol?.Visibility == Visibility.Visible))
-                        ? Visibility.Collapsed
-                        : Visibility.Visible;
-
-                    // 图形图标模式：原图标露出来，颜色统一白色（和其他皮肤一致）
-                    if (geek && iconMode
-                        && item.Glyph.Visibility == Visibility.Visible
-                        && item.Glyph is Microsoft.UI.Xaml.Controls.IconElement navIcon)
-                    {
-                        WhitenGeekIcon(navIcon, new SolidColorBrush(GeekIconWhite));
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -1413,10 +773,9 @@ namespace CelesteMusicPlayer
         private void ApplyCapsuleSortButtonStyle(bool accent)
         {
             const double height = 32;
-            // 极客界面：排序按钮一律直角（用户要求）；经典/图景保持原来的胶囊（半高圆角）。
-            // 这是所有排序按钮的总入口，改这里一次覆盖全部复用点。只改形状，填充色不变。
-            bool geek = IsGeekUiStyleActive();
-            var capsule = geek ? new CornerRadius(0) : new CornerRadius(height / 2.0); // 半高等于半径 → 两头圆、中间直
+            // 排序按钮：经典/图景保持胶囊（半高圆角）。这是所有排序按钮的总入口，
+            // 改这里一次覆盖全部复用点。只改形状，填充色不变。
+            var capsule = new CornerRadius(height / 2.0); // 半高等于半径 → 两头圆、中间直
 
             // 排序相关按钮始终使用主题色；accent 参数保留以兼容旧调用
             Brush background = ResolveAccentBrush();
@@ -1451,7 +810,7 @@ namespace CelesteMusicPlayer
                 ApplyCapsuleToControl(
                     SelectAllMultiSelectButton,
                     height,
-                    geek ? new CornerRadius(0) : new CornerRadius(8),
+                    new CornerRadius(8),
                     selectAllBg,
                     selectAllFg);
             }

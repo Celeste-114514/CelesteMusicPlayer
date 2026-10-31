@@ -91,8 +91,6 @@ namespace CelesteMusicPlayer
                     {
                         "Light" or "ClassicLight" => ElementTheme.Light,
                         "Dark" or "ClassicDark" => ElementTheme.Dark,
-                        // 极客界面：恒为深色（近黑终端风）
-                        "Geek" => ElementTheme.Dark,
                         _ => ElementTheme.Default,
                     };
                 }
@@ -120,10 +118,6 @@ namespace CelesteMusicPlayer
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FrostedGlass.cs", caught); }
-
-            // 极客界面：二级窗口跟随主界面做终端化（等宽字体 + 直角 + 细线）。
-            // 底色/明暗上面已经给了，这里补视觉三件套；主窗口会由内部逻辑跳过（它有自己的 ApplyGeekChrome）。
-            GeekWindowSkin.Apply(window, ClassicMode == "Geek");
         }
 
         /// <summary>已挂过激活回调的窗口，避免重复挂（弱引用表，窗口关了自动释放）。</summary>
@@ -152,13 +146,11 @@ namespace CelesteMusicPlayer
                 if (ClassicMode != null && !BackdropEnabled)
                 {
                     // 令牌测试皮肤：窗口根底色问令牌要（App.Background），盖掉经典灰阶
-                    Color rootColor = ClassicMode == "Geek"
-                        ? Color.FromArgb(255, 11, 15, 11)          // 极客：与主窗口 RootShell 同一款近黑
-                        : TokenRootColor?.Invoke() is Color tokenRoot
-                            ? tokenRoot
-                            : ClassicIsLight
-                                ? Color.FromArgb(255, 243, 243, 243)
-                                : Color.FromArgb(255, 32, 32, 32);
+                    Color rootColor = TokenRootColor?.Invoke() is Color tokenRoot
+                        ? tokenRoot
+                        : ClassicIsLight
+                            ? Color.FromArgb(255, 243, 243, 243)
+                            : Color.FromArgb(255, 32, 32, 32);
                     panel.Background = new SolidColorBrush(rootColor);
                     PaintedRoots.AddOrUpdate(panel, panel);
                 }
@@ -250,12 +242,6 @@ namespace CelesteMusicPlayer
             // 经典界面：面板一律不透明纯色（浅色=白卡，深色=炭灰卡），不再透出背后内容
             if (ClassicMode != null)
             {
-                if (ClassicMode == "Geek")
-                {
-                    // 极客界面：近黑面板，比主底(#0B0F0B)亮一档带层次，微绿调呼应终端
-                    return new SolidColorBrush(Color.FromArgb(255, 22, 27, 22));
-                }
-
                 // 令牌测试皮肤：面板底色问令牌要（Panel.Background），盖掉经典白/炭灰
                 if (TokenPanelColor?.Invoke() is Color tokenPanel)
                 {

@@ -51,13 +51,6 @@ namespace CelesteMusicPlayer
                 RefreshDetailPagesForTheme();
                 CelesteThemeApplied?.Invoke(themeName);
 
-                // 换完主题让极客皮肤那套也重刷一次（它有自己独立的磷光色逻辑）
-                try
-                {
-                    ApplyGeekDetailPages(IsGeekUiStyleActive());
-                }
-                catch (Exception ex) { StartupLog.WriteException("ApplyCelesteThemeAsync.geek", ex); }
-
                 // 设置面板的强调条也跟着重刷（阶段 0 新增的板块，走同一个取色入口）
                 ReapplySettingsAccent();
 

@@ -620,21 +620,10 @@ namespace CelesteMusicPlayer
         internal const string PhosphorGreen = "Green";
         internal const string PhosphorCyan = "Cyan";
 
-        /// <summary>当前是否处于极客界面模式（近黑终端风：等宽字、直角、技术读数）。供各面板刷新处判断。</summary>
-        internal static bool IsGeekUiStyleActive()
-        {
-            string mode;
-            try
-            {
-                mode = AppSettingsStore.Load().UiStyleMode;
-            }
-            catch
-            {
-                return false;
-            }
-
-            return mode == UiStyleGeek;
-        }
+        /// <summary>极客界面模式已于 2026-10-31 整体移除（用户拍板：新外壳不做极客皮肤）。
+        /// 这里恒返回 false，保留方法名是为了不改动全项目几十处调用点；
+        /// 老存档里的 UiStyleMode="Geek" 由 AppSettingsStore 归一到 ClassicSystem。</summary>
+        internal static bool IsGeekUiStyleActive() => false;
 
         private Brush ResolveAccentBrush()
         {

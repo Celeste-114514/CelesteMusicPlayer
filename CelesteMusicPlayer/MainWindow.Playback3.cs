@@ -71,12 +71,9 @@ namespace CelesteMusicPlayer
 
             // 容器本身保持透明，避免 Presenter 方角选中层
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
+            container.CornerRadius = new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
-
-            // 极客化行内细节：格式胶囊去药丸、封面直角（非极客恢复原样）。
-            ApplyGeekRowDetailChrome(container);
 
             bool selected = multiOnThisList
                 ? VisualTreeWalker.IsItemSelected(list, song, selectedSet)
@@ -86,7 +83,7 @@ namespace CelesteMusicPlayer
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
-                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
+                chrome.CornerRadius = new CornerRadius(8);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
                 // 让行内容横向铺满列表宽度（选中矩形也因此铺满整行、字段对齐表头）。
                 // 用显式宽度而非仅靠 HorizontalContentAlignment，确保在 ScrollViewer 布局下也生效。
@@ -409,9 +406,6 @@ namespace CelesteMusicPlayer
 
         private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
         {
-            // 极客模式的字符音量条（VOL ███░░）跟着滑块走
-            UpdateGeekVolumeText();
-
             UpdateVolumeIcon(e.NewValue);
 
             // 共享模式：MediaPlayer 数字音量（跟随用户）。

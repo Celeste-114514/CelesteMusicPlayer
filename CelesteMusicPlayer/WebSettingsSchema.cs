@@ -121,7 +121,7 @@ namespace CelesteMusicPlayer
                 Slider("PlaybackRate", "播放速度", 0.5, 2, 0.05, "×", "实际生效区间 0.5–2；旧存档里更大的值会被夹到这里。"),
                 Bool("PlaybackRatePreservePitch", "变速时保持音调", "关掉后音调随倍率升降（nightcore / daycore 效果）。")
             )).Concat(In("appearance",
-                Sel("UiStyleMode", "界面风格", "ClassicSystem|经典 · 跟随系统;ClassicLight|经典 · 浅色;ClassicDark|经典 · 深色;Scene|图景（背景图式）;Geek|极客终端",
+                Sel("UiStyleMode", "界面风格", "ClassicSystem|经典 · 跟随系统;ClassicLight|经典 · 浅色;ClassicDark|经典 · 深色;Scene|图景（背景图式）",
                     "只影响旧主窗口；网页界面是这一套之外的另一层。", scope: "native"),
                 Sel("CelesteThemeName", "主题文件", "$(themes)", "读 Themes\\*.celeste-theme 里的配色。只作用于旧主窗口的令牌。", scope: "native"),
                 Bool("EnableFrostedGlass", "亚克力毛玻璃背板", "旧主窗口的背景材质，和网页里的背景是两回事。", scope: "native"),
@@ -405,7 +405,7 @@ namespace CelesteMusicPlayer
             ["InsertPlaylistAtBegin"] = (s, v) => s.InsertPlaylistAtBegin = Bool(v),
             ["PlaybackRate"] = (s, v) => s.PlaybackRate = Math.Clamp(Num(v), 0.5, 2),
             ["PlaybackRatePreservePitch"] = (s, v) => s.PlaybackRatePreservePitch = Bool(v),
-            ["UiStyleMode"] = (s, v) => s.UiStyleMode = One(v, "ClassicSystem", "ClassicLight", "ClassicDark", "Scene", "Geek"),
+            ["UiStyleMode"] = (s, v) => s.UiStyleMode = One(v, "ClassicSystem", "ClassicLight", "ClassicDark", "Scene"),
             ["CelesteThemeName"] = (s, v) => s.CelesteThemeName = Text(v, 260),
             ["EnableFrostedGlass"] = (s, v) => s.EnableFrostedGlass = Bool(v),
             ["AccentSource"] = (s, v) => s.AccentSource = One(v, "System", "Custom"),

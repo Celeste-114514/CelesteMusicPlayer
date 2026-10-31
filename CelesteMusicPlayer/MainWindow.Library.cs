@@ -985,16 +985,21 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            SetLibrarySearchBasePrompt(_currentCategory switch
+            // 分类切换时刷新搜索框占位文案（原 SetLibrarySearchBasePrompt 随极客皮肤移除，
+            // 经典路径就是直接写 PlaceholderText）。
+            if (LibrarySearchBox != null)
             {
-                "Songs" => "搜索标题、专辑、艺术家",
-                "Albums" => "搜索专辑、艺术家",
-                "Artists" => "搜索艺术家",
-                "AlbumArtists" => "搜索专辑艺术家",
-                "Folders" => "搜索文件名",
-                "UserPlaylist" => "搜索标题、艺术家、专辑、年份",
-                _ => "搜索"
-            });
+                LibrarySearchBox.PlaceholderText = _currentCategory switch
+                {
+                    "Songs" => "搜索标题、专辑、艺术家",
+                    "Albums" => "搜索专辑、艺术家",
+                    "Artists" => "搜索艺术家",
+                    "AlbumArtists" => "搜索专辑艺术家",
+                    "Folders" => "搜索文件名",
+                    "UserPlaylist" => "搜索标题、艺术家、专辑、年份",
+                    _ => "搜索"
+                };
+            }
 
             ApplyLibrarySearchNow();
         }

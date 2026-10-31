@@ -856,7 +856,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         // 早先图景用空字符串表示，老用户存档里的空值会把新默认顶掉 —— 改了默认值本机也看不到，
         // 表现就是"默认皮肤还是图景"。现在空/未设置一律归到默认「经典 · 跟随系统」。
         UiStyleMode = s.UiStyleMode?.Trim() is { Length: > 0 } uiStyle
-                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek"
+                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark"
             ? uiStyle
             : "ClassicSystem",
         // 侧栏 emoji 图标开关：老存档没有这个字段，反序列化即 false（纯色图标），符合当前默认

@@ -397,8 +397,6 @@ namespace CelesteMusicPlayer
 
             _lastSyncedPlayingState = playing;
             string glyph = playing ? "\uE769" : "\uE768";   // E769 = 暂停，E768 = 播放
-            // 极客模式的 ASCII 播放键：[>] / [||]
-            SetGeekPlayKeyState(playing);
             if (PlayPauseIcon != null)
             {
                 PlayPauseIcon.Glyph = glyph;
@@ -2438,18 +2436,15 @@ namespace CelesteMusicPlayer
                 : ReferenceEquals(list.SelectedItem, song);
 
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
+            container.CornerRadius = new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
-
-            // 极客化行内细节：格式胶囊去药丸、封面直角（非极客恢复原样）。
-            ApplyGeekRowDetailChrome(container);
 
             Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
-                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
+                chrome.CornerRadius = new CornerRadius(8);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
                 if (list.ActualWidth > 0)
                 {

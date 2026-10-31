@@ -218,11 +218,6 @@ namespace CelesteMusicPlayer
                 SeekBySeconds(5);
                 e.Handled = true;
             }
-            else if (TryHandleGeekNavDigit(key))
-            {
-                // 极客模式编号菜单：数字键直达对应分类（按钮可见才生效，隐藏项不抢键）
-                e.Handled = true;
-            }
             // 「查找歌曲」已移除（老版本遗留），F / F3 不再绑定任何动作。
         }
 
@@ -1152,9 +1147,6 @@ namespace CelesteMusicPlayer
                 _floatingMirror = false;
             }
 
-            // 镜像落定后补刷字符进度条：值没变（切歌回来 Value 恰好相同）时 ValueChanged 不触发，
-            // 不补这一下字符条会停在上一首的位置
-            UpdateGeekFloatingProgressText();
         }
 
         /// <summary>真实进度条变化时镜像到悬浮条（镜像期间忽略悬浮条自身的 ValueChanged，避免回环）。</summary>
@@ -1184,8 +1176,6 @@ namespace CelesteMusicPlayer
             {
                 _floatingMirror = false;
             }
-
-            UpdateGeekFloatingProgressText();
         }
 
         // 悬浮进度条交互：复用真实进度条的拖拽 / 跳转逻辑
@@ -1235,10 +1225,6 @@ namespace CelesteMusicPlayer
 
         private void NowPlayingProgressSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
-            // 字符进度条（极客下滑动块的视觉）跟着滑块值刷：放在两个早退判断**之前**，
-            // 否则镜像 / 非拖动状态下都不刷，悬浮条只有拖动中的那几下会动。
-            UpdateGeekFloatingProgressText();
-
             if (_floatingMirror)
             {
                 return;
