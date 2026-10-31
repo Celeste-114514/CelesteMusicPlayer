@@ -96,3 +96,19 @@ expression-bodied（无花括号），脚本一路匹配到后面几百行的某
 修复：从 git HEAD 提取 389-431 行原文插回 UiTheme（ApplyUiStyleMode 与现存后半段自然拼合），
 Utilities 只保留真正该搬的 GeekUiStyleCached 字段+属性。**教训：expression-bodied 成员绝不能用
 花括号配平的通用切块；end_pat 必须锚定具体内容。**
+
+### 第十刀（提交 `4f40a83`，2026-10-31）：C 域（两山之外）开工
+- **传输三件套** → Playback.cs：`AdjustVolumeBy`/`SeekBySeconds`（Features）、`HandleMediaEnded`（Misc）
+  ——网页命令/托盘/热键/MediaPlayer.Ended 回调全是活路径。
+- **封面缓存字段补搬**：`_lastCoverBytes`/`_lastCoverImage` 上一轮因 `&&` 链短路实际没搬
+  （脚本先报错，后面的字段搬移根本没执行，但编译 RC=0 掩盖了它）——本轮真正搬进 Playback3。
+  **教训：`&&` 链上前一步失败会静默跳过后续步骤，看探针残账才能发现。**
+**518 → 492 错 / 186 → 181 成员**。四道验证全过。回退件 `pre-w13-transport-20261031`。
+
+### C 域（两山之外 ~170 处）剩余构成
+- 歌词视觉：`ScrollLyricToCenter`(6)、极客行染色 —— 操作旧歌词控件，等视觉域统一裁
+- 缩略图/电平：`_thumbPumpTimer`(4)、`IdleLevel`(4)、TaskbarPlayer 相关 —— NativeTaskbar 域小刀
+- 极客按钮域：`_geekAsciiButtons`/`GeekButtonBackup`/`ApplyGeekRowDetailChrome` —— 极客域小刀
+- 托盘动作尾巴：`ToggleFavoriteForCurrent`/`ToggleMainWindowVisibility`/`RestoreLastLibraryAsync`
+- 房间校正面板：`LoadRoomCorrectionIntoPanel`(4)/`_roomIrLoaded`(4) —— 归 DSP 域一起
+- 设置实时应用族：`ApplySettingsLive` 大 switch —— 独立刀
