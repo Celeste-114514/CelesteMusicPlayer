@@ -31,7 +31,6 @@ public sealed partial class MainWindow
                 ? _playlist[_currentIndex].FilePath
                 : null;
 
-            UpdateLibraryNavHighlight();
 
             switch (_currentCategory)
             {
@@ -155,7 +154,6 @@ public sealed partial class MainWindow
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     LoadAudioFxUiFromStore();
-                    UpdateDspBitPerfectUi();
                     break;
 
                 case "Settings":

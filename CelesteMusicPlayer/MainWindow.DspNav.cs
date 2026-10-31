@@ -84,7 +84,6 @@ namespace CelesteMusicPlayer
         private void InitDspNav()
         {
             InitRoomCorrectionTrimUi();
-            LoadDspRackUi();
             _dspRackReady = true;
 
 
@@ -204,9 +203,7 @@ namespace CelesteMusicPlayer
             SetModelControl("RoomIrEnabledToggle", SwitchMessage(true));
             ApplyFirParameters();
 
-            RefreshRoomCorrectionInfo();
             UpdateDspNavIndicators();
-            UpdateDspBitPerfectUi();
         }
 
         // ---------- 声道左右偏差可视化 ----------
@@ -312,7 +309,6 @@ namespace CelesteMusicPlayer
             // trim 是「实时生效」的那一个：拖动即进模型并落盘下发（与旧行为一致）
             UpdateRoomTrimLabel();
             ApplyFirParameters();
-            UpdateDspBitPerfectUi();
         }
 
         /// <summary>从模型初始化 trim 滑杆（只在加载面板时调用一次，避免打断拖动）。</summary>
@@ -326,7 +322,6 @@ namespace CelesteMusicPlayer
             }
 
             UpdateRoomTrimLabel();
-            RefreshRoomCorrectionInfo();
         }
 
         // ---------- 输出安全监控 ----------

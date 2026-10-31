@@ -135,7 +135,6 @@ public sealed partial class MainWindow
             }
 
             // 机架编排页的行状态与导航圆点同源，一起刷（页面不可见时刷新无副作用，控件判空即可）
-            RefreshDspRackRows();
 
             UpdateDspHeroBadges();
             // 页头电源开关与徽章/圆点同源同步（10 个可开关模块；同步过程有 _dspPowerSyncing 守卫）
@@ -205,117 +204,10 @@ public sealed partial class MainWindow
             }
 
             _audioEngine?.SetRoomCorrection(state);
-            UpdateDspBitPerfectUi();
             UpdateSignalChainDisplay();
             StartupLog.Write($"房间校正已应用: enabled={state.Enabled} ir={state.IrPath} gain={state.GainDb}dB");
         }
 
-        /// <summary>更新 DSP 激活状态提示：任一 DSP 生效 → 非 bit-perfect。</summary>
-        private void UpdateDspBitPerfectUi()
-        {
-            if (AudioFxBitPerfectStatusText == null)
-            {
-                return;
-            }
-
-            // 同步主界面常驻 bit-perfect 徽章（与音频设置面板口径一致）
-            RefreshMainBitPerfectBadge();
-
-            // DSP 总旁路（A/B 对比）优先显示：旁路时输出 bit-perfect，无论 DSP 设置如何
-            bool bypass = RackParameters.Bypassed;
-            if (bypass)
-            {
-                if (AudioFxEqPillPerfectText != null)
-                {
-                }
-
-                if (_currentCategory == "AudioFX")
-                {
-                }
-
-                if (DspBypassStatusText != null)
-                {
-                }
-
-                UpdateDspNavIndicators();
-                return;
-            }
-
-            if (DspBypassStatusText != null)
-            {
-            }
-
-            // 口径与链路面板 IsBitPerfectPure / 引擎 RefreshActive 对齐，抽取为 IsDspActiveForBadge 复用：
-            // ①限幅单独开/关都不计入（开=待命不动样本、关=不介入）；②ReplayGain 计入；
-            // ③卷积要求 Enabled 且真导入过 IR；④HiFi 软件音量同样破坏 bit-perfect。
-            bool active = IsDspActiveForBadge();
-
-            if (AudioFxEqPillPerfectText != null)
-            {
-            }
-
-            // 主界面信息条（左上角）提示：使用 DSP 时输出非 bit-perfect
-            if (_currentCategory == "AudioFX")
-            {
-                NowPlayingText.Text = active
-                    ? "⚠ 使用 DSP（EQ/声道/余量/ReplayGain/卷积）→ 输出非 bit-perfect"
-                    : (AudioFxSafetyLimiterToggle.IsOn
-                        ? "音效处理：全部关闭 → bit-perfect 直通（限幅待命，无其它 DSP 时不处理样本）"
-                        : "音效处理：全部关闭 → bit-perfect 直通");
-            }
-
-            UpdateDspNavIndicators();
-        }
-
-        /// <summary>是否有任一 DSP 真正破坏 bit-perfect（口径与 <see cref="UpdateDspBitPerfectUi"/> 一致）。</summary>
-        private bool IsDspActiveForBadge()
-        {
-            bool eqActive = EqState.Current != null && EqState.Current.HasEffect();
-            bool chActive = AudioFxChannelToggle.IsOn || AudioFxChannelCrossfeedToggle.IsOn;
-            bool headroomActive = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
-            bool rgActive = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
-            var room = RoomCorrectionStore.Load();
-            bool firActive = room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath);
-            bool volActive = _audioEngine?.IsSoftwareVolumeActive ?? false;
-            return eqActive || chActive || headroomActive || rgActive || firActive || volActive;
-        }
-        // DSP 批 2：IR 信息读数离壳
-
-        /// <summary>刷新 IR 信息与削波风险提示。</summary>
-        private void RefreshRoomCorrectionInfo()
-        {
-            if (RoomIrInfoText == null)
-            {
-                return;
-            }
-
-            RoomCorrectionState st = FirParameters.Current;
-            if (!st.Enabled || string.IsNullOrWhiteSpace(st.IrPath))
-            {
-                if (RoomClipRiskText != null)
-                {
-                }
-
-                return;
-            }
-
-            string name = string.IsNullOrWhiteSpace(st.IrName) ? System.IO.Path.GetFileName(st.IrPath) : st.IrName;
-            int taps = st.IrTapCount > 0 ? st.IrTapCount : (_audioEngine?.ConvolutionIrTaps ?? 0);
-            int latencyFrames = _audioEngine?.ConvolutionLatencyFrames ?? 0;
-            double latencyMs = latencyFrames > 0 && st.IrSampleRate > 0 ? latencyFrames * 1000.0 / st.IrSampleRate : 0;
-            string chText = st.IrChannels >= 2 ? "立体声" : st.IrChannels == 1 ? "单声道" : "—";
-
-            RoomIrInfoText.Text = "IR：" + name
-                + " ｜ 长度 " + (taps > 0 ? taps + " taps" : "—")
-                + " ｜ 源采样率 " + (st.IrSampleRate > 0 ? st.IrSampleRate + " Hz" : "—")
-                + " ｜ 声道 " + chText
-                + " ｜ 卷积延迟 " + (latencyMs > 0 ? latencyMs.ToString("F1") + " ms" : "—");
-
-            if (RoomClipRiskText != null)
-            {
-                bool risk = _audioEngine?.ConvolutionClippingRisk ?? false;
-            }
-        }
 
         /// <summary>
         /// 把开关状态同步成各模块真实状态（导航指示刷新的末端一步）。
@@ -483,23 +375,6 @@ public sealed partial class MainWindow
             return causes.Count == 0;
         }
 
-        /// <summary>刷新主播放界面常驻的 bit-perfect 徽章（绿=直通 / 琥珀=DSP 处理中）。</summary>
-        private void RefreshMainBitPerfectBadge()
-        {
-            try
-            {
-                if (MainBitPerfectBadge == null || MainBitPerfectText == null) return;
-                // 播放详情页不再显示这条徽章（非直通时会撑成长条），隐藏后就不必再刷。
-                if (MainBitPerfectBadge.Visibility != Microsoft.UI.Xaml.Visibility.Visible) return;
-                bool pure = EvaluateBitPerfectChain(out string reason, out bool confirmed);
-                var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
-                var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
-                // confirmed=false = 输出格式还没捕获（未播放）或无法识别：绿灯也要注明"待播放确认"，
-                // 不能让人以为已经核实过（2026-09-22 用户实测徽标谎报后收紧口径）。
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
         // DSP 批 3：EQ 撤销/快照族的干净伴生离壳
 
         /// <summary>单段在给定频率处的近似幅度贡献（dB）。峰值/架近似用理想带响应，低通/高通/切除按阶近似。</summary>
@@ -559,13 +434,7 @@ public sealed partial class MainWindow
         /// <summary>推一份「修改前」快照进撤销栈。coalesce=true 时 400ms 内的连续编辑算一步（滑杆拖动 / 连击）。</summary>
         private void PushEqUndoSnapshot(bool coalesce = false)
         {
-            if (EqState.PushUndo(coalesce)) UpdateEqUndoUi();
-        }
-
-        private void UpdateEqUndoUi()
-        {
-            if (AudioFxEqUndoButton != null) AudioFxEqUndoButton.IsEnabled = EqState.CanUndo;
-            if (AudioFxEqRedoButton != null) AudioFxEqRedoButton.IsEnabled = EqState.CanRedo;
+            EqState.PushUndo(coalesce);
         }
 
         /// <summary>撤销 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
@@ -667,7 +536,6 @@ public sealed partial class MainWindow
             }
 
             ApplyDspToEngine();
-            UpdateEqUndoUi();
         }
 
         /// <summary>A/B 对比核心（网页「音效处理」页直接调；网页点击不含 Shift，走普通分支）。返回结果消息。</summary>
@@ -759,7 +627,6 @@ public sealed partial class MainWindow
             DspApply.Apply(EqState.Current, EqState.Previewing, extra, _audioEngine);
             StartupLog.Write($"[DSP] 已保存 eq(Enabled={EqState.Current.Enabled},bands={EqState.Current.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
 
-            UpdateDspBitPerfectUi();
             // 任何 DSP 改动都同步刷新左侧导航圆点 / 模块页徽章 / 左右偏差条
             UpdateDspNavIndicators();
 
@@ -954,7 +821,6 @@ public sealed partial class MainWindow
             EqCurveStore.Save(curve);
 
             _audioEngine?.SetEqCurve(curve);
-            UpdateDspBitPerfectUi();
             UpdateSignalChainDisplay();
             StartupLog.Write("EQ 曲线已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
         }

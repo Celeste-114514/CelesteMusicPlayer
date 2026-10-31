@@ -64,21 +64,12 @@ namespace CelesteMusicPlayer
             }
 
             WebDavLocation loc = WebDavLocation.FromSettings(settings);
-            SetNavEntryVisibility(NavWebDavButton, loc.IsConfigured);
 
             if (!loc.IsConfigured)
             {
                 return;
             }
 
-            // 条目的文字就是库名（设置里填的显示名，没填就是主机名）。
-            foreach (NavItemRef item in NavItems)
-            {
-                if (ReferenceEquals(item.Button, NavWebDavButton) && item.Label != null)
-                {
-                    item.Label.Text = loc.LibraryName;
-                }
-            }
         }
 
         /// <summary>供设置窗口保存 / 删除后调用：刷新条目，并在不再存在时把视图切回「歌曲」。</summary>

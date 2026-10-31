@@ -351,7 +351,6 @@ public sealed partial class MainWindow
                 // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
                 ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
-                RefreshMainBitPerfectBadge();
                 // 按设备记忆 DSP 配置档：开关与提示同步
                 if (DeviceDspMemoryToggle != null)
                 {

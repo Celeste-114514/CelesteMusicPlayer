@@ -64,57 +64,6 @@ namespace CelesteMusicPlayer
         private bool _dspCompGrOn;
 
         // ─────────────────────────────────────────────────────────────
-        // 加载：存档 → UI
-        // ─────────────────────────────────────────────────────────────
-
-        /// <summary>把 dsp-rack.json 的当前值灌进面板。面板未构建时不报错（控件引用为空）。</summary>
-        private void LoadDspRackUi()
-        {
-            if (DspCompToggle == null)
-            {
-                return;
-            }
-
-            RackState rack = DspRackStore.Load();
-            _dspRackLoading = true;
-            try
-            {
-                // 压缩器：先装载模型，控件照模型投影（模型是唯一参数来源）
-                CompParameters.Load(rack.Compressor);
-                DspCompThresholdSlider.Value = CompParameters.Current.ThresholdDb;
-
-                // 声场 / 矩阵：同样先装载模型，控件照模型投影
-                FieldParameters.Load(rack.StereoField);
-                DspFieldToggle.IsOn = FieldParameters.Current.Enabled;
-                DspFieldWidthSlider.Value = FieldParameters.Current.Width * 100.0;
-                DspFieldSideSlider.Value = FieldParameters.Current.SideGainDb;
-
-                MatrixParameters.Load(rack.Matrix);
-                DspMatrixToggle.IsOn = MatrixParameters.Current.Enabled;
-                DspMatrixLlSlider.Value = MatrixParameters.Current.LeftToLeft;
-                DspMatrixRlSlider.Value = MatrixParameters.Current.RightToLeft;
-                DspMatrixLrSlider.Value = MatrixParameters.Current.LeftToRight;
-                DspMatrixRrSlider.Value = MatrixParameters.Current.RightToRight;
-
-                RefreshDspCompReadouts();
-                RefreshDspFieldReadouts();
-                RefreshDspMatrixReadouts();
-                RefreshDspRackList(rack.RackOrder);
-                RefreshCrossfeedCutoffReadout();
-
-                // 画布不读 ThemeResource、也不参与 XAML 布局期的自动刷新，必须显式画一次。
-                // （折叠状态下 ActualWidth=0，Draw 内部会直接返回，切页时由 SelectDspPage 补画）
-                RedrawDspCompTransferCurve();
-                RedrawDspMatrixFlow();
-                RedrawDspFieldRing();
-            }
-            finally
-            {
-                _dspRackLoading = false;
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────
         // 下发：UI → store → 内核
         // ─────────────────────────────────────────────────────────────
 
@@ -416,156 +365,31 @@ namespace CelesteMusicPlayer
         private void RefreshDspRackList(int[] order)
         {
             RackParameters.Load(order);
-            RenderDspRackList();
         }
 
-        /// <summary>
-        /// 渲染链路全景：只列 8 个可排序的内核模块（草稿顺序）。
-        /// SRC / 耳机校正 / 输出安全是链路结构决定的上下游，不在机架里、不参与排序——
-        /// 它们各自在「采样率」「参数 EQ（页内下半部分）」「输出安全」页面上呈现。
-        /// 状态文字/颜色按此刻各模块真实生效情况生成。
-        /// </summary>
-        private void RenderDspRackList()
-        {
-            if (DspRackList == null)
-            {
-                return;
-            }
-
-            bool bypassed = DspRackGlobalBypassed;
-            List<DspRackRow> rows = new();
-
-            // 8 个内核模块：模型里的当前顺序（可上下移）
-            int[] order = RackParameters.Order;
-            for (int i = 0; i < order.Length && i < RackModuleNames.Length; i++)
-            {
-                int id = order[i];
-                DspRackState state = RackModuleActive(id)
-                    ? (bypassed ? DspRackState.Bypassed : DspRackState.On)
-                    : DspRackState.Off;
-                rows.Add(new DspRackRow
-                {
-                    SlotLabel = (i + 1) + ".",
-                    Name = RackModuleNames[id],
-                    Hint = RackModuleHints[id],
-                    StateText = state switch
-                    {
-                        DspRackState.On => "生效中",
-                        DspRackState.Bypassed => "已旁路",
-                        _ => "未启用"
-                    },
-                    StateBrush = DspRackStateBrush(state),
-                    Movable = true,
-                    ModuleId = id
-                });
-            }
-
-            _dspRackRows = rows;
-
-            int restore = DspRackList.SelectedIndex;
-            if (restore >= 0 && restore < rows.Count)
-            {
-                DspRackList.SelectedIndex = restore;
-            }
-
-            ShowDspRackHint();
-        }
-
-        /// <summary>机架 8 模块此刻是否真正参与处理（供行状态；全局旁路由调用方叠加 Bypassed）。</summary>
-        private bool RackModuleActive(int moduleId)
-        {
-            switch (moduleId)
-            {
-                case DspCoreInterop.RackEqualizer:
-                    return EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
-                case DspCoreInterop.RackConvolution:
-                    return FirParameters.Current.Enabled;
-                case DspCoreInterop.RackReplayGain:
-                    return RgParameters.Current.Mode != ReplayGainMode.Off;
-                case DspCoreInterop.RackCompressor:
-                    return DspCompActive();
-                case DspCoreInterop.RackCrossfeed:
-                    return AudioFxChannelCrossfeedToggle != null && AudioFxChannelCrossfeedToggle.IsOn
-                        && (AudioFxChannelCrossfeedSlider?.Value ?? 0) > 0.1;
-                case DspCoreInterop.RackStereoField:
-                    return DspFieldActive();
-                case DspCoreInterop.RackChannelMatrix:
-                    return DspMatrixActive();
-                case DspCoreInterop.RackChannelBalance:
-                    return ChannelBalanceActive();
-                default:
-                    return false;
-            }
-        }
 
         /// <summary>声道平衡（机架最后一项）是否产生实际处理：任一非默认值即算。</summary>
         private bool ChannelBalanceActive()
         {
-            if (AudioFxChannelToggle == null || !AudioFxChannelToggle.IsOn)
+            ChannelBalanceState channel = ExtraParameters.Channel;
+            if (!channel.Enabled)
             {
                 return false;
             }
 
-            double balance = AudioFxChannelBalanceSlider?.Value ?? 0;
-            double lg = AudioFxChannelLeftGainSlider?.Value ?? 0;
-            double rg = AudioFxChannelRightGainSlider?.Value ?? 0;
-            double ld = AudioFxChannelLeftDelaySlider?.Value ?? 0;
-            double rd = AudioFxChannelRightDelaySlider?.Value ?? 0;
-            return Math.Abs(balance) > 0.005
-                || Math.Abs(lg) > 0.05
-                || Math.Abs(rg) > 0.05
-                || Math.Abs(ld) > 0.05
-                || Math.Abs(rd) > 0.05
-                || (AudioFxChannelSwapToggle?.IsOn ?? false)
-                || (AudioFxChannelInvertLToggle?.IsOn ?? false)
-                || (AudioFxChannelInvertRToggle?.IsOn ?? false)
-                || (AudioFxChannelMonoCombo?.SelectedIndex ?? 0) > 0;
-        }
-
-        /// <summary>仅重刷行状态（不动顺序）：导航指示刷新 / 皮肤切换时调用。</summary>
-        private void RefreshDspRackRows()
-        {
-            if (DspRackList == null)
-            {
-                return;
-            }
-
-            RenderDspRackList();
-        }
-
-        private void ShowDspRackHint()
-        {
-            if (DspRackHintText == null)
-            {
-                return;
-            }
-
-            int index = DspRackList?.SelectedIndex ?? -1;
-            if (index >= 0 && _dspRackRows.Count > 0 && index < _dspRackRows.Count)
-            {
-            }
-            else
-            {
-            }
-
-            UpdateDspRackMoveButtons();
+            return Math.Abs(channel.Balance) > 0.005
+                || Math.Abs(channel.LeftGainDb) > 0.05
+                || Math.Abs(channel.RightGainDb) > 0.05
+                || Math.Abs(channel.LeftDelayMs) > 0.05
+                || Math.Abs(channel.RightDelayMs) > 0.05
+                || channel.SwapChannels
+                || channel.InvertLeft
+                || channel.InvertRight
+                || !string.Equals(channel.MonoMode, "off", StringComparison.Ordinal);
         }
 
         private void DspRackList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            ShowDspRackHint();
-        }
-
-        /// <summary>上移/下移只在选中可调序行时可用（机架 8 行全部可调）。</summary>
-        private void UpdateDspRackMoveButtons()
-        {
-            if (DspRackUpButton == null || DspRackDownButton == null)
-            {
-                return;
-            }
-
-            int index = DspRackList?.SelectedIndex ?? -1;
-            bool movable = index >= 0 && index < _dspRackRows.Count && _dspRackRows[index].Movable;
         }
 
         private void DspRackUp_Click(object sender, RoutedEventArgs e)
@@ -618,7 +442,6 @@ namespace CelesteMusicPlayer
             rack.RackOrder = RackParameters.Snapshot();
             if (_audioEngine is { } engine) engine.SetRack(rack);
             else DspRackStore.Save(rack);
-            RenderDspRackList();
             UpdateDspNavIndicators();
         }
 

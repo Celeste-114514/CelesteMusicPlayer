@@ -326,7 +326,6 @@ namespace CelesteMusicPlayer
             try
             {
                 LoadAudioFxUiFromStore();
-                LoadDspRackUi();
                 // 房间校正不进 dsp-rack.json，参数模型要从它自己的存档重新装载（否则方案切过去后模型是旧值）
                 LoadRoomCorrectionIntoPanel();
                 InitializeSrcUi();

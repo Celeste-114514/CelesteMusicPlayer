@@ -89,7 +89,6 @@ namespace CelesteMusicPlayer
             RoomCorrectionState state = FirParameters.Snapshot();
             RoomCorrectionStore.Save(state);
             ApplyRoomCorrection(state);
-            RefreshRoomCorrectionInfo();
         }
 
         private async void RoomIrBrowseButton_Click(object sender, RoutedEventArgs e)
