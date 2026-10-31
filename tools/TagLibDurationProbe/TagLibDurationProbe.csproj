@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 只读探针：直接问 TagLib「这个文件的时长/采样率/声道/码率是多少」。
+       用来跟 ffmpeg 解码出来的真实值对照，判断曲库显示的时长是不是 TagLib 读错了。
+       不参与主程序编译（独立目录，主 csproj 只 glob 自己那一层）。 -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>TagLibDurationProbe</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 版本与 CelesteMusicPlayer.csproj 保持一致，否则探针结论不代表实际行为 -->
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+</Project>
