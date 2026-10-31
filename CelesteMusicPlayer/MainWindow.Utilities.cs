@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -905,6 +906,45 @@ namespace CelesteMusicPlayer
         private static bool? _geekUiStyleCached;
 
         internal static bool GeekUiStyleCached => _geekUiStyleCached ??= IsGeekUiStyleActive();
+        // 电平表空闲值与旧列表已实现项枚举（2026-10-31 从 MainWindow.Misc.cs 搬来）：IdleLevel 纯计算（SpectrumEnvelope/FormatHelper 在活类），枚举只操作传入对象（VisualTreeWalker 活类）。
 
+        /// <summary>未播放时的静态频谱形状（始终可见，中间高两边低）。</summary>
+        private static double IdleLevel(int index)
+        {
+            double shape = 0.22 + 0.28 * (0.5 + 0.5 * Math.Sin(index * 1.7 + 1.3));
+            return Math.Max(0.18, shape * FormatHelper.SpectrumEnvelope(index));
+        }
+
+        private static IEnumerable<ListViewItem> EnumerateRealizedListViewItems(ListView list)
+        {
+            Panel? panel = VisualTreeWalker.FindItemsPanel(list);
+            if (panel == null)
+            {
+                yield break;
+            }
+
+            foreach (UIElement child in panel.Children)
+            {
+                if (child is ListViewItem item)
+                {
+                    yield return item;
+                }
+            }
+        }
+        // 行悬停画刷（2026-10-31 从 MainWindow.UiTheme.cs 搬来）：纯计算，依赖 IsOpaqueUiStyleActive（已在本文件）。
+
+        /// <summary>行悬停底色：经典 / 极客界面用半透明灰（原浅白在浅色主题与近黑底上几乎看不见）。</summary>
+        internal static Brush ResolveRowHoverBrush(FrameworkElement? anchor)
+        {
+            if (!IsOpaqueUiStyleActive())
+            {
+                return new SolidColorBrush(Windows.UI.Color.FromArgb(20, 255, 255, 255));
+            }
+
+            bool dark = anchor?.ActualTheme == ElementTheme.Dark;
+            return new SolidColorBrush(dark
+                ? Windows.UI.Color.FromArgb(34, 255, 255, 255)
+                : Windows.UI.Color.FromArgb(24, 128, 128, 128));
+        }
     }
 }

@@ -2035,10 +2035,6 @@ namespace CelesteMusicPlayer
         internal static bool IsMultiSelectSelection(ListViewBase? list)
             => RangeMultiSelect.IsMultiSelectMode(list);
 
-        /// <summary>给列表挂上 Shift 连选一段 / Ctrl 跳选（转发到共用实现 RangeMultiSelect）。</summary>
-        internal static void AttachRangeMultiSelect(ListViewBase? list)
-            => RangeMultiSelect.Attach(list);
-
         /// <summary>
         /// 通过 None 中转切换选择模式，安全清空选中项，避免 SelectedItems.Clear 崩溃。
         /// </summary>
@@ -2239,24 +2235,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static IEnumerable<ListViewItem> EnumerateRealizedListViewItems(ListView list)
-        {
-            Panel? panel = VisualTreeWalker.FindItemsPanel(list);
-            if (panel == null)
-            {
-                yield break;
-            }
-
-            foreach (UIElement child in panel.Children)
-            {
-                if (child is ListViewItem item)
-                {
-                    yield return item;
-                }
-            }
-        }
-
-
         private static IEnumerable<GridViewItem> EnumerateRealizedGridViewItems(GridView grid)
         {
             Panel? panel = VisualTreeWalker.FindItemsPanel(grid);
@@ -2352,14 +2330,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
-
-
-        /// <summary>未播放时的静态频谱形状（始终可见，中间高两边低）。</summary>
-        private static double IdleLevel(int index)
-        {
-            double shape = 0.22 + 0.28 * (0.5 + 0.5 * Math.Sin(index * 1.7 + 1.3));
-            return Math.Max(0.18, shape * FormatHelper.SpectrumEnvelope(index));
-        }
 
 
         /// <summary>波形倒影的画刷缓存（按序号缓存渐变画刷，避免每帧重建 40 个画刷造成 GC 抖动）。

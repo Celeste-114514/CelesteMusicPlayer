@@ -30,20 +30,6 @@ namespace CelesteMusicPlayer
         private Visibility _volumeIconVisibility = Visibility.Visible;
         private Visibility _volumeCanvasVisibility = Visibility.Visible;
 
-        /// <summary>被 ASCII 化过的按钮 → 原始内容与图标可见性备份（切风格时还原用）。</summary>
-        private readonly Dictionary<Button, GeekButtonBackup> _geekAsciiButtons = new();
-
-        private sealed class GeekButtonBackup
-        {
-            public object? Content;
-            public TextBlock? Label;
-
-            /// <summary>纯图标按钮外面套的字符宿主 Grid（还原时整包换回原内容）。</summary>
-            public Grid? Host;
-
-            /// <summary>被藏掉的图标 → 原可见性。用字典去重：补藏可能对同一个图标跑多次。</summary>
-            public Dictionary<UIElement, Visibility> Icons = new();
-        }
 
         /// <summary>极客布局总入口：由 ApplyGeekChrome 在界面风格切换时调用。</summary>
         internal void ApplyGeekShell(bool geek)

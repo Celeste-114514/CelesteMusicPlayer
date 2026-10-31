@@ -204,7 +204,6 @@ namespace CelesteMusicPlayer
                     };
                     AudioChainCloseStoryboard.Completed += _audioChainCloseCompleted;
 
-                    RetargetStoryboard(AudioChainCloseStoryboard, "chainClose");
                     try
                     {
                         AudioChainCloseStoryboard.Begin();

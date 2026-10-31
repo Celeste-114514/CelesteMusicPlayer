@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Media;
 using Windows.Media.Playback;
 using Microsoft.UI.Xaml;
 using System;
+using System.Collections.Generic;
 
 namespace CelesteMusicPlayer
 {
@@ -262,5 +263,41 @@ namespace CelesteMusicPlayer
 
         // 退出流程标记（2026-10-31 随 ExitApplication 从 MainWindow.Misc.cs 搬来）
         private bool _exitStarted;
+        // 托盘「显示/隐藏主窗口」（2026-10-31 从 MainWindow.Features.cs 搬来）：纯窗口操作，随托盘域。
+
+        private void ToggleMainWindowVisibility()
+        {
+            try
+            {
+                if (AppWindow.IsVisible)
+                {
+                    AppWindow.Hide();
+                }
+                else
+                {
+                    AppWindow.Show();
+                    Activate();
+                }
+            }
+            catch
+            {
+                Activate();
+            }
+        }
+        // 极客 ASCII 按钮备份（2026-10-31 随 SetGeekFavoriteState 从 MainWindow.GeekShell.cs 搬来）。
+        /// <summary>被 ASCII 化过的按钮 → 原始内容与图标可见性备份（切风格时还原用）。</summary>
+        private readonly Dictionary<Button, GeekButtonBackup> _geekAsciiButtons = new();
+
+        private sealed class GeekButtonBackup
+        {
+            public object? Content;
+            public TextBlock? Label;
+
+            /// <summary>纯图标按钮外面套的字符宿主 Grid（还原时整包换回原内容）。</summary>
+            public Grid? Host;
+
+            /// <summary>被藏掉的图标 → 原可见性。用字典去重：补藏可能对同一个图标跑多次。</summary>
+            public Dictionary<UIElement, Visibility> Icons = new();
+        }
     }
 }

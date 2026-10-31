@@ -177,17 +177,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static void SetColumnWidthIfChanged(ColumnDefinition column, double width)
-        {
-            if (column.Width.IsAbsolute && Math.Abs(column.Width.Value - width) < 0.5)
-            {
-                return;
-            }
-
-            column.Width = new GridLength(width);
-        }
-
-
         private void ColumnSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             if (sender is not FrameworkElement splitter || splitter.Tag is not string pair)
@@ -329,18 +318,5 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void HideHoverTip()
-        {
-            if (_activeHoverTip != null)
-            {
-                _activeHoverTip.IsOpen = false;
-                _activeHoverTip = null;
-            }
-
-            if (_hoverElement != null)
-            {
-                ToolTipService.SetToolTip(_hoverElement, null);
-            }
-        }
     }
 }

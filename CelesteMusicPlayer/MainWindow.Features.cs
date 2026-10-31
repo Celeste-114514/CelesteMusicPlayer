@@ -719,26 +719,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void ToggleMainWindowVisibility()
-        {
-            try
-            {
-                if (AppWindow.IsVisible)
-                {
-                    AppWindow.Hide();
-                }
-                else
-                {
-                    AppWindow.Show();
-                    Activate();
-                }
-            }
-            catch
-            {
-                Activate();
-            }
-        }
-
         /// <summary>将歌曲插入当前播放项之后（下一首播放）。</summary>
         internal void PlaySongsNext(IEnumerable<PlaylistItem> songs)
         {

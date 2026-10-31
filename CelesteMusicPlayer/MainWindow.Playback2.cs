@@ -2504,6 +2504,10 @@ namespace CelesteMusicPlayer
         private void UpdateSelectAllMultiSelectButtonState()
         {
         }
+        // 多选范围选择挂接（2026-10-31 从 MainWindow.Misc.cs 搬来）：多选域随 Playback2。
 
+        /// <summary>给列表挂上 Shift 连选一段 / Ctrl 跳选（转发到共用实现 RangeMultiSelect）。</summary>
+        internal static void AttachRangeMultiSelect(ListViewBase? list)
+            => RangeMultiSelect.Attach(list);
     }
 }

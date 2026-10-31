@@ -2433,7 +2433,6 @@ namespace CelesteMusicPlayer
             // 单击选中：无视用户滚动状态，把该行滚到中间
             if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
             {
-                ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
             }
         }
 
@@ -2801,7 +2800,6 @@ namespace CelesteMusicPlayer
                 SyncLyricsToPosition(target, force: true, applyOffset: false);
                 if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
                 {
-                    ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
                 }
 
                 StartupLog.Write("续播/定位: " + startAt.ToString("F2") + "s");

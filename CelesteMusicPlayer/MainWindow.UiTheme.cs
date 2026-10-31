@@ -1637,20 +1637,6 @@ namespace CelesteMusicPlayer
         // 左栏常显，展开/收起不再需要切换它的 Visibility。
 
 
-        /// <summary>行悬停底色：经典 / 极客界面用半透明灰（原浅白在浅色主题与近黑底上几乎看不见）。</summary>
-        internal static Brush ResolveRowHoverBrush(FrameworkElement? anchor)
-        {
-            if (!IsOpaqueUiStyleActive())
-            {
-                return new SolidColorBrush(Windows.UI.Color.FromArgb(20, 255, 255, 255));
-            }
-
-            bool dark = anchor?.ActualTheme == ElementTheme.Dark;
-            return new SolidColorBrush(dark
-                ? Windows.UI.Color.FromArgb(34, 255, 255, 255)
-                : Windows.UI.Color.FromArgb(24, 128, 128, 128));
-        }
-
         // 左侧音乐库面板的收起/展开功能已按用户要求移除（面板固定展开）。
 
         /// <summary>把无边框窗口的 DWM 边框/标题栏描边色设为当前 UI 底色，
