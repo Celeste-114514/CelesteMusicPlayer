@@ -565,27 +565,6 @@ namespace CelesteMusicPlayer
             };
         }
 
-        /// <summary>
-        /// 喜欢状态变化时同步心形键：♡ 空心 / ♥ 实心红 —— 形状加颜色双重区分，
-        /// 和经典模式"实心红心"的语义一致。
-        /// </summary>
-        internal void SetGeekFavoriteState(bool fav)
-        {
-            TextBlock? label = FavoriteButton != null
-                               && _geekAsciiButtons.TryGetValue(FavoriteButton, out GeekButtonBackup? backup)
-                ? backup.Label
-                : null;
-            if (label == null)
-            {
-                return;
-            }
-
-            label.Text = fav ? "♥" : "♡";
-            label.Foreground = fav
-                ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0xFF, 0x4D, 0x4D))
-                : new SolidColorBrush(PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor));
-        }
-
         // ---------- ASCII 键位：把图标按钮换成字符键 ----------
 
         /// <summary>字符键专用字体。这些键画的是符号字符（♪ ≡ ↻ ⤢ ♡ ♥ → ∞ □ × 等），

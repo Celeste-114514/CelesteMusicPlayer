@@ -3252,5 +3252,15 @@ namespace CelesteMusicPlayer
                 }
             }
         }
+        // 封面缓存失效（2026-10-31 搬来）：封面域状态随 Playback3。
+
+        /// <summary>封面写入磁盘后使缓存失效（下载封面后调用）。</summary>
+        internal static void InvalidateCoverCache(string audioPath)
+        {
+            if (!string.IsNullOrWhiteSpace(audioPath))
+            {
+                CoverBytesCache.TryRemove(audioPath, out _);
+            }
+        }
     }
 }

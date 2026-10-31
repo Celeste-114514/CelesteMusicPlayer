@@ -375,17 +375,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>极客界面模式的设置值（设置项「界面风格」下拉里的「极客」）。</summary>
         // UiStyleGeek 常量 2026-10-31 随 IsGeekUiStyleActive 一起搬到 MainWindow.Utilities.cs。
-
-        /// <summary>
-        /// 极客模式的进程内缓存（第一次问的时候读一次设置，之后沿用）。
-        /// 给"每条列表行都要判断一次"的高频路径用：PlaylistItem.FormatChips 的极客包装、行分隔线等。
-        /// AppSettingsStore.Load() 每次都会 Clone 一整个设置对象，逐行调用太浪费。
-        /// 界面风格切换时由 ApplyUiStyleMode 立即刷新，不会读到过期值。
-        /// </summary>
-        private static bool? _geekUiStyleCached;
-
-        internal static bool GeekUiStyleCached => _geekUiStyleCached ??= IsGeekUiStyleActive();
-
         internal static void RefreshGeekUiStyleCache(bool geek) => _geekUiStyleCached = geek;
        
         /// <summary>
@@ -429,7 +418,6 @@ namespace CelesteMusicPlayer
                         ? ElementTheme.Default
                         : darkClassic ? ElementTheme.Dark : ElementTheme.Light;
                 }
-
                 // 极客专属外观（等宽字 / 直角 / 顶栏读数）：两个分支都要跑，切走时负责还原。
                 ApplyGeekChrome(geek);
 
@@ -2022,35 +2010,6 @@ namespace CelesteMusicPlayer
                 // 托盘失败则直接退出，避免关不掉
                 ExitApplication();
             }
-        }
-
-
-        internal void RestoreFromTray()
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                try
-                {
-                    StartupLog.Write("托盘: RestoreFromTray 收到点击");
-                    // 统一走主界面恢复（建/还原/显示/拉前台），别在这里另写一套 Show。
-                    RestoreMainWindow();
-                    // 托盘图标常驻：不随窗口恢复隐藏（退出时才清理）
-                }
-                catch (Exception ex)
-                {
-                    StartupLog.WriteException("RestoreFromTray", ex);
-                }
-            });
-        }
-
-
-        internal void ExitFromTray()
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                StartupLog.Write("托盘: ExitFromTray 收到点击");
-                ExitApplication();
-            });
         }
 
 

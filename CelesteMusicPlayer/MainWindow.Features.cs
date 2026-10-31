@@ -22,22 +22,8 @@ namespace CelesteMusicPlayer
     /// <summary>MusicPlayer2 对齐功能：SMTC、热键、收藏、下一首播放、在线资源等。</summary>
     public sealed partial class MainWindow
     {
-        private GlobalHotkeyService? _hotkeys;
-        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sleepTimer;
 
-        /// <summary>睡眠定时器停止模式。</summary>
-        private enum SleepStopMode
-        {
-            None,
-            AfterMinutes,
-            AfterTrack,
-            AfterTracks
-        }
 
-        private SleepStopMode _sleepMode = SleepStopMode.None;
-        private int _sleepTracksRemaining;
-        private int _sleepMinutes;   // AfterMinutes 模式下的分钟数（0=未设置）；面板回显用
-        private double _sleepCustomMinutes;
         // 引擎由 PlaybackSession 持有，这里只留转发属性（见 MainWindow.PlaybackHost.cs）。
         private readonly LibraryWatchService _libraryWatch = new();
         private bool _featuresInitialized;
@@ -190,45 +176,6 @@ namespace CelesteMusicPlayer
                 _audioEngine?.SetPlaybackSpeed(s.PlaybackRate, s.PlaybackRatePreservePitch);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.ApplyPlaybackRateFromSettings", caught); }
-        }
-
-        private void RestartGlobalHotkeysFromSettings()
-        {
-            try
-            {
-                _hotkeys?.StopListening();
-                _hotkeys?.Dispose();
-                _hotkeys = null;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            if (!AppSettingsStore.Load().EnableGlobalHotkeys)
-            {
-                return;
-            }
-
-            try
-            {
-                _hotkeys = new GlobalHotkeyService();
-                _hotkeys.PlayPause += () => DispatcherQueue.TryEnqueue(TogglePlayPausePublic);
-                _hotkeys.Next += () => DispatcherQueue.TryEnqueue(PlayNext);
-                _hotkeys.Previous += () => DispatcherQueue.TryEnqueue(PlayPrevious);
-                _hotkeys.VolumeUp += () => DispatcherQueue.TryEnqueue(() => AdjustVolumeBy(5));
-                _hotkeys.VolumeDown += () => DispatcherQueue.TryEnqueue(() => AdjustVolumeBy(-5));
-                _hotkeys.SeekForward += () => DispatcherQueue.TryEnqueue(() => SeekBySeconds(5));
-                _hotkeys.SeekBack += () => DispatcherQueue.TryEnqueue(() => SeekBySeconds(-5));
-                _hotkeys.ToggleDesktopLyrics += () => DispatcherQueue.TryEnqueue(() =>
-                    SetDesktopLyricsEnabled(!_desktopLyricsEnabled));
-                _hotkeys.ToggleFavorite += () => DispatcherQueue.TryEnqueue(ToggleFavoriteForCurrent);
-                _hotkeys.ShowHideMain += () => DispatcherQueue.TryEnqueue(ToggleMainWindowVisibility);
-                _hotkeys.Stop += () => DispatcherQueue.TryEnqueue(() => GetPlayer()?.Pause());
-                _hotkeys.Start();
-                _hotkeys.ApplyBindings(AppSettingsStore.Load().CustomHotkeys);
-            }
-            catch (Exception ex)
-            {
-                StartupLog.Write("GlobalHotkey start failed: " + ex.Message);
-            }
         }
 
         private void RestartLibraryWatchFromSettings()
@@ -950,28 +897,6 @@ namespace CelesteMusicPlayer
             _taskbarButtons?.UpdateFavorite(fav);
 
             NowPlayingText.Text = fav ? "已添加到我喜欢的音乐" : "已取消喜欢";
-        }
-
-        private void UpdateFavoriteButtonUi()
-        {
-            bool fav = !string.IsNullOrWhiteSpace(_nowPlayingPath)
-                && (TrackStatsStore.Get(_nowPlayingPath)?.IsFavorite ?? false);
-
-            if (FavoriteButtonIcon != null)
-            {
-                FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
-                ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
-            }
-
-            // 极客模式：图标被字符 ♡/♥ 盖着 —— 心形也要跟着喜欢状态变（空心/实心红）。
-            if (GeekUiStyleCached)
-            {
-                SetGeekFavoriteState(fav);
-            }
-
-            // 任务栏缩略图按钮：把当前曲目的收藏状态同步到 thumbar
-            // （启动恢复上次播放时，thumbar 加载完成就会用对的图标）
-            _taskbarButtons?.UpdateFavorite(fav);
         }
 
         private void FavoriteButton_Click(object sender, RoutedEventArgs e)
@@ -1997,56 +1922,6 @@ namespace CelesteMusicPlayer
             ApplySleepSelection(sel, SleepTracksBox?.Value ?? 1);
         }
 
-        /// <summary>应用睡眠定时选择（对话框与面板页签共用）。sel 口径与旧对话框 RadioButtons 一致。</summary>
-        private void ApplySleepSelection(int sel, double trackCountValue, double customMinutes = 0)
-        {
-            _sleepTimer?.Stop();
-            _sleepTimer = null;
-            _sleepMode = SleepStopMode.None;
-            _sleepTracksRemaining = 0;
-            _sleepMinutes = 0;
-            _sleepCustomMinutes = 0;
-
-            if (sel == 0)
-            {
-                NowPlayingText.Text = "睡眠定时器已关闭";
-                return;
-            }
-
-            if (sel == 6)
-            {
-                _sleepMode = SleepStopMode.AfterTrack;
-                NowPlayingText.Text = "睡眠定时器：当前曲目播完后停止";
-                return;
-            }
-
-            if (sel == 7)
-            {
-                int n = (int)Math.Clamp(Math.Round(trackCountValue), 1, 99);
-                _sleepMode = SleepStopMode.AfterTracks;
-                _sleepTracksRemaining = n;
-                NowPlayingText.Text = $"睡眠定时器：再播放 {n} 首后停止";
-                return;
-            }
-
-            double minutes = sel == 8 ? customMinutes : sel switch
-            {
-                1 => 15,
-                2 => 30,
-                3 => 60,
-                4 => 90,
-                _ => 120
-            };
-            _sleepMode = SleepStopMode.AfterMinutes;
-            _sleepMinutes = (int)Math.Ceiling(minutes);
-            _sleepCustomMinutes = sel == 8 ? minutes : 0;
-            _sleepTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
-            _sleepTimer.Interval = TimeSpan.FromMinutes(minutes);
-            _sleepTimer.Tick += (_, _) => StopForSleep("睡眠定时器到点，播放已暂停");
-            _sleepTimer.Start();
-            NowPlayingText.Text = $"睡眠定时器已设置：{minutes} 分钟后停止播放";
-        }
-
         /// <summary>弹出面板时把当前定时状态回显到单选（批量赋值挂就绪守卫）。</summary>
         private void RefreshSleepPage()
         {
@@ -2167,26 +2042,6 @@ namespace CelesteMusicPlayer
             }
 
             return false;
-        }
-
-        /// <summary>统一停止播放并清除睡眠定时器状态。</summary>
-        private void StopForSleep(string message)
-        {
-            _sleepTimer?.Stop();
-            _sleepTimer = null;
-            _sleepMode = SleepStopMode.None;
-            _sleepMinutes = 0;
-            _sleepCustomMinutes = 0;
-            _sleepTracksRemaining = 0;
-            try
-            {
-                MediaPlayer? p = GetPlayer();
-                p?.Pause();
-                _audioEngine?.Pause();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            NowPlayingText.Text = message;
         }
 
         /// <summary>

@@ -874,5 +874,37 @@ namespace CelesteMusicPlayer
 
         /// <summary>设置页等子窗口用来回写主窗口状态。</summary>
         internal static MainWindow? Instance { get; private set; }
+        // 极客歌词强调色与磷光色分层（2026-10-31 从 MainWindow.GeekNowPlaying.cs 搬来）：PhosphorShade 纯计算；GeekLyricAccentColor 读 _geekNowPlaying 状态字段（随批移动）。
+
+        /// <summary>
+        /// 歌词磷光色：非极客返回 null（歌词走主题强调色链，行为与以前完全一致）。
+        /// 切风格 / 换磷光色时由 ApplyGeekNowPlaying 触发一次强制重染。
+        /// </summary>
+        internal Color? GeekLyricAccentColor()
+            => _geekNowPlayingActive && _geekNowPlayingPhosphor is Color color ? color : (Color?)null;
+
+        /// <summary>磷光色叠加 alpha 的画刷（歌词分层用：邻近 / 远处 / 未唱字）。</summary>
+        internal static SolidColorBrush PhosphorShade(Color baseColor, byte alpha)
+            => new(Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
+
+        // 极客播放页状态（2026-10-31 随 GeekLyricAccentColor 从 MainWindow.GeekNowPlaying.cs 搬来）
+
+        /// <summary>当前生效的磷光色；null = 极客没开。设置里换了色只重染，不重复刷整页。</summary>
+        private Color? _geekNowPlayingPhosphor;
+
+        private bool _geekNowPlayingActive;
+
+        // 极客风格缓存（2026-10-31 从 MainWindow.UiTheme.cs 搬来）：IsGeekUiStyleActive 已在本文件
+
+        /// <summary>
+        /// 极客模式的进程内缓存（第一次问的时候读一次设置，之后沿用）。
+        /// 给"每条列表行都要判断一次"的高频路径用：PlaylistItem.FormatChips 的极客包装、行分隔线等。
+        /// AppSettingsStore.Load() 每次都会 Clone 一整个设置对象，逐行调用太浪费。
+        /// 界面风格切换时由 ApplyUiStyleMode 立即刷新，不会读到过期值。
+        /// </summary>
+        private static bool? _geekUiStyleCached;
+
+        internal static bool GeekUiStyleCached => _geekUiStyleCached ??= IsGeekUiStyleActive();
+
     }
 }

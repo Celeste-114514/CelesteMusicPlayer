@@ -46,10 +46,7 @@ namespace CelesteMusicPlayer
             "SliderThumbBackgroundFocused",
         };
 
-        /// <summary>当前生效的磷光色；null = 极客没开。设置里换了色只重染，不重复刷整页。</summary>
-        private Color? _geekNowPlayingPhosphor;
 
-        private bool _geekNowPlayingActive;
 
         /// <summary>
         /// 磷光色统一总入口：由 ApplyGeekChrome 在界面风格切换、以及设置保存（AppSettingsStore.Changed）
@@ -381,17 +378,6 @@ namespace CelesteMusicPlayer
                 _geekNowPlayingTinted.Add(element);
             }
         }
-
-        /// <summary>
-        /// 歌词磷光色：非极客返回 null（歌词走主题强调色链，行为与以前完全一致）。
-        /// 切风格 / 换磷光色时由 ApplyGeekNowPlaying 触发一次强制重染。
-        /// </summary>
-        internal Color? GeekLyricAccentColor()
-            => _geekNowPlayingActive && _geekNowPlayingPhosphor is Color color ? color : (Color?)null;
-
-        /// <summary>磷光色叠加 alpha 的画刷（歌词分层用：邻近 / 远处 / 未唱字）。</summary>
-        internal static SolidColorBrush PhosphorShade(Color baseColor, byte alpha)
-            => new(Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
 
         /// <summary>立刻按当前风格重染歌词（极客开关 / 磷光色变更时调用；没加载歌词时是空操作）。</summary>
         private void RefreshLyricColorsForGeek()

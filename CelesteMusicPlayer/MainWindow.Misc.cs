@@ -1803,16 +1803,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>封面写入磁盘后使缓存失效（下载封面后调用）。</summary>
-        internal static void InvalidateCoverCache(string audioPath)
-        {
-            if (!string.IsNullOrWhiteSpace(audioPath))
-            {
-                CoverBytesCache.TryRemove(audioPath, out _);
-            }
-        }
-
-
         // 2026-10-29（W6 第五小步）：封面源字节提取（TryReadCoverBytes / TryLoadInnerCover /
         // TryLoadOuterCover / TryMeasureImageSize）已整体搬到 CoverSourceReader.cs。
         // 搬出原因：这几段只依赖 TagLib# 与文件 IO，住在主窗口 partial class 里，
@@ -2341,46 +2331,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
             // 直接退出当前进程(由新进程接管,绕过托盘/关闭提示逻辑)
-            Environment.Exit(0);
-        }
-
-
-        private bool _exitStarted;
-        private void ExitApplication()
-        {
-            if (_exitStarted) return;
-            _exitStarted = true;
-            // 先标记允许关闭，避免任何 Closing 处理器再弹“最小化到托盘还是退出”的对话框
-            _allowClose = true;
-
-            try { _taskbarPlayer?.Dispose(); _taskbarPlayer = null; }
-            catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.Exit", ex); }
-
-            // 立刻销毁托盘/任务栏图标：用户一点“退出”，图标马上消失
-            try
-            {
-                _trayIcon?.Dispose();
-                _trayIcon = null;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                _taskbarButtons?.Dispose();
-                _taskbarButtons = null;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            // 持久化关键状态（干净退出标记 / 续播进度），失败也不影响退出
-            try { AppSettingsStore.MarkAppCleanExit(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            try { PersistPlaybackSession(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try { Close(); } catch (Exception ex) { StartupLog.WriteException("MainWindow.ExitCleanup", ex); }
-
-            // 直接、强制结束进程。不调用 Close()/Application.Current.Exit()，
-            // 因为它们在 WinUI3 里可能卡在窗口拆除或资源释放上几秒，导致
-            // “托盘图标已没、主程序却还停好几秒”。Environment.Exit(0) 是进程级强杀，
-            // 立即终止所有线程与窗口，干净利落。
             Environment.Exit(0);
         }
 
