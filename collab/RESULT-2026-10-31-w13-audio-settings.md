@@ -4,7 +4,7 @@
 
 ## 一、这次搬了什么
 
-`audioSettings` 是 `MainWindow.WebTransport.cs` 里剩下的最后一整块业务（11 个操作）：
+`audioSettings` 是 `MainWindow.WebTransport.cs` 里剩下的最后一整块业务（10 个操作，`ab` 内含 4 个动作）：
 
 | 操作 | 干什么 | 现位置 |
 |---|---|---|
