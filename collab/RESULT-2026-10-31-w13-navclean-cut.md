@@ -48,3 +48,16 @@
 - `LoadAndAddFiles`（8 处，`OpenFileButton_Click`/`ExternalFile`/`Playback` 在调）：它依赖占位控件
   `PlaylistView.ItemsSource` 的解绑/重绑 —— 那两处绑定操作无效，裁掉后方法可搬活文件。
 - `WebDsp.cs` 138 处仍是最大单一借用方（DSP 状态机，第③步之前的硬骨头）。
+
+---
+## 追加（第七刀，提交 `219c204`）
+
+- **关键调查结论**：`LibraryTracks => _playlist`（Playback2.cs:1324），`WebLibraryService` 的曲库读模型
+  直接吃 `_playlist` —— **网页曲库显示顺序 = 内存播放列表顺序**。`ApplyCategoryView` case "Songs" 里的
+  `ApplySort` 是用户可见行为，必须留到导航刀精细拆（不能像多选那样裁）。
+- **`LoadAndAddFiles` 甄别**（8 处）：尾部与 `ApplyCategoryView`/`ApplySort` 咬合
+  （不同分类调 ApplyCategoryView / ApplySort / RenumberCollection），同属导航域，留导航刀一起。
+- **第七刀**：`ApplyCapsuleSortButtonStyle`（46 行，给十几个旧排序按钮刷样式、零状态写入）
+  → 删活文件 3 处调用点（InitializePlayerAndTimers / EnterMultiSelectMode / MainWindow 构造）。
+  **620 → 614 错 / 215 → 214 成员**。DLL 3,019,264。验证同上（回归 4041/0 失败、实播两首 OK）。
+  回退件 `dist/web-ui-20261028-pre-w13-capsule-20261031/`。
