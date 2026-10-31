@@ -95,7 +95,7 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 - 🏗️ 架构
   - 界面全部由自绘网页渲染（WebView2 + 裸 Win32 宿主），原生侧只保留音频内核、系统集成与数据层
-  - **移除 WinUI 3 与 Windows App SDK**：安装包不再需要 Windows App SDK 运行时，自包含包从 95MB 降到 75MB
+  - **移除 WinUI 3 与 Windows App SDK**：安装包不再需要 Windows App SDK 运行时，自包含包从 95MB 降到 63MB
   - 旧界面残留的"假控件层"清零：业务代码里的控件引用 2,048 处 → 0，累计删除约 2.3 万行死代码
   - 播放 / 曲库 / 设置 / DSP 全部收敛到服务边界：界面只发命令、取快照，不再直接操作控件
 - ✨ 改进
@@ -117,8 +117,8 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
   - 关闭窗口时的「缩到托盘 / 退出 / 每次询问」策略
   - 滚轮调节音量、空格暂停、左右方向键快进退 —— 这三项将在网页界面重新提供
 - 📦 发布说明
-  - `CelesteMusicPlayer-Setup-26.11.1.exe`（框架依赖，需 .NET 10 桌面运行时，37.9MB）
-  - `CelesteMusicPlayer-Setup-SC-26.11.1.exe`（自包含，不依赖本机 .NET，75.4MB）
+  - `CelesteMusicPlayer-Setup-26.11.1.exe`（框架依赖，需 .NET 10 桌面运行时，25.3MB）
+  - `CelesteMusicPlayer-Setup-SC-26.11.1.exe`（自包含，不依赖本机 .NET，62.8MB）
   - `SHA256SUMS.txt` 随附，应用内更新据此校验
   - 可直接覆盖安装，设置与曲库保留
 
