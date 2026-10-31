@@ -47,7 +47,6 @@ namespace CelesteMusicPlayer
 
                 string thisSource = IsCommunityAuthor(_opraPreviewEq.Author) ? "community" : "opra";
                 _opraSourceFilter = _opraSourceFilter == thisSource ? null : thisSource;
-                ApplyOpraEqFilter();
             }
             catch (Exception caught)
             {
@@ -55,45 +54,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>按当前来源筛选重铺曲线列表（列表本体来自 _opraEqs，不重新查库）。</summary>
-        private void ApplyOpraEqFilter()
-        {
-
-            List<OpraProductEqSummary> shown = _opraEqs;
-            if (_opraSourceFilter != null)
-            {
-                bool wantCommunity = _opraSourceFilter == "community";
-                shown = _opraEqs.Where(x => IsCommunityAuthor(x.Author) == wantCommunity).ToList();
-            }
-
-            UpdateOpraSourceBadge();
-
-            if (OpraEqStatusText != null && _opraSourceFilter != null && shown.Count == 0)
-            {
-            }
-        }
-
-        /// <summary>刷新来源徽章的文字与选中态（选中 = 正在按该来源筛选）。</summary>
-        private void UpdateOpraSourceBadge()
-        {
-            if (OpraSampleBadge == null || OpraSampleBadgeText == null)
-            {
-                return;
-            }
-
-            bool community = _opraPreviewEq != null && IsCommunityAuthor(_opraPreviewEq.Author);
-            string label = community ? "社区测量" : "OPRA 库";
-            bool active = _opraSourceFilter != null
-                && _opraSourceFilter == (community ? "community" : "opra");
-
-            // 主动筛查时加一圈强调边框，让「点了有效果」看得见
-        }
-
-        /// <summary>当前主题/皮肤下的强调色（复用 DspAccentBrush：极客下自动是磷光色）。</summary>
-        private Color DspAccentColor()
-            => DspAccentBrush() is SolidColorBrush scb
-                ? scb.Color
-                : Color.FromArgb(255, 0x0F, 0x76, 0x6E);
 
         // ─────────────────────────────────────────────────────────────
         // 热门品牌墙
@@ -119,46 +79,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
-        // 最近用过 / 收藏
-        // ─────────────────────────────────────────────────────────────
-
-        /// <summary>把收藏（★）和最近（🕘）拼成一个列表显示；两份都没有时整卡隐藏。</summary>
-        private void RefreshOpraRecentList()
-        {
-            try
-            {
-                if (OpraRecentList == null || OpraRecentCard == null)
-                {
-                    return;
-                }
-
-                OpraHistoryState st = OpraHistoryStore.Load();
-                var entries = new List<OpraRecentEntry>();
-
-                foreach (OpraHistoryItem f in st.Favorites)
-                {
-                    entries.Add(OpraRecentEntry.From(f, mark: "★"));
-                }
-
-                foreach (OpraHistoryItem r in st.Recent)
-                {
-                    // 已经以收藏身份出现过的不重复列
-                    if (st.Favorites.Any(x => x.EqId == r.EqId))
-                    {
-                        continue;
-                    }
-
-                    entries.Add(OpraRecentEntry.From(r, mark: "🕘"));
-                }
-
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.RefreshOpraRecentList", caught);
-            }
-        }
-
         /// <summary>应用成功后把这条记进「最近用过」（收藏不动）。</summary>
         private void NoteOpraApplied(OpraCorrection corr)
         {
@@ -166,7 +86,6 @@ namespace CelesteMusicPlayer
                 corr.EqId, corr.ProductId, corr.ProductName, corr.VendorName,
                 corr.Author, corr.ImportedBandCount, corr.Curve.PreampDb));
 
-            RefreshOpraRecentList();
         }
 
         // ─────────────────────────────────────────────────────────────
@@ -175,214 +94,8 @@ namespace CelesteMusicPlayer
 
         internal void RedrawOpraCanvas()
         {
-            RedrawOpraPreview();
         }
 
-        /// <summary>
-        /// 画选中曲线的总响应（preamp + 各段叠加）。
-        /// 段响应复用 EQ 曲线那个 ApproxBandGain —— 预览和应用后 EQ 页看到的形状是同一套算法，
-        /// 不会出现「预览长这样、应用完变那样」。
-        /// </summary>
-        private void RedrawOpraPreview()
-        {
-            Canvas? canvas = OpraPreviewCanvas;
-            if (canvas == null || canvas.ActualWidth <= 2 || canvas.ActualHeight <= 2)
-            {
-                return;
-            }
-
-            if (_opraPreviewEq == null)
-            {
-                canvas.Children.Clear();
-                return;
-            }
-
-            try
-            {
-                OpraCorrection? corr = _opra.BuildCorrection(_opraPreviewEq.EqId);
-                if (corr?.Curve.Bands == null)
-                {
-                    canvas.Children.Clear();
-
-                    return;
-                }
-
-                double w = canvas.ActualWidth;
-                double h = canvas.ActualHeight;
-                double padL = 44, padR = 14, padT = 12, padB = 22;
-                double plotW = w - padL - padR;
-                double plotH = h - padT - padB;
-                if (plotW <= 2 || plotH <= 2)
-                {
-                    return;
-                }
-
-                const double fMin = 20.0, fMax = 20000.0;
-                double logMin = Math.Log10(fMin), logMax = Math.Log10(fMax);
-
-                // ── 纵轴贴合曲线真实范围 ──
-                // OPRA 曲线的预增益几乎都是负的（防止叠加增益把峰值顶到削波），
-                // 所以「实际响应」整条会沉到 0 dB 以下。若照旧的 ±对称刻度画，
-                // 形状会被压扁成贴着 0 的一条线 —— 这里改成贴合 min/max，
-                // 并额外画一条「形状」虚线（扣掉预增益），两者差别一眼可见。
-                int samples = 240;
-                var freqs = new double[samples];
-                var shapeDb = new double[samples];
-                double lo = 0, hi = 0;
-                for (int i = 0; i < samples; i++)
-                {
-                    double f = Math.Pow(10.0, logMin + (logMax - logMin) * i / (samples - 1));
-                    double s = 0;
-                    foreach (EqBand b in corr.Curve.Bands)
-                    {
-                        if (b.Enabled)
-                        {
-                            s += ApproxBandGain(f, b);
-                        }
-                    }
-
-                    freqs[i] = f;
-                    shapeDb[i] = s;
-                    double o = s + corr.Curve.PreampDb;
-                    if (i == 0)
-                    {
-                        lo = Math.Min(s, o);
-                        hi = Math.Max(s, o);
-                    }
-                    else
-                    {
-                        lo = Math.Min(lo, Math.Min(s, o));
-                        hi = Math.Max(hi, Math.Max(s, o));
-                    }
-                }
-
-                lo -= 1.0;
-                hi += 1.0;
-                if (hi - lo < 8.0)
-                {
-                    double mid = (hi + lo) / 2;
-                    lo = mid - 4.0;
-                    hi = mid + 4.0;
-                }
-
-                double span = hi - lo;
-                double X(double f) => padL + (Math.Log10(Math.Clamp(f, fMin, fMax)) - logMin) / (logMax - logMin) * plotW;
-                double Y(double db) => padT + (hi - db) / span * plotH;
-
-                bool dark = IsDspCanvasHostDark(OpraPreviewHost);
-                Color gridWeak = dark ? Color.FromArgb(24, 255, 255, 255) : Color.FromArgb(28, 0, 0, 0);
-                Color gridStrong = dark ? Color.FromArgb(64, 255, 255, 255) : Color.FromArgb(74, 0, 0, 0);
-                Color labelColor = dark ? Color.FromArgb(170, 255, 255, 255) : Color.FromArgb(145, 30, 30, 30);
-                Color accent = DspAccentColor();
-                bool zeroVisible = lo + 0.5 < 0 && 0 < hi - 0.5;
-
-                var children = canvas.Children;
-                children.Clear();
-
-                foreach (double f in new[] { 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0, 20000.0 })
-                {
-                    children.Add(new Shapes.Line
-                    {
-                        X1 = X(f), Y1 = padT, X2 = X(f), Y2 = padT + plotH,
-                        Stroke = new SolidColorBrush(gridWeak), StrokeThickness = 1
-                    });
-                    string t = f >= 1000 ? (f / 1000.0).ToString("0.#") + "k" : f.ToString("0");
-                    children.Add(MakeOpraLabel(t, X(f) - 16, padT + plotH + 4, 32, TextAlignment.Center, labelColor));
-                }
-
-                // 0 dB 基准线：只有落在可视区内才画（画在框外会误导）
-                if (zeroVisible)
-                {
-                    children.Add(new Shapes.Line
-                    {
-                        X1 = padL, Y1 = Y(0), X2 = padL + plotW, Y2 = Y(0),
-                        Stroke = new SolidColorBrush(gridStrong), StrokeThickness = 1.4
-                    });
-                }
-
-                var ticks = new SortedSet<double>();
-                ticks.Add(Math.Round(hi - 0.5));
-                ticks.Add(Math.Round(lo + 0.5));
-                if (zeroVisible)
-                {
-                    ticks.Add(0);
-                }
-
-                foreach (double db in ticks)
-                {
-                    children.Add(MakeOpraLabel(
-                        (db > 0 ? "+" : "") + db.ToString("0"), 0, Y(db) - 7, 38, TextAlignment.Right, labelColor));
-                }
-
-                var shapePts = new PointCollection();
-                var outPts = new PointCollection();
-                for (int i = 0; i < samples; i++)
-                {
-                    shapePts.Add(new Windows.Foundation.Point(X(freqs[i]), Y(shapeDb[i])));
-                    outPts.Add(new Windows.Foundation.Point(X(freqs[i]), Y(shapeDb[i] + corr.Curve.PreampDb)));
-                }
-
-                // 面积只在 0 线可见时填（否则会糊成一大块色）
-                if (zeroVisible)
-                {
-                    var area = new PointCollection();
-                    area.Add(new Windows.Foundation.Point(X(fMin), Y(0)));
-                    foreach (Windows.Foundation.Point p in outPts)
-                    {
-                        area.Add(p);
-                    }
-
-                    area.Add(new Windows.Foundation.Point(X(fMax), Y(0)));
-                    children.Add(new Shapes.Polygon
-                    {
-                        Points = area,
-                        Fill = new SolidColorBrush(Color.FromArgb((byte)(dark ? 40 : 34), accent.R, accent.G, accent.B)),
-                        Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL, padT, plotW, plotH) }
-                    });
-                }
-
-                // 形状虚线（不含预增益）：这才是「哪里抬、哪里压」
-                // ⚠ 每个 Shape 各自 new 一份几何/集合：WinRT 的 setter 会接管传入实例，共用会抛异常
-                children.Add(new Shapes.Polyline
-                {
-                    Points = shapePts,
-                    Stroke = new SolidColorBrush(Color.FromArgb((byte)(dark ? 150 : 130), accent.R, accent.G, accent.B)),
-                    StrokeThickness = 1.4,
-                    StrokeDashArray = new DoubleCollection { 4, 4 },
-                    StrokeLineJoin = PenLineJoin.Round,
-                    Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL - 2, padT - 2, plotW + 4, plotH + 4) }
-                });
-
-                children.Add(new Shapes.Polyline
-                {
-                    Points = outPts,
-                    Stroke = new SolidColorBrush(accent),
-                    StrokeThickness = 2.2,
-                    StrokeLineJoin = PenLineJoin.Round,
-                    Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL - 2, padT - 2, plotW + 4, plotH + 4) }
-                });
-
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.RedrawOpraPreview", caught);
-            }
-        }
-
-        private static UIElement MakeOpraLabel(string text, double x, double y, double width, TextAlignment align, Color color)
-        {
-            var tb = new TextBlock
-            {
-                Text = text,
-                FontSize = 10,
-                Foreground = new SolidColorBrush(color),
-                Width = width,
-                TextAlignment = align
-            };
-            Canvas.SetLeft(tb, x);
-            Canvas.SetTop(tb, y);
-            return tb;
-        }
     }
 
     /// <summary>品牌墙上的一颗芯片（x:Bind x:DataType 只认顶层类型，参照 DspRackRow 的做法）。</summary>

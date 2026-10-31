@@ -50,7 +50,6 @@ public sealed partial class MainWindow
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             }
 
-            RefreshFolderBrowserSelectionChrome();
         }
 
         private void ExpandFolderPathToFile(string filePath)
@@ -203,18 +202,6 @@ public sealed partial class MainWindow
                     Depth = entry.Depth
                 })
                 .ToList();
-
-        private void RefreshFolderBrowserSelectionChrome()
-        {
-            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(FolderBrowserView);
-            foreach (ListViewItem container in EnumerateRealizedListViewItems(FolderBrowserView))
-            {
-                if (FolderBrowserView.ItemFromContainer(container) is FolderBrowserItem item)
-                {
-                    ApplyFolderBrowserItemSelectionChrome(container, item, selectedSet);
-                }
-            }
-        }
 
         private static bool IsSupportedAudioFile(string path)
         {

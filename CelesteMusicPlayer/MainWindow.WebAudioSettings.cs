@@ -84,7 +84,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            public void RefreshPanel() => window.RefreshAudioSettingsPanel();
+            public void RefreshPanel() { /* 音频设置页由网页自己渲染，宿主侧已没有任何面板要刷新 */ }
         }
     }
 }

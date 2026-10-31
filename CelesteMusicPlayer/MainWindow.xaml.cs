@@ -662,7 +662,6 @@ namespace CelesteMusicPlayer
             // 删掉调用即恢复 E4 样式与 XAML 属性，无需替代逻辑。
             _playlistViewSource = _playlist;
             {
-                if (FolderBrowserView.ActualWidth > 0) RefreshFolderBrowserSelectionChrome();
             };
 
             // 启动默认页面：读设置「启动后进入」（默认 播放队列 = UserPlaylist；非法值回退播放队列）

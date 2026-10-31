@@ -76,7 +76,6 @@ public sealed partial class MainWindow
 
             ApplyAbLoop();
             SetAbLoopHint(_abLoopB >= 0 ? "A 点已设，可以开循环了。" : "A 点已设；再拖到晚一点的位置，设 B 点。");
-            RefreshAbLoopPage();
         }
 
         private void SetAbLoopEnd()
@@ -103,7 +102,6 @@ public sealed partial class MainWindow
             _abLoopB = pos;
             ApplyAbLoop();
             SetAbLoopHint("B 点已设。点「开启 AB 循环」就开始循环。");
-            RefreshAbLoopPage();
         }
 
         private void ToggleAbLoop()
@@ -119,7 +117,6 @@ public sealed partial class MainWindow
             SetAbLoopHint(_abLoopActive
                 ? "循环中：播到 B 点自动跳回 A 点，进度条跟着跳是正常的。"
                 : "循环已关，接着正常播。");
-            RefreshAbLoopPage();
         }
 
         private void ClearAbLoop()
@@ -129,7 +126,6 @@ public sealed partial class MainWindow
             _abLoopActive = false;
             ApplyAbLoop();
             SetAbLoopHint("已清除 A / B。");
-            RefreshAbLoopPage();
         }
 
         private void ApplyAbLoop() => _audioEngine?.SetAbLoop(_abLoopA, _abLoopB, _abLoopActive);
@@ -137,16 +133,6 @@ public sealed partial class MainWindow
         private void SetAbLoopHint(string text)
         {
             _abLoopHint = text;
-        }
-
-        /// <summary>弹出面板时刷新 AB 页的读数与按钮态。</summary>
-        private void RefreshAbLoopPage()
-        {
-            if (AbLoopAText == null || AbLoopBText == null || AbLoopToggleButton == null)
-            {
-                return;
-            }
-
         }
 
         // ---- 组合框填充 + 输出模式切换（网页 ChangeOutputMode 直通路径）----
@@ -200,7 +186,6 @@ public sealed partial class MainWindow
         {
             AppSettingsStore.Update(s => s.OutputMode = mode);
             OutputMode.Apply(AppSettingsStore.Load());
-            UpdateModeCardHighlight(mode);
             if (string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase))
             {
                 // 2026-09-24 KA13 定案：ASIO 几秒一卡=驱动缓冲过小 + USB 电源管理，喂料器已内置 4s ring 仍可能中招。
@@ -217,113 +202,8 @@ public sealed partial class MainWindow
                 _audioCombosLoading = false;
             }
 
-            RefreshAudioSettingsPanel();
         }
 
-        /// <summary>输出模式三张可视化卡片：当前选中的卡片用主题色高亮，其余还原为常态。</summary>
-        private void UpdateModeCardHighlight(string mode)
-        {
-            Windows.UI.Color accent = ResolveAccentColor();
-            var activeBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
-            var activeBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(46, accent.R, accent.G, accent.B));
-            var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
-
-            SetModeCard(ModeSharedCard, string.Equals(mode, "Shared", StringComparison.OrdinalIgnoreCase), activeBorder, activeBg, normalBorder);
-            SetModeCard(ModeExclusiveCard, string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase), activeBorder, activeBg, normalBorder);
-            SetModeCard(ModeAsioCard, string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase), activeBorder, activeBg, normalBorder);
-        }
-
-        private static void SetModeCard(Button? card, bool active, Microsoft.UI.Xaml.Media.Brush activeBorder, Microsoft.UI.Xaml.Media.Brush activeBg, Microsoft.UI.Xaml.Media.Brush normalBorder)
-        {
-            if (card == null)
-            {
-                return;
-            }
-
-            card.BorderBrush = active ? activeBorder : normalBorder;
-            card.BorderThickness = new Microsoft.UI.Xaml.Thickness(active ? 2 : 1);
-            card.Background = active ? activeBg : null;
-        }
-
-        /// <summary>内核卡片高亮：只剩原生内核一项（2026-10-16 ECHO 选项已删），恒高亮表示当前生效。</summary>
-        private void UpdateEngineCardHighlight(string engine)
-        {
-            Windows.UI.Color accent = ResolveAccentColor();
-            var activeBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
-            var activeBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(46, accent.R, accent.G, accent.B));
-            var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
-
-            SetModeCard(EngineNative2Card, true, activeBorder, activeBg, normalBorder);
-        }
-
-        // ---- 音频面板刷新 + 链路摘要行（网页 RefreshPanel 直通路径）----
-
-        private void RefreshAudioSettingsPanel()
-        {
-            try
-            {
-
-                bool hifi = IsHiFiModeSelected();
-                var chain = _audioEngine?.ChainFormat;
-
-                // 源胶囊两行：源文件真实值 / 实际送链路的转码 WAV（各说各话，绝不混一行看串）
-                // 输出胶囊两行：设备端实际格式 / 结论
-
-                // DSP 摘要（口径与引擎 ManagedDspSourceProvider.RefreshActive 对齐：
-                // 只有真正逐样本处理的模块才计入"（开）"；限幅单独开着只待命、不计入）
-                bool eqOn = EqCurveStore.Load().HasEffect();
-                var extra = DspExtraStore.Load();
-                bool chOn = extra.ChannelBalance?.IsActive == true;
-                bool limiterOn = extra.Safety?.EnableLimiter != false;    // 限幅开关状态（≠激活：单独开只待命）
-                bool hasHeadroom = extra.Safety?.AffectsBits == true;    // 余量≠0：安全模块唯一真正逐样本处理的情形
-                bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
-                bool volOn = _audioEngine?.IsSoftwareVolumeActive ?? false; // HiFi 软件音量同样是采样级增益
-                var active = new System.Collections.Generic.List<string>();
-                if (eqOn) active.Add("EQ");
-                if (chOn) active.Add("声道");
-                if (hasHeadroom) active.Add("余量");
-                if (rgOn) active.Add("ReplayGain");
-                if (volOn) active.Add("音量");
-                // 限幅：开着且已有其它逐样本模块 → 随链生效（防削波）；开着但全链直通 → 待命（不动样本）；
-                // 关着 → 完全不介入，摘要里不出现。2026-09-22 用户实测"限幅没开却显示开了"根因：
-                // 旧 AffectsBits 口径把"显式关限幅"算成激活（DspState.cs 已修），此处同步改口径。
-                string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
-                // bit-perfect：综合判定（DSP + 输出格式 + 是否共享模式），不再只看 DSP 开关
-
-                // 专业播放状态
-                // 与上面 DSP 摘要同口径：余量✓=真在处理；限幅✓=随链生效、待=开着但全链直通、—=已关闭
-                bool limiterEngaged = limiterOn && active.Count > 0;
-                // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
-                // 同步主界面常驻 bit-perfect 徽章
-                // 按设备记忆 DSP 配置档：开关与提示同步
-
-                // ASIO 卡顿排查提醒（2026-09-24 KA13 实测定案：驱动缓冲 5.8ms + USB 电源管理=几秒一卡；
-                // 喂料器内置 4s ring 已排除备货问题，故选 ASIO 时常显此条，切换模式即时可查）
-                if (AsioBufferTipText != null)
-                {
-                    bool asioMode = string.Equals(AppSettingsStore.Load().OutputMode, "Asio", StringComparison.OrdinalIgnoreCase);
-                }
-
-                // 独占输出内核 A/B 卡片高亮同步
-                UpdateEngineCardHighlight(AppSettingsStore.Load().ExclusiveEngine);
-
-                if (DeviceDspHint != null)
-                {
-                    string cur = _audioEngine?.OutputDeviceId;
-                    if (string.IsNullOrWhiteSpace(cur))
-                    {
-                    }
-                    else
-                    {
-                        bool has = DeviceDspProfileStore.HasProfile(cur);
-                    }
-                }
-
-                // SRC 会话实际状态（源→目标 / 未升频原因）
-                RefreshSrcSessionState();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
 
         // ---- 输出设备热插拔（USB DAC / 蓝牙耳机插拔自动切换）----
 
@@ -399,7 +279,6 @@ public sealed partial class MainWindow
                     ShowHotplugNotice("检测到「" + name + "」，已自动切回该设备。");
                 }
 
-                RefreshAudioSettingsPanel();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             finally

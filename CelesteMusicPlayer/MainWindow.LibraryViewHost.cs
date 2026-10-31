@@ -111,32 +111,6 @@ public sealed partial class MainWindow
             return ordered.ToList();
         }
 
-        private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
-        {
-            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(grid);
-            bool anyRealized = false;
-            foreach (GridViewItem container in EnumerateRealizedGridViewItems(grid))
-            {
-                anyRealized = true;
-                if (grid.ItemFromContainer(container) is AlbumEntry album)
-                {
-                    ApplyAlbumGridItemSelectionChrome(grid, container, album, selectedSet);
-                }
-            }
-
-            // 面板尚未生成时回退（极少见）
-            if (!anyRealized)
-            {
-                foreach (AlbumEntry album in albums)
-                {
-                    if (grid.ContainerFromItem(album) is GridViewItem container)
-                    {
-                        ApplyAlbumGridItemSelectionChrome(grid, container, album, selectedSet);
-                    }
-                }
-            }
-        }
-
         // W13 第二十九刀：搜索 UI / 艺术家列表 / 头像解析
 
         private void UpdateLibrarySearchUi()
@@ -204,7 +178,6 @@ public sealed partial class MainWindow
             _folderSearchIndex = -1;
             if (FolderBrowserView != null && _currentCategory == "Folders")
             {
-                RefreshFolderBrowserSelectionChrome();
             }
         }
 
@@ -382,7 +355,6 @@ public sealed partial class MainWindow
                 {
                 }
 
-                RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
                 return;
             }
 
@@ -392,7 +364,6 @@ public sealed partial class MainWindow
                     || ContainsIgnoreCase(a.Artist, q))
                 .ToList();
 
-            RefreshAlbumWallSelectionChrome(AlbumGridView, filtered);
         }
 
         private void ApplyArtistsSearchFilter()
@@ -420,20 +391,4 @@ public sealed partial class MainWindow
 
         // W13 第二十九刀：搜索过滤 / 已实现容器枚举
 
-        private static IEnumerable<GridViewItem> EnumerateRealizedGridViewItems(GridView grid)
-        {
-            Panel? panel = VisualTreeWalker.FindItemsPanel(grid);
-            if (panel == null)
-            {
-                yield break;
-            }
-
-            foreach (UIElement child in panel.Children)
-            {
-                if (child is GridViewItem item)
-                {
-                    yield return item;
-                }
-            }
-        }
     }

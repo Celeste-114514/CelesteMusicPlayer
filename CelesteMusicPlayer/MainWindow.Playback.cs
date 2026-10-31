@@ -1287,7 +1287,6 @@ namespace CelesteMusicPlayer
                 || !Directory.Exists(_browseFolderPath))
             {
                 UpdateFolderSearchNavUi();
-                RefreshFolderBrowserSelectionChrome();
                 return;
             }
 
@@ -1327,7 +1326,6 @@ namespace CelesteMusicPlayer
             else
             {
                 RefreshFolderBrowserRoots();
-                RefreshFolderBrowserSelectionChrome();
             }
         }
 
