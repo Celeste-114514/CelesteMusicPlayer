@@ -75,3 +75,24 @@
 **614 → 588 错 / 214 → 205 成员**。DLL 3,018,240。四道验证全过。
 回退件 `dist/web-ui-20261028-pre-w13-accent-20261031/`。
 跳过未动：`RetargetStoryboard`（操作旧界面元素树的名字解析，属视觉域）、`DrawWaveformStyle`（旧 Canvas 绘制）。
+
+### 第九刀（提交 `e2c238d`，2026-10-31）：第 2 步杂项真功能整批搬完
+新建两个 partial 文件：
+- `MainWindow.LyricsBridge.cs`：歌词数据桥三件套（网页歌词/迷你播放器/托盘在用）+ 桌面歌词开关族
+  （Set/Toggle/Badge/Ensure/ClosedByUser —— WebView2 独立窗口是活功能）
+- `MainWindow.AppFlow.cs`：定时停止族（枚举+字段+ApplySleepSelection+StopForSleep）、
+  托盘显隐（RestoreFromTray/ExitFromTray）、退出流程（ExitApplication+_exitStarted）、
+  收藏状态（UpdateFavoriteButtonUi+SetGeekFavoriteState）、全局热键重启（+_hotkeys 字段）
+Utilities：GeekUiStyleCached 缓存、GeekLyricAccentColor/PhosphorShade、极客播放页状态字段。
+Playback3：封面缓存字段 + InvalidateCoverCache。
+**588 → 518 错 / 205 → 186 成员**。DLL 3,018,752。四道验证全过。
+回退件 `dist/web-ui-20261028-pre-w13-miscfeatures-20261031/`。
+未做（连锅太深）：设置实时应用族（ApplySettingsLive 是大 switch 分发）—— 留独立刀。
+
+### ⚠ 第九刀过程坑：配平切块把 UiTheme 切爆过一次
+cut_block 用 `^\s*\}` 当结束标志会把**嵌套块的闭合**当方法结束 —— RefreshGeekUiStyleCache 是
+expression-bodied（无花括号），脚本一路匹配到后面几百行的某个 `}`，把 `_lastAppliedUiStyleMode` +
+`ApplyUiStyleMode` 前半误切进 Utilities，UiTheme 剩下残缺方法体 → 226 个编译错误。
+修复：从 git HEAD 提取 389-431 行原文插回 UiTheme（ApplyUiStyleMode 与现存后半段自然拼合），
+Utilities 只保留真正该搬的 GeekUiStyleCached 字段+属性。**教训：expression-bodied 成员绝不能用
+花括号配平的通用切块；end_pat 必须锚定具体内容。**
