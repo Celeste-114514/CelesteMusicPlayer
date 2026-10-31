@@ -66,7 +66,7 @@ public sealed partial class MainWindow
                         continue;
                     }
 
-                    image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
+                    image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(232));
                 }
 
                 if (image != null)

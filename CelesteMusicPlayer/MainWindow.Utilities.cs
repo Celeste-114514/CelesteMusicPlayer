@@ -429,23 +429,13 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 封面解码目标像素 = 元素当前显示尺寸 × 屏幕缩放。
-        /// 显示尺寸取不到（元素隐藏/未布局）时用 fallbackLayoutPx。
+        /// 封面解码目标像素 = 布局目标宽度 × 屏幕缩放。
+        /// 以前按承载图片的元素实测尺寸算，但那几个 Image 现在都是垫片（ActualWidth 恒 0），
+        /// 每次都是回退到调用方给的宽度 —— 索性直接收这个宽度，不再去问控件。
         /// </summary>
-        private int CoverDecodeTargetPx(FrameworkElement? element, double fallbackLayoutPx)
+        private int CoverDecodeTargetPx(double fallbackLayoutPx)
         {
-            double layoutPx = 0;
-            if (element != null)
-            {
-                // ActualWidth 布局后才有；Width 是布局代码显式设的（未设为 NaN），可提前用
-                layoutPx = element.ActualWidth > 0
-                    ? element.ActualWidth
-                    : (double.IsNaN(element.Width) ? 0 : element.Width);
-            }
-            if (layoutPx <= 0)
-            {
-                layoutPx = fallbackLayoutPx;
-            }
+            double layoutPx = fallbackLayoutPx;
             return (int)Math.Clamp(Math.Ceiling(layoutPx * CoverRasterizationScale()), 96, 1024);
         }
 

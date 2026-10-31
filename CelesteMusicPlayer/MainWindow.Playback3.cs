@@ -842,7 +842,7 @@ namespace CelesteMusicPlayer
 
             BitmapImage? thumb = await CoverArtService.GetAsync(coverBytes, CoverVariant.Thumb);
             bool fromCache = thumb != null;
-            thumb ??= await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(TransportCoverBorder, 160));
+            thumb ??= await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(160));
 
             // 切歌竞态：取图期间已经换了歌就丢掉这次结果
             if (thumb == null || !string.Equals(_nowPlayingPath, path, StringComparison.OrdinalIgnoreCase))
@@ -945,7 +945,7 @@ namespace CelesteMusicPlayer
                 // 2026-10-19「播放栏封面糊」：播放页大图改走封面分档缓存（Large 768 档），
                 // 命中时零 TagLib / 零解码；没命中（首播、缓存被清）才回落"按显示尺寸现解码"。
                 coverImage = await CoverArtService.GetAsync(coverBytes, CoverVariant.Large);
-                coverImage ??= await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(NowPlayingCoverBorder, 320));
+                coverImage ??= await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(320));
             }
 
             if (_nowPlayingPath != item.FilePath)

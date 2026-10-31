@@ -1159,7 +1159,7 @@ namespace CelesteMusicPlayer
                         byte[]? cb = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
                         if (cb is { Length: > 0 })
                         {
-                            bmp = await CreateBitmapFromBytesAsync(cb, CoverDecodeTargetPx(null, 160)); // 与专辑封面同一机制；歌单墙卡片 160px
+                            bmp = await CreateBitmapFromBytesAsync(cb, CoverDecodeTargetPx(160)); // 与专辑封面同一机制；歌单墙卡片 160px
                         }
                     }
                 }

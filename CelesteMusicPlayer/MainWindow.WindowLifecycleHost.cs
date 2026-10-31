@@ -271,7 +271,6 @@ public sealed partial class MainWindow
             try
             {
                 ExtendsContentIntoTitleBar = true;
-                SetTitleBar(AppTitleBar); // 自定义标题栏区域可拖动
                 MakeWindowBorderless(); // 无边框 + 自绘系统按钮；保留 WS_THICKFRAME 使窗口可自由调节大小
             }
             catch (Exception ex)
