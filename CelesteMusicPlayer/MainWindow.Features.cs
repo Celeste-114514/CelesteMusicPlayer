@@ -719,67 +719,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void AdjustVolumeBy(double delta)
-        {
-            // HiFi 独占/ASIO 且「HiFi 软件音量」未开启：滑块恒 100%，热键/滚轮不挪位，
-            // 避免出现"显示 95% 实际没变"的假状态（此时调音量请用 DAC 旋钮 / 系统音量端）。
-            if (IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked())
-            {
-                return;
-            }
-
-            VolumeSlider.Value = Math.Clamp(VolumeSlider.Value + delta, 0, 100);
-        }
-
-        internal void SeekBySeconds(double seconds)
-        {
-            // 引擎播放（FFmpeg / HiFi 独占路径）：以前这里只认 MediaPlayer，
-            // 而现在所有播放都走引擎 → 快进/快退（键盘、迷你播放器、托盘）其实是完全失效的。
-            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
-            {
-                try
-                {
-                    // seconds 是"原歌曲时间"里跳多少（热键 ±5）：先还原成源时间，seek 前再换算回 WAV 时间
-                    double scale = TempoScale();
-                    double duration = _audioEngine.Duration.TotalSeconds * scale;
-                    double next = _audioEngine.Position.TotalSeconds * scale + seconds;
-                    next = Math.Clamp(next, 0, duration > 0 ? duration : next);
-                    _audioEngine.Seek(TimeSpan.FromSeconds(next / scale));
-
-                    // seek 会丢弃无缝源里已预加载的下一首，重挂一次
-                    _ = Session.PreloadNextAsync();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-                return;
-            }
-
-            MediaPlayer? player = GetPlayer();
-            if (player?.Source == null)
-            {
-                // 启动就绪态：还没播，快进/快退就当作"从这个位置开始播"
-                StartPlaybackFromPendingPosition(ProgressSlider.Value + seconds, pauseAfter: false);
-                return;
-            }
-
-            try
-            {
-                TimeSpan duration = player.PlaybackSession.NaturalDuration;
-                TimeSpan next = player.PlaybackSession.Position + TimeSpan.FromSeconds(seconds);
-                if (next < TimeSpan.Zero)
-                {
-                    next = TimeSpan.Zero;
-                }
-
-                if (duration > TimeSpan.Zero && next > duration)
-                {
-                    next = duration;
-                }
-
-                player.PlaybackSession.Position = next;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
         private void ToggleMainWindowVisibility()
         {
             try

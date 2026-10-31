@@ -2161,11 +2161,7 @@ namespace CelesteMusicPlayer
         }
 
 
-                /// <summary>最近一次当前播放曲目的封面字节：清掉自定义背景后恢复封面背景用。</summary>
-        private byte[]? _lastCoverBytes;
 
-        /// <summary>最近一次当前播放曲目的封面大图（迷你播放器整窗背景同步用，读大图不是播放栏缩略图）。</summary>
-        private ImageSource? _lastCoverImage;
 
         /// <summary>自定义背景图的请求序号：连续换图时丢弃过期结果，避免旧图盖掉新图。</summary>
         private int _customBackgroundRequest;

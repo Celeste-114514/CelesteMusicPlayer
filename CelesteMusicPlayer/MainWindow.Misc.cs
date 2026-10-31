@@ -2438,34 +2438,5 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void HandleMediaEnded()
-        {
-            if (ConsumeSleepStopIfDue())
-            {
-                return;
-            }
-
-            switch (_orderResolver.Order)
-            {
-                case PlaybackOrder.TrackLoop:
-                    // IsLooping 为 true 时通常不会触发；兜底再播当前曲
-                    if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
-                    {
-                        PlayUserPlaylistAt(_queue.Index);
-                    }
-                    break;
-
-                case PlaybackOrder.TrackOnce:
-                    break;
-
-                case PlaybackOrder.Sequential:
-                    PlayNext(autoAdvance: true);
-                    break;
-
-                default:
-                    PlayNext(autoAdvance: true);
-                    break;
-            }
-        }
     }
 }

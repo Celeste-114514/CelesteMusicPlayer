@@ -3262,5 +3262,12 @@ namespace CelesteMusicPlayer
                 CoverBytesCache.TryRemove(audioPath, out _);
             }
         }
+        // 封面域缓存（2026-10-31 从 MainWindow.UiTheme.cs 搬来）：TransportCover / NowPlayingPanel 刷新在读写。
+
+                /// <summary>最近一次当前播放曲目的封面字节：清掉自定义背景后恢复封面背景用。</summary>
+        private byte[]? _lastCoverBytes;
+
+        /// <summary>最近一次当前播放曲目的封面大图（迷你播放器整窗背景同步用，读大图不是播放栏缩略图）。</summary>
+        private ImageSource? _lastCoverImage;
     }
 }
