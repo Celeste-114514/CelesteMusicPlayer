@@ -3057,28 +3057,6 @@ namespace CelesteMusicPlayer
             return "结论：" + string.Join(" · ", parts);
         }
 
-        /// <summary>按设备记忆：若开启且当前设备有已存配置档，则套用该设备的 DSP 配置（不碰音频字节流）。</summary>
-        private void ApplyDeviceDspProfileIfEnabled(string deviceId)
-        {
-            try
-            {
-                if (!DeviceDspProfileStore.IsEnabled()) return;
-                if (string.IsNullOrWhiteSpace(deviceId)) return;            // 系统默认设备不按设备记忆
-                if (!DeviceDspProfileStore.HasProfile(deviceId)) return;   // 无存档则用全局配置，避免被默认覆盖
-                var profile = DeviceDspProfileStore.GetProfile(deviceId);
-                DeviceDspProfileStore.ApplyToStores(profile);
-                // 重新填充音效面板控件 + 内存 EQ 曲线（与启动加载同口径）
-                LoadAudioFxUiFromStore();
-                // 推送到引擎（内部已按 _audioFxPanelReady 守卫；未就绪时仅写盘不应用）
-                ApplyDspToEngine();
-                // 独立的 10 段均衡器与房间校正由引擎直接读 store
-                _audioEngine?.SetEqualizer(EqualizerStore.Load().BandGains);
-                RefreshAudioSettingsPanel();
-                StartupLog.Write($"[DSP] 已套用设备配置档：{deviceId}");
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
         private void DeviceDspMemoryToggle_Toggled(object sender, RoutedEventArgs e)
         {
             try

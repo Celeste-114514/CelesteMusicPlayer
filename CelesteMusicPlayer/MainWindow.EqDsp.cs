@@ -96,7 +96,6 @@ namespace CelesteMusicPlayer
 
 
         private bool _audioFxEqDragging;
-        private bool _audioFxEqBuilt;
         // 外部曲线（耳机校正 opra-* / Equalizer APO 导入等）在预设下拉里的动态展示项：
         // 按需创建、挂在「管理（删除）我的预设…」之前，选中它纯展示、不切预设
         // （守卫见 AudioFxEqPreset_SelectionChanged 顶部）。
@@ -105,52 +104,6 @@ namespace CelesteMusicPlayer
         // (限幅器 IsOn=True 等)加载会触发 Toggled/SelectionChanged，若此时允许 ApplyDspToEngine
         // 会把默认的"打开"状态保存到盘，覆盖用户上次关闭的设置 —— 必须用该标志屏蔽。
 
-
-        /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ。</summary>
-        internal void ApplyOpraCurve(EqCurveState curve)
-        {
-            // 「耳机校正生效」由 _opraApplied 计算属性按曲线 id 直读，这里不再赋值
-            ApplyEqCurveToPlayer(curve);
-        }
-
-        /// <summary>把一条曲线应用到播放器（曲线状态 + 持久化 + 面板同步 + DSP 实时生效 + 链路显示）。
-        /// OPRA 耳机校正、Equalizer APO 导入等「外部曲线入口」共用这一条路径。</summary>
-        internal void ApplyEqCurveToPlayer(EqCurveState curve)
-        {
-            if (curve == null)
-            {
-                return;
-            }
-
-            curve.Enabled = true;
-            PushEqUndoSnapshot();
-            EqState.Current = curve;
-            EqCurveStore.Save(curve);
-
-            // 若音效面板已构建，同步其 EQ 显示（打开 OPRA 面板前通常已打开音效工作台）。
-            if (_audioFxEqBuilt)
-            {
-                // 同步过程会改 Toggle / ComboBox 选中项，handler 就地触发；_audioFxLoading 屏蔽，
-                // 否则预设下拉的反向应用会把刚下发的这条曲线覆盖成「平坦」（2026-10-01 修）。
-                _audioFxLoading = true;
-                try
-                {
-                    AudioFxEqEnableToggle.IsOn = true;
-                    AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(curve.PreampDb) + " dB";
-                    SelectAudioFxEqPreset(curve.PresetId);
-                    SelectAudioFxEqBand(_audioFxEqSelected);
-                    RedrawAudioFxEqCurve();
-                    RefreshAudioFxEqBandEditor();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-                finally { _audioFxLoading = false; }
-            }
-
-            _audioEngine?.SetEqCurve(curve);
-            UpdateDspBitPerfectUi();
-            UpdateSignalChainDisplay();
-            StartupLog.Write("EQ 曲线已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
-        }
 
         private void SelectAudioFxEqPreset(string presetId)
         {
@@ -410,23 +363,6 @@ namespace CelesteMusicPlayer
                 if (b is { Enabled: true }) g += ApproxBandGain(f, b);
             }
             return g;
-        }
-
-
-        private static TextBlock MakeEqAxisLabel(string text, double x, double y, double width, TextAlignment align, Color color)
-        {
-            var tb = new TextBlock
-            {
-                Text = text,
-                FontSize = 10,
-                Foreground = new SolidColorBrush(color),
-                TextAlignment = align,
-                Width = width,
-                Height = 14
-            };
-            Canvas.SetLeft(tb, x);
-            Canvas.SetTop(tb, y);
-            return tb;
         }
 
 
@@ -1118,7 +1054,6 @@ namespace CelesteMusicPlayer
 
 
         // ---- 简单模式 ----
-        private double _eqSimpleBass, _eqSimpleVocal, _eqSimpleAir, _eqSimpleWarm;
 
         private void AudioFxEqSimple_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
@@ -1151,79 +1086,6 @@ namespace CelesteMusicPlayer
             finally { _audioFxLoading = false; }
 
             ApplySimpleTones();
-        }
-
-
-        private static void AppendSimple(EqCurveState s, string tone, double strength)
-        {
-            double[] fr = { 32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
-            foreach (double f in fr)
-            {
-                double g = 0;
-                if (tone == "bass")
-                {
-                    if (f <= 80) g += 2.5 * strength;
-                    else if (f <= 160) g += 1.6 * strength;
-                    else if (f <= 315) g += 0.7 * strength;
-                    else if (f >= 10000) g += -0.4 * strength;
-                }
-                else if (tone == "vocal")
-                {
-                    if (f >= 800 && f <= 2500) g += 1.7 * strength;
-                    else if (f >= 315 && f < 800) g += 0.7 * strength;
-                    else if (f >= 5000 && f <= 8000) g += -0.8 * strength;
-                    else if (f <= 80) g += -0.4 * strength;
-                }
-                else if (tone == "air")
-                {
-                    if (f >= 10000) g += 2.0 * strength;
-                    else if (f >= 5000) g += 1.1 * strength;
-                    else if (f <= 160) g += -0.5 * strength;
-                }
-                else if (tone == "warm")
-                {
-                    if (f <= 125) g += 1.4 * strength;
-                    else if (f >= 4000) g += -0.9 * strength;
-                    else if (f >= 250 && f <= 1000) g += 0.4 * strength;
-                }
-
-                g = Math.Round(Math.Clamp(g, -12, 12) * 10) / 10;
-                s.Bands.Add(new EqBand { Enabled = Math.Abs(g) > 0.01, FrequencyHz = f, GainDb = g, Q = 1.0, FilterType = EqFilterType.Peaking });
-            }
-        }
-
-
-        /// <param name="restoreFromStore">true=从持久化恢复上次滑块值；false=清空（用于重置按钮）。</param>
-        private void SyncAudioFxEqSimpleFromState(bool restoreFromStore = true)
-        {
-            // 简单模式各滑块值：默认从持久化恢复（避免重启后回到 0），重置时清空。
-            // 进出都保留调用方原有的 _audioFxLoading：本方法会被 LoadAudioFxUiFromStore 的
-            // "整段加载"包裹调用，直接置 false 会把外层守卫提前解除，导致后半段控件赋值
-            // 当场触发回写（半载状态写盘）。2026-09-30 听音方案重载面板时踩到，改为保存/恢复。
-            bool prevLoading = _audioFxLoading;
-            _audioFxLoading = true;
-            try
-            {
-                if (restoreFromStore)
-                {
-                    var t = SimpleEqStore.Load();
-                    _eqSimpleBass = t.Bass;
-                    _eqSimpleVocal = t.Vocal;
-                    _eqSimpleAir = t.Air;
-                    _eqSimpleWarm = t.Warm;
-                }
-                else
-                {
-                    _eqSimpleBass = _eqSimpleVocal = _eqSimpleAir = _eqSimpleWarm = 0;
-                    SimpleEqStore.Save(new SimpleEqState());
-                }
-
-                AudioFxEqSimpleBassSlider.Value = _eqSimpleBass;
-                AudioFxEqSimpleVocalSlider.Value = _eqSimpleVocal;
-                AudioFxEqSimpleAirSlider.Value = _eqSimpleAir;
-                AudioFxEqSimpleWarmSlider.Value = _eqSimpleWarm;
-            }
-            finally { _audioFxLoading = prevLoading; }
         }
 
 
@@ -1265,32 +1127,6 @@ namespace CelesteMusicPlayer
 
             _ = await SaveAudioFxEqPresetCoreAsync(nameBox.Text ?? string.Empty);
         }
-
-        /// <summary>保存 EQ 预设核心（网页「音效处理」页直接调，name 由网页输入框给）。
-        /// 返回给调用方一句结果消息（空名 = 没保存）。</summary>
-        internal async Task<string> SaveAudioFxEqPresetCoreAsync(string rawName)
-        {
-            string name = (rawName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                const string bad = "预设名称不能为空，未保存";
-                NowPlayingText.Text = bad;
-                return bad;
-            }
-
-            var toSave = EqState.Current.Clone();
-            toSave.PresetName = name.Length > 40 ? name.Substring(0, 40) : name;
-            toSave.PresetId = "user:" + Guid.NewGuid().ToString("N").Substring(0, 8);
-            string newId = EqUserPresetStore.Upsert(toSave);
-
-            // 刷新下拉并在列表中选择刚保存的预设
-            RefreshAudioFxUserPresetItems();
-            SelectAudioFxEqPreset(newId);
-            string msg = "EQ 预设已保存：" + toSave.PresetName;
-            NowPlayingText.Text = msg;
-            return msg;
-        }
-
 
         private void AudioFxEqAutoGain_Click(object sender, RoutedEventArgs e)
         {
@@ -1718,75 +1554,5 @@ namespace CelesteMusicPlayer
         private DispatcherQueueTimer? _eqSpectrumTimer;
         private bool _eqSpectrumOn = true;
 
-        /// <summary>首次进入音效面板时构建 EQ 滑杆与预设 / 单声道下拉。</summary>
-        private void EnsureAudioFxUiBuilt()
-        {
-            if (_audioFxEqBuilt)
-            {
-                return;
-            }
-
-            _audioFxEqBuilt = true;
-
-            // 曲线画布有尺寸后再绘制（首次进入在布局完成后重画）
-            AudioFxEqCurveCanvas.SizeChanged -= AudioFxEqCurve_SizeChanged;
-            AudioFxEqCurveCanvas.SizeChanged += AudioFxEqCurve_SizeChanged;
-
-            if (AudioFxEqPresetCombo != null)
-            {
-                AudioFxEqPresetCombo.Items.Clear();
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "平坦", Tag = "flat" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "古典", Tag = "classical" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "流行", Tag = "pop" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "爵士", Tag = "jazz" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "摇滚", Tag = "rock" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "柔和", Tag = "soft" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "低音增强", Tag = "bass" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "自定义…", Tag = "custom" });
-                // 用户预设（含分隔 + 各命名预设）
-                var userPresets = EqUserPresetStore.Load();
-                if (userPresets.Count > 0)
-                {
-                    AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "—— 我的预设 ——", IsEnabled = false });
-                    foreach (var p in userPresets)
-                    {
-                        AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "★ " + (string.IsNullOrWhiteSpace(p.PresetName) ? "未命名" : p.PresetName), Tag = p.PresetId });
-                    }
-                }
-
-                // 删除我的预设（长按/右键除名）
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "管理（删除）我的预设…", Tag = "manage" });
-            }
-
-            if (AudioFxEqBandTypeCombo != null)
-            {
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "峰值 (Peak)", Tag = EqFilterType.Peaking });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低架 (Low Shelf)", Tag = EqFilterType.LowShelf });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高架 (High Shelf)", Tag = EqFilterType.HighShelf });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低通 (Low Pass)", Tag = EqFilterType.LowPass });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高通 (High Pass)", Tag = EqFilterType.HighPass });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "切除 (Notch)", Tag = EqFilterType.Notch });
-            }
-
-            if (AudioFxChannelMonoCombo != null)
-            {
-                AudioFxChannelMonoCombo.Items.Clear();
-                AddMonoComboItem("off", "关闭（立体声）");
-                AddMonoComboItem("left", "只用左声道");
-                AddMonoComboItem("right", "只用右声道");
-                AddMonoComboItem("sum", "左右求和");
-            }
-
-            AudioFxEqBandFreqSlider.Minimum = Math.Log10(20) / Math.Log10(2); // ~4.32 (log2)
-            AudioFxEqBandFreqSlider.Maximum = Math.Log10(20000) / Math.Log10(2); // ~14.29
-
-            if (AudioFxRgModeCombo != null)
-            {
-                AudioFxRgModeCombo.Items.Clear();
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "关闭", Tag = ReplayGainMode.Off });
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "单曲 (Track)", Tag = ReplayGainMode.Track });
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "专辑 (Album)", Tag = ReplayGainMode.Album });
-            }
-        }
     }
 }

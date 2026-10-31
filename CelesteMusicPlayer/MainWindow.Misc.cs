@@ -891,80 +891,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AddMonoComboItem(string mode, string label)
-        {
-            AudioFxChannelMonoCombo.Items.Add(new ComboBoxItem { Content = label, Tag = mode });
-        }
-
-
-        /// <summary>从持久化状态加载音效面板控件。</summary>
-        private void LoadAudioFxUiFromStore()
-        {
-            _audioFxLoading = true;
-            try
-            {
-                EqState.Current = EqCurveStore.Load();
-                AudioFxEqEnableToggle.IsOn = EqState.Current.Enabled;
-                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
-                SelectAudioFxEqPreset(EqState.Current.PresetId);
-                AudioFxEqModeRadio.SelectedIndex = 0; // 专业
-                SyncAudioFxEqSimpleFromState();
-                SelectAudioFxEqBand(_audioFxEqSelected);
-                RedrawAudioFxEqCurve();
-                RefreshAudioFxEqBandEditor();
-
-                DspExtraState extra = DspExtraStore.Load();
-                ExtraParameters.Load(extra);
-                var ch = extra.ChannelBalance;
-                ReplayGainState rglog = ReplayGainStore.Load();
-                StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
-                AudioFxChannelToggle.IsOn = ch.Enabled;
-                AudioFxChannelBalanceSlider.Value = ch.Balance;
-                AudioFxChannelLeftGainSlider.Value = ch.LeftGainDb;
-                AudioFxChannelRightGainSlider.Value = ch.RightGainDb;
-                SelectAudioFxMonoMode(ch.MonoMode);
-                AudioFxChannelSwapToggle.IsOn = ch.SwapChannels;
-                AudioFxChannelInvertLToggle.IsOn = ch.InvertLeft;
-                AudioFxChannelInvertRToggle.IsOn = ch.InvertRight;
-                AudioFxChannelLeftDelaySlider.Value = ch.LeftDelayMs;
-                AudioFxChannelRightDelaySlider.Value = ch.RightDelayMs;
-                AudioFxChannelCrossfeedToggle.IsOn = ch.CrossfeedEnabled;
-                // Crossfeed 已独立成页：强度和截止的两处读数要在加载时同步一次
-                RefreshDspXfeedLevelReadout();
-                RefreshCrossfeedCutoffReadout();
-                AudioFxChannelCrossfeedSlider.Value = ch.CrossfeedLevel;
-                // 老存档没有这个字段 → 反序列化得到默认 700，正好等于旧版写死值，行为不变
-                AudioFxChannelCrossfeedCutoffSlider.Value = ch.CrossfeedCutoffHz;
-
-                var safety = extra.Safety;
-                AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;
-                AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(safety.HeadroomDb);
-                AudioFxSafetyLimiterToggle.IsOn = safety.EnableLimiter;
-
-                // ReplayGain：先装载模型，再让控件照模型投影（模型是唯一参数来源）
-                RgParameters.Load(ReplayGainStore.Load());
-                SelectAudioFxRgMode(RgParameters.Current.Mode);
-                AudioFxRgPreampSlider.Value = RgParameters.Current.PreampDb;
-                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(RgParameters.Current.PreampDb);
-                AudioFxRgPreventClippingToggle.IsOn = RgParameters.Current.PreventClipping;
-                RefreshAudioFxRgInfo();
-            }
-            finally
-            {
-                _audioFxLoading = false;
-            }
-
-            // 面板已从盘加载完成，之后才允许 DSP handler 持久化/应用（启动阶段误触发需屏蔽）。
-            _audioFxPanelReady = true;
-
-            // 模块导航：默认定位第一个模块，并按当前状态点亮各模块圆点
-            InitDspNav();
-
-            // EQ 页快捷状态条（EQ 状态 / bit-perfect / 预增益 / 余量 / 预设）初始同步
-            UpdateAudioFxEqQuickStrip();
-
-        }
-
         /// <summary>
         /// 打开房间校正：2026-10-12 阶段 2 起不再弹独立窗口 —— IR 导入已内嵌到
         /// 音效处理的「FIR / 房间校正」页，这里直接跳过去并选中该页。
@@ -988,40 +914,6 @@ namespace CelesteMusicPlayer
             {
                 SelectDspPage(pageIndex);
             }
-        }
-
-
-        private void SelectAudioFxMonoMode(string mode)
-        {
-            for (int i = 0; i < AudioFxChannelMonoCombo.Items.Count; i++)
-            {
-                if (AudioFxChannelMonoCombo.Items[i] is ComboBoxItem { Tag: string m } && string.Equals(m, mode, StringComparison.Ordinal))
-                {
-                    AudioFxChannelMonoCombo.SelectedIndex = i;
-                    return;
-                }
-            }
-
-            AudioFxChannelMonoCombo.SelectedIndex = 0;
-        }
-
-
-        private void ApplySimpleTones()
-        {
-            PushEqUndoSnapshot(coalesce: true);
-            var s = new EqCurveState { Enabled = AudioFxEqEnableToggle.IsOn, PreampDb = EqState.Current.PreampDb, PresetId = "simple", PresetName = "简单模式" };
-            SimpleEqStore.Save(new SimpleEqState { Bass = _eqSimpleBass, Vocal = _eqSimpleVocal, Air = _eqSimpleAir, Warm = _eqSimpleWarm });
-            if (_eqSimpleBass > 0.01) AppendSimple(s, "bass", _eqSimpleBass);
-            if (_eqSimpleVocal > 0.01) AppendSimple(s, "vocal", _eqSimpleVocal);
-            if (_eqSimpleAir > 0.01) AppendSimple(s, "air", _eqSimpleAir);
-            if (_eqSimpleWarm > 0.01) AppendSimple(s, "warm", _eqSimpleWarm);
-            if (s.Bands.Count == 0) s.Bands.Add(new EqBand { Enabled = true, FrequencyHz = 1000, GainDb = 0 });
-
-            EqState.Current = s;
-            _audioFxEqSelected = EqState.Current.Bands.Count > 0 ? 0 : -1;
-            RedrawAudioFxEqCurve();
-            RefreshAudioFxEqBandEditor();
-            ApplyDspToEngine();
         }
 
 

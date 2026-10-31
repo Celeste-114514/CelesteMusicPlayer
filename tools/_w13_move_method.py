@@ -18,7 +18,9 @@ import sys
 
 
 def split_keep_crlf(raw):
-    return raw.split(b"\r\n")
+    # 2026-10-31 三修：LF-only 文件按 \r\n 切会变成一整行，配平必炸（GeekDsp.cs 实测）。
+    # 按文件实际换行风格切，写回时用同一风格拼回。
+    return raw.split(b"\r\n") if b"\r\n" in raw else raw.split(b"\n")
 
 
 def find_method(lines, pattern):
@@ -108,7 +110,7 @@ def main():
         raise SystemExit(f"目标文件尾部结构不认识，先人工确认: {lines_dst[-4:]}")
     while body_lines and body_lines[-1].strip() == b"":
         body_lines.pop()
-    if not body_lines[-1].rstrip(b"\r").rstrip().endswith(b"}"):
+    if not body_lines[-1].rstrip(b"\r").rstrip().endswith((b"}", b";")):
         raise SystemExit("去掉类闭合后 body 末行不是成员闭合，先人工确认")
     nl_t = b"\r\n" if b"\r\n" in dst_raw[-4000:] else b"\n"
     chunk = b""
@@ -133,7 +135,8 @@ def main():
             blanks += 1
         del src[s:tail]
 
-    open(a.src, "wb").write(b"\r\n".join(src))
+    nl_s = b"\r\n" if b"\r\n" in src_raw else b"\n"
+    open(a.src, "wb").write(nl_s.join(src))
     print(f"已搬 {len(blocks)} 个方法 -> {a.dst}")
 
 

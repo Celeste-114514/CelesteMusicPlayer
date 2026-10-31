@@ -318,10 +318,8 @@ namespace CelesteMusicPlayer
             }
 
             // EQ 页：只有本页可见时才跑 ~15fps 频谱定时器（曲线背景用），离开即停
-            EnsureEqSpectrumTimer(idx == DspPageEqIndex);
             if (idx == DspPageEqIndex)
             {
-                RedrawAudioFxEqCurve();
                 // 耳机校正（2026-10-01 并入本页）：第一次进入加载 OPRA 数据库（之后复用内存态）；
                 // 历史列表与曲线预览都可能被别处改动过，切进来刷新一次
                 EnsureOpraLoaded();

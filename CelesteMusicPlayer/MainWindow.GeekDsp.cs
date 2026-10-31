@@ -37,19 +37,6 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private bool _geekDspActive;
-        private Color? _geekDspPhosphor;
-
-        /// <summary>
-        /// DSP 面板当前的强调色：极客模式返回磷光色，非极客返回 null（含义＝沿用系统/自定义主题色）。
-        /// 面板里凡是「要跟强调色走」的地方一律问它，不要自己读 Application.Resources。
-        /// </summary>
-        internal Color? GeekDspAccentColor()
-            => _geekDspActive && _geekDspPhosphor is Color phosphor ? phosphor : (Color?)null;
-
-        /// <summary>面板强调色画刷：极客下给磷光，否则回落系统主题色（与全局行为一致）。</summary>
-        internal Brush DspAccentBrush()
-            => GeekDspAccentColor() is Color accent ? new SolidColorBrush(accent) : ResolveAccentBrush();
 
         /// <summary>
         /// ThemeColorService 在非极客下注入的全部 accent 资源键。
@@ -326,49 +313,5 @@ namespace CelesteMusicPlayer
             UpdateDspNavIndicators();
         }
 
-        /// <summary>往目标色按比例混色（t=0 原色，t=1 目标色）。对齐 ThemeColorService 的 MixWithWhite / MixWithBlack。</summary>
-        private static Color MixToward(Color c, Color target, double t)
-            => Color.FromArgb(
-                255,
-                (byte)(c.R + (target.R - c.R) * t),
-                (byte)(c.G + (target.G - c.G) * t),
-                (byte)(c.B + (target.B - c.B) * t));
-
-        /// <summary>
-        /// 模块页徽章的配色（state: "on" = 生效中，其余 = 未启用）。
-        /// 「已旁路」的琥珀警示色不在本函数里 —— 语义色不参与主题化，否则就失去警示作用了。
-        /// 极客下「生效中」改走磷光，等价于其它皮肤里这块由主题色负责强调的效果；
-        /// 字形也要跟着改：极客是暗界面、默认前景是白的，浅底上会糊成一团，所以显式钉一层深色。
-        /// </summary>
-        private void SetDspBadgeState(Border badge, TextBlock text, string state, string caption)
-        {
-            text.Text = caption;
-
-            Color on = Color.FromArgb(255, 0x3B, 0x6D, 0x11);
-            Color off = Color.FromArgb(255, 0xB4, 0xB2, 0xA9);
-
-            // 「已旁路」是语义警示色，不参与主题化（否则失去警示作用）
-            if (state == "bypassed")
-            {
-                badge.Background = new SolidColorBrush(Color.FromArgb(255, 0xC0, 0x7A, 0x1A));
-                text.Foreground = new SolidColorBrush(Color.FromArgb(255, 0xFF, 0xFF, 0xFF));
-                return;
-            }
-
-            if (GeekDspAccentColor() is Color phosphor)
-            {
-                if (state == "on")
-                {
-                    badge.Background = new SolidColorBrush(MixToward(phosphor, Colors.White, 0.72));
-                    text.Foreground = new SolidColorBrush(MixToward(phosphor, Colors.Black, 0.80));
-                    return;
-                }
-
-                off = Color.FromArgb(255, 0x4A, 0x4A, 0x42);
-            }
-
-            badge.Background = new SolidColorBrush(state == "on" ? on : off);
-            text.Foreground = null; // null = 回落主题默认前景
-        }
     }
 }
