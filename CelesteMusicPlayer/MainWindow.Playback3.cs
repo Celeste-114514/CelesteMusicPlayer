@@ -931,58 +931,6 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 进度条居中（2026-10-14 用户要求：以主界面左右中轴为对称轴左右对称）。
-        /// 进度条改成固定长度后，它只是在右侧「播放控制区」内部居中，整体是偏右的；
-        /// 所以按左侧「封面 + 歌曲信息」的实际宽度给一个负的左偏移，把它的中心
-        /// 挪到整条播放栏（也就是主界面）的中轴上。宽度随内容变，所以每次尺寸变化都重算。
-        ///
-        /// 2026-10-16 用户反馈：波形进度条离上方太近，往下调又会和左侧播放信息重叠 → 整组下移。
-        /// 同日第二轮：进度条不再以播放栏中轴 / 固定右移量定位，改为**以播放按钮为中心对称**
-        /// （播放按钮是整排控制的视觉重心，中轴会随左侧封面+歌名宽度漂）。
-        /// 下移量是一个常量，想微调只改这里。
-        /// </summary>
-        /// <returns>这一轮有没有真的改动 Margin（启动补校靠它判断布局是否已经稳定）。</returns>
-        private bool UpdateTransportProgressCentering()
-        {
-            if (ProgressRowGrid == null || TransportInfoPanel == null)
-            {
-                return false;
-            }
-
-            // 改前先留底：启动补校要判断"这轮有没有动过"，动了就继续观察，没动才算稳。
-            // ⚠️ 阈值是 2px 不是 0.01px：2026-10-16 探针实测，补校本身有 ±1px 自激振荡
-            // （CenterOnElement 的 0.5px 写入阈值与"排一帧补量"错位形成的极限环，
-            //  P 在 -325/-326/-327 之间翻、B 在 -5/-5.5 之间翻，永远差 0.5px 所以永远写）。
-            //  用精确比较会永远判"动"→ 定时器永远不停（第一版就这样跑了 195+ tick）。
-            //  2px 以下算布局已停；真正的布局落定（主题挂载/曲库加载）是上百 px 的跳动，漏不掉。
-            var beforeProgress = ProgressRowGrid.Margin;
-            var beforeButtons = TransportMainButtonsPanel != null
-                ? TransportMainButtonsPanel.Margin
-                : default(Microsoft.UI.Xaml.Thickness);
-
-            // 2026-10-16 用户反馈「波形进度条下面那排按钮太靠右」：原来按钮组和进度条共用
-            // +96 的右移量，跟着进度条一起被推到右边去了。按钮组单独回落到播放栏正中（0）。
-            // 顺序很重要：先把按钮组摆正，再拿播放按钮当基准摆进度条。
-            CenterOnTransportAxis(TransportMainButtonsPanel, TransportButtonsShiftX, TransportProgressShiftY);
-
-            // 2026-10-16 用户新要求：进度条不以播放栏中轴为基准，而是**以播放按钮为中心**
-            // 左右对称 —— 播放按钮是整排控制的视觉重心，中轴会因为左侧封面+歌名宽度不同而漂。
-            CenterOnElement(ProgressRowGrid, PlayPauseButton, TransportProgressShiftY);
-            // 按钮组刚改过 Margin，布局可能还没消化完；排一帧再量一次（0.5px 阈值挡住抖动）。
-            try
-            {
-                DispatcherQueue.TryEnqueue(() =>
-                    CenterOnElement(ProgressRowGrid, PlayPauseButton, TransportProgressShiftY));
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.UpdateTransportProgressCentering", caught); }
-
-            bool progressMoved = MarginDrift(beforeProgress, ProgressRowGrid.Margin);
-            bool buttonsMoved = TransportMainButtonsPanel != null
-                && MarginDrift(beforeButtons, TransportMainButtonsPanel.Margin);
-            return progressMoved || buttonsMoved;
-        }
-
-        /// <summary>
         /// Margin 变化是否超过"布局还在动"的阈值（2px）。
         /// 2026-10-16 探针实测：启动补校存在 ±1px 自激极限环（补量帧与 0.5px 写入阈值
         /// 错位，P 在三个相邻整像素间翻、B 在相差 0.5px 的两个值间翻），
@@ -997,95 +945,8 @@ namespace CelesteMusicPlayer
         /// <summary>按钮组相对播放栏中轴的偏移量（px）：0 = 正好落在窗口左右中轴上。</summary>
         private const double TransportButtonsShiftX = 0;
 
-        /// <summary>
-        /// 把一个元素的中心对齐到参照元素的中心（都相对播放栏量）。
-        /// 用法：进度条以播放按钮为中心左右对称。
-        /// </summary>
-        private void CenterOnElement(FrameworkElement? element, FrameworkElement? anchor, double offsetY = 0)
-        {
-            if (element == null || anchor == null || BottomTransportBar == null)
-            {
-                return;
-            }
-
-            if (BottomTransportBar.ActualWidth <= 0 || element.ActualWidth <= 0 || anchor.ActualWidth <= 0)
-            {
-                return;
-            }
-
-            double anchorCenter = anchor.TransformToVisual(BottomTransportBar)
-                .TransformPoint(new Windows.Foundation.Point(anchor.ActualWidth / 2, 0)).X;
-            double centerNow = element.TransformToVisual(BottomTransportBar)
-                .TransformPoint(new Windows.Foundation.Point(element.ActualWidth / 2, 0)).X;
-            double centerWithoutMargin = centerNow - element.Margin.Left;
-            double newLeft = anchorCenter - centerWithoutMargin;
-
-            if (Math.Abs(newLeft - element.Margin.Left) < 0.5 && Math.Abs(offsetY - element.Margin.Top) < 0.5)
-            {
-                return;
-            }
-
-            element.Margin = new Microsoft.UI.Xaml.Thickness(newLeft, offsetY, 0, 0);
-        }
-
         /// <summary>进度条/按钮组相对垂直居中的下移量（px）：离播放栏上沿留出呼吸。</summary>
         private const double TransportProgressShiftY = 8;
-
-        /// <summary>
-        /// 把一个元素平移到「播放栏的正中 + 指定偏移」。
-        ///
-        /// 不手算左右各占了多宽（那套算错一次就偏，2026-10-14 试过）：直接量——
-        /// 先用 TransformToVisual 求出元素中心当前相对播放栏的坐标，减掉现 Margin 得到
-        /// "不做偏移时"的中心，再一次性算出让它落在目标中心所需的 Margin。
-        /// 与封面宽度、歌名长短、右侧按钮多少全都无关，量几次都不会累积误差。
-        /// </summary>
-        private void CenterOnTransportAxis(FrameworkElement? element, double offsetX = 0, double offsetY = 0)
-        {
-            if (element == null || BottomTransportBar == null)
-            {
-                return;
-            }
-
-            if (BottomTransportBar.ActualWidth <= 0 || element.ActualWidth <= 0)
-            {
-                return; // 还没布局完，等下一次 SizeChanged
-            }
-
-            GeneralTransform transform = element.TransformToVisual(BottomTransportBar);
-            double centerNow = transform.TransformPoint(
-                new Windows.Foundation.Point(element.ActualWidth / 2, 0)).X;
-            double centerWithoutMargin = centerNow - element.Margin.Left;
-            double wanted = BottomTransportBar.ActualWidth / 2 + offsetX;
-            double newLeft = wanted - centerWithoutMargin;
-
-            // 差不到 0.5px 就别动：避免改 Margin 又触发一轮布局，来回抖
-            if (Math.Abs(newLeft - element.Margin.Left) < 0.5 && Math.Abs(offsetY - element.Margin.Top) < 0.5)
-            {
-                return;
-            }
-
-            element.Margin = new Microsoft.UI.Xaml.Thickness(newLeft, offsetY, 0, 0);
-        }
-
-        private void ProgressRowGrid_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
-        {
-            UpdateTransportProgressCentering();
-        }
-
-        private void TransportMainButtonsPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
-        {
-            UpdateTransportProgressCentering();
-        }
-
-        private void TransportRightButtonsPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
-        {
-            UpdateTransportProgressCentering();
-        }
-
-        private void BottomTransportBar_SizeChanged(dynamic sender, dynamic e)
-        {
-            UpdateTransportProgressCentering();
-        }
 
         /// <summary>
         /// 启动期补校几次进度条位置（2026-10-16：修"刚启动没对齐、拖一下窗口才对齐"）。
@@ -1116,51 +977,8 @@ namespace CelesteMusicPlayer
         private int _startupCenteringStable;
         private int _startupCenteringTicks;
 
-        private void ScheduleStartupTransportCentering()
-        {
-            _startupCenteringTimer?.Stop();
-            _startupCenteringStable = 0;
-            _startupCenteringTicks = 0;
-            _startupCenteringTimer = DispatcherQueue.CreateTimer();
-            _startupCenteringTimer.Interval = TimeSpan.FromMilliseconds(150);
-            _startupCenteringTimer.Tick += (s, _) =>
-            {
-                _startupCenteringTicks++;
-                bool changed;
-                try
-                {
-                    changed = UpdateTransportProgressCentering();
-                }
-                catch (Exception caught)
-                {
-                    global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.StartupCenteringTick", caught);
-                    changed = false;
-                }
-
-                if (changed)
-                {
-                    // 布局还在动（超过 2px 的真移动）：重新计时，继续观察
-                    _startupCenteringStable = 0;
-                }
-                else
-                {
-                    _startupCenteringStable++;
-                }
-
-                // ⚠️ 兜底上限必须无条件检查：曾把这段写在 if(changed) 的 else 里，
-                // 布局一直动时永远走不到，定时器跑一辈子不停（2026-10-16 探针抓到 195+ tick）。
-                if (_startupCenteringStable >= 10 || _startupCenteringTicks >= 67)
-                {
-                    s.Stop();
-                    StartupLog.Write($"[播放栏] 启动补校结束 ticks={_startupCenteringTicks} stable={_startupCenteringStable}");
-                }
-            };
-            _startupCenteringTimer.Start();
-        }
-
         private void TransportInfoPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
         {
-            UpdateTransportProgressCentering();
         }
 
 

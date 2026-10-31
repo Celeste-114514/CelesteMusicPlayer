@@ -118,23 +118,6 @@ public sealed partial class MainWindow
                         RedrawProgressStyle();
                     }
 
-                    // 2026-10-16 用户反馈：「刚启动程序时进度条没对齐（还是靠右），手动调一下
-                    // 窗口大小就对齐了」。根因=**布局尚未落定就量了位置**：
-                    // CenterOnElement 用 TransformToVisual 量播放按钮的中心，而启动时
-                    // 「按钮组先居中 → 播放按钮位置才确定」是分两帧发生的，第一次量到的是
-                    // 按钮组还没摆正时的过渡值；之后没有事件再触发重算，于是就一直错着，
-                    // 直到用户拖窗口触发 SizeChanged 才补上。
-                    //
-                    // ⚠️ 第一版修法是挂 LayoutUpdated 每次布局都校 —— 结果**进度条和按钮持续
-                    // 快速抖动**（改 Margin → 触发新一轮布局 → 再校，来回颤），已废弃。
-                    // 现在的做法=只在**启动后**排几次延迟校正（200/400/600/800ms），
-                    // 覆盖布局落定的那几帧；运行期一律交给 SizeChanged，不再常驻校正。
-                    ScheduleStartupTransportCentering();
-
-                    if (PlayPauseButton != null)
-                    {
-                        PlayPauseButton.SizeChanged += BottomTransportBar_SizeChanged;
-                    }
 
                     // 设置窗口里改「波形配色 / 白度」时即时重画进度条，用户当场看到效果（不必切歌或重启）
                     AppSettingsStore.Changed -= OnSettingsChangedForProgressStyle;
