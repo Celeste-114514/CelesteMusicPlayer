@@ -285,3 +285,53 @@ Rebuild 0 错误；publish DLL 2,978,816 字节 / 269 文件；接口回归 fail
 
 每个都要连 20-70 个闭包成员一起搬，属于「一块功能一刀」。下一步建议先打 `MainWindow_Closed`
 （关闭序列，行为最独立、验证最容易：启停一次就知道有没有问题）。
+
+---
+
+# 批 31-33：鼠标侧键接上 + 三处死接线清理（26 → 18）
+
+## 批 31（`1c91545`）：鼠标侧键前进/后退 —— 用户点名要的功能
+
+新外壳原来没有侧键导航，本次在**网页层**补上（不是原生层，原生窗口是隐藏的，收不到事件）：
+
+- `shell.js` 新增 `backStack` / `fwdStack` 双栈：任何一次新导航清空前进栈。
+- `XButton1`（mouseup button 3）= 后退，`XButton2`（button 4）= 前进；
+  `mousedown` 里 `preventDefault`，防止 Chromium 把它当自己的历史导航。
+- **后退的优先级很重要**：只有「详情页」（面包屑 ≥3 级：主页/分类/条目）才走面包屑父级，
+  普通分类页走页面栈。第一版没加这个判断，结果在「专辑」页按后退永远跳回主页 ——
+  因为导航后面包屑已经是两级（主页/专辑），`at(-2)` 拿到的是「主页」。
+- `CelesteShell` 暴露 `goBack` / `goForward` / `getNavStacks`（后者给探针看栈）。
+
+**探针**：新建 `tools/W13SideButtonProbe.cjs`，合成 XButton 事件跑完整序列：
+专辑 → 后退→歌曲 → 后退→总览 → 前进→歌曲 → 前进→专辑，且新导航后前进栈清空。结果 `ok: true`。
+
+**原生侧清理**：`LibraryPaneRoot_PointerPressed` + `NavigateLibraryHistoryBack/Forward` 删除（-48 行）。
+
+## 批 32（`b164e94`）：从未接线的艺术家链接处理器
+
+`NowPlayingArtistLinkButton_Click` 从没被任何 `Click +=` 订阅过（LegacyControls 造的那个按钮
+只被设过 `IsEnabled`），纯死代码。删掉后 `OpenArtistDetail` 的最后一个借用消失。
+
+## 批 33（`1106830`）：两处原生菜单死接线
+
+`PlaylistView_RightTapped` 的右键菜单挂在 `CurrentPlaylistWindow.xaml` 上，而
+`CurrentPlaylistWindow.xaml.cs` 在 csproj 的 Compile Remove 块里 —— 这个窗口运行时根本不存在，
+所以菜单永远弹不出来。据此移除两处接线（**功能本身保留**，只是不再从死入口进）。
+
+## 验证
+
+Rebuild 0 错误；publish 正常 / 269 文件；接口回归 failures+jsErrors 空、exitCode 0；
+侧键探针 `ok:true`；实播 `ok=true`、pos 8.1。出货已同步。
+
+## 剩余 18 错 / 8 个成员（逐个定性）
+
+| 成员 | 性质 | 新外壳有替代吗 |
+|---|---|---|
+| `ApplySettingsLive`（闭包 74） | 网页设置改动后回写宿主 | **有**（网页设置自己应用外观），但宿主侧「音量/输出/歌词」等仍需应用 |
+| `RestartLibraryWatchFromSettings`（32） | 改曲库文件夹后重启监听 | 无，**必须保留** |
+| `RestoreLastLibraryAsync`（34） | 启动恢复上次曲库 | 无，**必须保留** |
+| `MainWindow_FirstActivated`（40） | 首窗口激活（标题栏扩展/DPI） | 无，**必须保留** |
+| `MainWindow_Closed`（32） | 关闭序列（存进度/销毁引擎/退托盘） | 无，**必须保留** |
+| `ToggleFavoriteForCurrent`（23） | 全局热键「收藏当前曲」 | 无（网页没有全局热键），**必须保留** |
+| `InitializeMusicPlayer2Features`（23） | 播放器初始化后的功能挂接 | 部分（网页接管 UI），**需逐个看** |
+| `OnTagsSaved`（25） | 网页改完标签回宿主刷内存 | **有**（网页自己刷），宿主只需通知，可瘦身 |
