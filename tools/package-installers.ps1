@@ -129,28 +129,28 @@ function Assert-PublishHealthy {
 
     if (-not (Test-Path -LiteralPath $Dir)) { return }
 
+    # ⚠ 2026-11-01 更新：W13 之后项目不再使用 XAML，publish 产物里**没有** .pri 资源索引了
+    # （旧的"pri 必须 ≥900KB"判据会误杀每一个正常包）。现在的体检改成：
+    #   ① 主程序、依赖清单、网页资源三样必须在；
+    #   ② 自包含版必须真的带运行时（coreclr.dll），框架依赖版必须不带 —— 这才是不装坏包的关键。
     $exe = Join-Path $Dir 'CelesteMusicPlayer.exe'
-    $pri = Join-Path $Dir 'CelesteMusicPlayer.pri'
-    if (-not (Test-Path -LiteralPath $exe)) { throw "$Variant 产物缺少 $exe" }
-    if (-not (Test-Path -LiteralPath $pri)) { throw "$Variant 产物缺少 $pri（资源索引）" }
+    $deps = Join-Path $Dir 'CelesteMusicPlayer.deps.json'
+    $web = Join-Path $Dir 'WebShell\index.html'
+    foreach ($must in @($exe, $deps, $web)) {
+        if (-not (Test-Path -LiteralPath $must)) { throw "$Variant 产物缺少 $must" }
+    }
 
-    $priLen = (Get-Item -LiteralPath $pri).Length
-    if ($priLen -lt 900KB) {
-        throw "$Variant 的 .pri 只有 $([math]::Round($priLen / 1KB))KB（正常约 1.6MB），XAML 资源缺失。" +
-              "多半是 publish 漏了 -p:WindowsPackageType=None。拒绝打包。"
+    $coreclr = Test-Path -LiteralPath (Join-Path $Dir 'coreclr.dll')
+    if ($ExpectSelfContained -and -not $coreclr) {
+        throw "$Variant 是自包含版，但产物里没有 coreclr.dll —— 多半漏了 -p:CelesteSelfContainedDistribute=true。拒绝打包。"
+    }
+    if (-not $ExpectSelfContained -and $coreclr) {
+        throw "$Variant 是框架依赖版，但产物里带了 coreclr.dll（应该是自包含版编错了）。拒绝打包。"
     }
 
     $exeLen = (Get-Item -LiteralPath $exe).Length
-    if ($ExpectSelfContained -and $exeLen -lt 250KB) {
-        throw "$Variant 的 CelesteMusicPlayer.exe 只有 $([math]::Round($exeLen / 1KB))KB（自包含应约 296KB），" +
-              "疑似编成了依赖运行时版（漏 -p:CelesteSelfContainedDistribute=true）。拒绝打包。"
-    }
-    if (-not $ExpectSelfContained -and $exeLen -gt 250KB) {
-        throw "$Variant 的 CelesteMusicPlayer.exe 有 $([math]::Round($exeLen / 1KB))KB（框架依赖版应约 173KB），" +
-              "疑似编成了自包含版。拒绝打包。"
-    }
-
-    Write-Host "  [体检] $Variant 正常：exe $([math]::Round($exeLen / 1KB))KB，pri $([math]::Round($priLen / 1KB))KB"
+    $webCount = (Get-ChildItem -LiteralPath (Join-Path $Dir 'WebShell') -File | Measure-Object).Count
+    Write-Host "  [体检] $Variant 正常：exe $([math]::Round($exeLen / 1KB))KB，网页资源 $webCount 个，运行时=$(if ($coreclr) { '自带' } else { '依赖本机' })"
 }
 
 if (-not $SkipFrameworkDep) { Assert-PublishHealthy $publishFd '框架依赖版(fd)' $false }

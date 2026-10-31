@@ -741,11 +741,16 @@ LGPL-3.0 代码可按 §3 升级为 GPL-3.0 后随本作品一同传播）。
 | `native/echo-core/audio-engine/third_party/nlohmann_json.hpp` | MIT | 与 GPL/AGPL 兼容。 |
 | [NAudio](https://github.com/naudio/NAudio) 2.2.1 | MIT | 音频采集/重采样。 |
 | [TagLibSharp](https://github.com/mono/taglib-sharp) 2.3.0 | **LGPL-2.1-only** | 读写音频文件标签。⚠ 本程序以动态链接方式引用该库，库本体及其许可保持不变；见下方「已知许可兼容性说明」。 |
-| [H.NotifyIcon.WinUI](https://github.com/HavenDV/H.NotifyIcon) 2.3.0 | MIT | 系统托盘图标。 |
 | [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore) 10.0.11 | MIT | 曲库 SQLite 访问。 |
 | [ToolGood.Words.Pinyin](https://github.com/toolgood/ToolGood.Words) 3.1.0 | MIT | 中文拼音索引。 |
-| Microsoft.WindowsAppSDK / WinUI 1.8 | 微软软件许可条款 | 应用框架。 |
-| `System.Drawing.Common` 9.0.1、`System.Security.Cryptography.ProtectedData` 8.0.0 | MIT | .NET 基础库。 |
+| [SkiaSharp](https://github.com/mono/SkiaSharp) 3.119.4（+ `SkiaSharp.NativeAssets.Win32`） | MIT | 封面解码 / 缩放 / JPEG 编码（`CoverThumbnailer`）。 |
+| [Microsoft.Web.WebView2](https://learn.microsoft.com/microsoft-edge/webview2/) 1.0.3179.45 | 微软软件许可条款 | 界面宿主（网页壳）。运行时使用系统已安装的 Evergreen 运行时。 |
+| `outputs/webview2-shell/rhine-renderer.js` | **MIT**（© 2026 LBEILC，RhineLabUI） | 播放页 3D 唱片机渲染器，许可原文随包分发于 `outputs/webview2-shell/RHINE-NOTICE.txt`。 |
+| `System.Drawing.Common` 10.0.11、`System.Security.Cryptography.ProtectedData` 8.0.0 | MIT | .NET 基础库。 |
+
+> 2026-11-01 据实更新：原表里的 `H.NotifyIcon.WinUI` 与 `Microsoft.WindowsAppSDK / WinUI 1.8`
+> 已随界面重构全部移除 —— 托盘改用 Win32 `Shell_NotifyIconW`，界面改用 WebView2，
+> 程序运行时不加载任何 WinUI / Windows App SDK 组件，故不再列入依赖。
 
 ### 已知许可兼容性说明
 

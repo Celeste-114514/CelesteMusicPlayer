@@ -4,7 +4,14 @@
 
 > 本仓库日常验证入口与目录说明：[先看这里](先看这里-仓库与验证入口.md)。验证最新修改，请用仓库根目录的「打开当前播放器」快捷方式。
 
-一个基于 **WinUI 3 / .NET 10** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
+一个 **.NET 10 + WebView2** 的本地 HiFi 音乐播放器。
+
+界面是自己画的网页（HTML / CSS / JS），直接跑在原生窗口里的 WebView2 上；C# 只负责音频内核、
+系统集成（托盘 / 任务栏 / 桌面歌词 / 文件关联 / 全局热键）与数据层。**已完全移除 WinUI 3 与
+Windows App SDK 依赖** —— 运行时不加载任何 WinUI 组件，也不再需要安装 Windows App SDK 运行时。
+
+功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发；
+重构过程中参考的其它开源项目见文末「参考项目与致谢」。代码全部由 AI 生成。
 
 联系我 [t.me/celesteabsolomb](https://t.me/celesteabsolomb)
 
@@ -37,43 +44,85 @@
 
 ## 🖥️ 截图
 
-<img width="2082" height="1191" alt="QQ20261002-023624" src="https://github.com/user-attachments/assets/1b4bbecc-170d-402f-bd21-5cca83924aa2" />
-<img width="1386" height="793" alt="QQ20260917-165955" src="https://github.com/user-attachments/assets/79b428d0-a790-4e1c-82ad-cc9beeb23390" />
-<img width="1386" height="793" alt="QQ20260917-170248" src="https://github.com/user-attachments/assets/edf73c43-240e-4340-afcd-49b8990a40d1" />
-<img width="2082" height="1191" alt="QQ20261001-205353" src="https://github.com/user-attachments/assets/1b2a2f46-669b-46bc-9f49-61c7ca9b85d0" />
-<img width="2560" height="1528" alt="QQ20261002-023642" src="https://github.com/user-attachments/assets/ef0ae764-a904-4103-95c1-a672e7b02554" />
+<!-- 新版界面截图待补：图片直接拖到这里上传即可，建议按「主页 / 播放页 / DSP / 标签 / 桌面歌词」各来一张 -->
+
+（新版界面截图整理中。）
 
 
 
 
 ## 🛠️ 技术栈
 
-- WinUI 3（Microsoft.WindowsAppSDK 1.8）
-- .NET 10 / C#
-- [TagLibSharp](https://github.com/mono/taglib-sharp) 标签读取
-- [H.NotifyIcon](https://github.com/HavenDV/H.NotifyIcon) 系统托盘
-- FFmpeg（内置）
+- **界面**：WebView2 + 自绘网页（HTML / CSS / JS，源码在 `outputs/webview2-shell/`），
+  宿主是裸 Win32 窗口（WinForms 承载），不使用 XAML
+- **运行时**：.NET 10 / C#（win-x64）
+- **音频**：NAudio（WASAPI 共享 / 独占）、ASIO 喂料器、自研 C++ 内核 `celeste_core.dll`、
+  DSP 运算核 `celeste_dsp_core.dll`；可切换 ECHO 内核 `celeste_audio_core.dll`
+- **图像 / 标签 / 数据**：SkiaSharp（封面缩放）、TagLibSharp（标签读写）、
+  Microsoft.Data.Sqlite（曲库）、ToolGood.Words.Pinyin（拼音索引）
+- **系统集成**：Win32 通知区图标（`Shell_NotifyIconW`）、任务栏缩略图按钮 + DWM、
+  系统媒体控制（SMTC）、全局热键
+- **外部工具**：FFmpeg（内置，转码 / 波形）
 
 ## 🔨 构建与发布
 
-需要：.NET 10 SDK + Visual Studio 2026（含 WinUI 工作负载）
+需要：.NET 10 SDK（不再需要 WinUI 工作负载）。打安装包另外需要 NSIS 3。
 
 ```bash
 # 开发运行
 dotnet build -c Debug
 
-# 发布框架依赖（默认，体积小；目标机器需安装 .NET 10 运行时与 Windows App SDK，未装时程序启动会弹窗引导下载）
-dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -o publish
+# 框架依赖版（体积小；目标机器需装 .NET 10 桌面运行时，缺了程序启动会弹窗引导下载）
+dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 \
+  -p:Platform=x64 -p:WindowsPackageType=None -o dist/publish-fd
 
-# 发布自包含（免安装，含 .NET 10 运行时与 Windows App SDK，体积更大）
-dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true -o publish
+# 自包含版（把 .NET 运行时一起带上，体积大，免装运行时）
+dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 \
+  -p:Platform=x64 -p:WindowsPackageType=None -p:CelesteSelfContainedDistribute=true -o dist/publish-sc
 ```
 
-默认发布产物为**框架依赖**（体积小）；目标机器缺运行环境时程序启动会**弹窗提示并提供官方下载链接**。如需免安装自包含包，用上面的 `CelesteSelfContainedDistribute=true` 命令。
+两个安装包（框架依赖 + 自包含）连同 `SHA256SUMS.txt` 一次打完，用仓库里的打包脚本
+`tools/package-installers.ps1`（版本号取自 `CelesteMusicPlayer.csproj` 的 `<Version>`，
+也可用 `-Version` 覆盖）。
 
 正式版本由 CI 自动发布：推送 `vX.Y.Z` tag 后，自动完成构建、回归测试、打包（框架依赖 + 自包含双安装包）并发布到 GitHub Release，无需手动打包上传。
 
 ## 📝 更新日志
+
+### v26.11.1（2026-11-01）
+
+本次是**架构级重构**：界面从原生 XAML 整体换成网页壳，WinUI 3 / Windows App SDK 依赖彻底移除。
+
+- 🏗️ 架构
+  - 界面全部由自绘网页渲染（WebView2 + 裸 Win32 宿主），原生侧只保留音频内核、系统集成与数据层
+  - **移除 WinUI 3 与 Windows App SDK**：安装包不再需要 Windows App SDK 运行时，自包含包从 95MB 降到 75MB
+  - 旧界面残留的"假控件层"清零：业务代码里的控件引用 2,048 处 → 0，累计删除约 2.3 万行死代码
+  - 播放 / 曲库 / 设置 / DSP 全部收敛到服务边界：界面只发命令、取快照，不再直接操作控件
+- ✨ 改进
+  - 🖼️ **封面不再糊**：缓存三档改为 240 / 480 / 1024 px，并按屏幕缩放（DPI）取档；以往 150% / 200% 缩放下列表与队列封面一律拿到 160px 小图被放大
+  - 🪟 **桌面歌词重做**：透明合成宿主 + 网页渲染，位置记忆、锁定 / 鼠标穿透、横竖排、字体文件、样式包导入导出
+  - 🔔 **托盘换 Win32**：去掉 H.NotifyIcon，改用系统通知区图标 + 网页自绘菜单（跟随系统深浅色）
+  - 🎛️ **音频链路面板**：每段显示实际生效参数（采样率 / 位深 / 声道 / 是否转码），全关时明确显示 bit-perfect
+  - ⏯️ 任务栏缩略图四按钮（上一首 / 播放暂停 / 下一首 / 收藏）+ 可选任务栏播放条（默认关闭）
+- 🐛 修复（清一色"看着有、其实没生效"的老问题）
+  - 错误提示框从来没弹出来过（在等一个已不存在的界面根节点，等满就放弃）
+  - 歌词保存询问恒判「不保存」
+  - 简单模式下拖 EQ 滑杆，拿到的永远是禁用状态的曲线
+  - DSP 页的 SRC 源描述恒为空串
+  - 相对快进 / 快退从 0 起算，而不是从当前位置
+  - 任务栏进度条把假上限当总时长（进度显示不对）
+  - 窗口拖边改大小只做了宿主一半，网页侧那半从未接上
+- 🧹 删除（旧界面的东西；功能留待网页重做，见下）
+  - 「界面风格」（经典浅色 / 深色 / 跟随系统 / 图景）与亚克力毛玻璃开关
+  - 关闭窗口时的「缩到托盘 / 退出 / 每次询问」策略
+  - 滚轮调节音量、空格暂停、左右方向键快进退 —— 这三项将在网页界面重新提供
+- 📦 发布说明
+  - `CelesteMusicPlayer-Setup-26.11.1.exe`（框架依赖，需 .NET 10 桌面运行时，37.9MB）
+  - `CelesteMusicPlayer-Setup-SC-26.11.1.exe`（自包含，不依赖本机 .NET，75.4MB）
+  - `SHA256SUMS.txt` 随附，应用内更新据此校验
+  - 可直接覆盖安装，设置与曲库保留
+
+---
 
 ### v26.10.20（2026-10-20）
 - ✨ 新增功能
@@ -436,12 +485,15 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📦 安装包
 
-使用 [NSIS](https://nsis.sourceforge.io/) 将发布目录打包为 `setup.exe`（见 `installer/CelesteMusicPlayer.nsi`）。安装为**用户级**安装到 `%LOCALAPPDATA%\Programs\CelesteMusicPlayer`，无需管理员权限，自动创建开始菜单 / 桌面快捷方式与卸载入口。
+使用 [NSIS](https://nsis.sourceforge.io/) 将发布目录打包为 `setup.exe`（见 `installer/CelesteMusicPlayer.nsi`，
+版本号与目录由 `tools/package-installers.ps1` 传入）。安装为**用户级**安装到
+`%LOCALAPPDATA%\Programs\CelesteMusicPlayer`，无需管理员权限，自动创建开始菜单 / 桌面快捷方式与卸载入口。
 
-```bash
-# 发布自包含（win-x64）后
-makensis.exe installer\CelesteMusicPlayer.nsi
-```
+- `CelesteMusicPlayer-Setup-<版本>.exe` —— 框架依赖版（需 .NET 10 桌面运行时）
+- `CelesteMusicPlayer-Setup-SC-<版本>.exe` —— 自包含版（不依赖本机 .NET）
+- `SHA256SUMS.txt` —— 两个安装包的 SHA-256，应用内更新下载后据此校验
+
+两个包内容一致，可直接覆盖安装，设置与曲库保留。
 
 ## 📄 许可证
 
@@ -452,9 +504,36 @@ makensis.exe installer\CelesteMusicPlayer.nsi
 第三方组件（`native/echo-core/` 的 LGPL-3.0 内核、TagLibSharp 的 LGPL-2.1 等）
 各自保留原有许可，详见 [LICENSE](LICENSE) 中的「第三方组件」小节。
 
-## 🙏 致谢
+## 🙏 参考项目与致谢
 
-- [FFmpeg](https://ffmpeg.org/)（gyan.dev 构建）
-- [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2)（功能参考）
-- [ECHO-NEXT](https://github.com/moekotori/ECHO)（功能参考）
+> 本项目在 2026 年 10 月做过一次大重构（原生 XAML → 网页界面）。设计思路、协议形状与若干算法
+> 参考了下面这些项目；代码均为自己重写，但该说的来源一条不落。
+
+### 设计与功能参考
+
+- [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) —— 功能与交互参考（播放列表、标签编辑、DSD 处理思路等）
+- [ECHO-NEXT](https://github.com/moekotori/ECHO) —— 功能与架构参考：封面分档缓存（CoverCacheManager）、
+  音频链路面板、任务栏播放条、样式包 manifest 的协议设计、独占输出内核的 C ABI 外形
+- [RHINE / RhineLabUI](https://github.com/LBEILC)（MIT，© 2026 LBEILC）—— 播放页 3D 唱片机渲染器
+  （`outputs/webview2-shell/rhine-renderer.js`），许可原文见 `outputs/webview2-shell/RHINE-NOTICE.txt`
+
+### 派生代码（与许可强相关）
+
+- **ECHO 派生的 DSP 内核**：`native/dsp-core/audio-engine/` 主体衍生自 ECHO 的 AGPL-3.0 版本，
+  这是本项目整体采用 AGPL-3.0 的原因，详见 [LICENSE](LICENSE) 的「ECHO 派生代码」章节
+- **ECHO 派生的独占输出内核**：`native/echo-core/`（LGPL-3.0，动态链接、可整体替换，
+  源码随仓库，见 `native/echo-core/README-LGPL.md`）
+
+### 第三方组件
+
+- [FFmpeg](https://ffmpeg.org/)（gyan.dev 构建，转码 / 波形）
+- [NAudio](https://github.com/naudio/NAudio)（MIT，WASAPI 采集与重采样）
+- [TagLibSharp](https://github.com/mono/taglib-sharp)（LGPL-2.1，标签读写）
+- [SkiaSharp](https://github.com/mono/SkiaSharp)（MIT，封面缩放与编码）
+- [Microsoft.Web.WebView2](https://learn.microsoft.com/microsoft-edge/webview2/)（界面宿主）
+- [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore)（MIT，曲库）
+- [ToolGood.Words.Pinyin](https://github.com/toolgood/ToolGood.Words)（MIT，拼音索引）
+- [NSIS](https://nsis.sourceforge.io/)（安装包）
+
+完整的第三方清单与许可条款见 [LICENSE](LICENSE) 的「第三方组件」章节。
 
