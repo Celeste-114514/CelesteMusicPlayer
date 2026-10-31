@@ -158,3 +158,14 @@ case "UserPlaylist" RenumberCollection 重写队列序号。
 - **LoadAndAddFiles（6 处）**：文件加载入口，尾部与 ApplySort/RenumberCollection 咬合；活路径已不调 ApplyCategoryView，搬家阻力减小。
 - 列表视觉族逐个甄别：ScheduleFitColumns(6)/RefreshFolderBrowserSelectionChrome(6)/SetListSelectionMode(6)。
 - DSP 域（~150 处）成为账面最大块：ApplyFirParameters(8) 榜首。
+
+### 第十四刀（2026-10-31）：导航域收尾——LoadAndAddFiles 整体离壳
+壳里旧注记「搬走会引入壳依赖」已过时：逐个核对，依赖（GetPlayer/CreatePlaylistItemFromPath/
+ClearNowPlayingPanel/StopEngineIfActive/RenumberCollection/ApplySort 及三个顶层工具类）现全在活文件。
+133 行**原样搬 MainWindow.Playback.cs**，尾部 4 处 ApplyCategoryView 按第十三刀口径改调活版
+ApplyCategoryViewData，壳内调用点自动跟随。**428 → 422 错 / 167 → 166 成员，残余 0**。
+四道验证全过（CDP 首连两次瞬断，重试全绿，疑似发布后首启扫库超时窗口，非代码问题）。
+出货已同步；回退件 `pre-w13-loadfiles-20261031`。明细见 `RESULT-2026-10-31-w13-loadfiles-cut.md`。
+导航域三大件（ApplyCategoryView/CommitLibraryNavigation/LoadAndAddFiles）全部下榜；
+导航域剩余只剩列表视觉族（ScheduleFitColumns/RefreshFolderBrowserSelectionChrome/SetListSelectionMode 各 6）。
+下一仗：DSP 域（~150 处，榜首 ApplyFirParameters 8）。
