@@ -713,7 +713,7 @@ namespace CelesteMusicPlayer
                 startupCategory = "UserPlaylist";
             }
             _currentCategory = startupCategory;
-            ApplyCategoryView();
+            ApplyCategoryViewData();
             _navCurrent = CaptureLibraryNavState();
 
             LibraryPaneRoot.AddHandler(

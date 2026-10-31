@@ -30,6 +30,37 @@ namespace CelesteMusicPlayer
                && a.AlbumFromArtist == b.AlbumFromArtist
                && a.UsesAlbumArtist == b.UsesAlbumArtist;
 
+        /// <summary>
+        /// 切换分类视图时对「活数据」的等价副作用（2026-10-31 第十三刀，自壳 ApplyCategoryView 分离）。
+        /// 旧版 ApplyCategoryView（壳 Misc.cs，290 行）九成是给旧界面占位控件摆面板（网页看不到）；
+        /// 真正影响网页/播放行为的只有两处，本方法逐行保留：
+        /// - case "Songs"：强制重置为「标题升序」并 ApplySort —— _playlist 的顺序 = 网页曲库显示顺序
+        ///   （LibraryTracks => _playlist，2026-10-31 第七刀查实），同时经 SyncIndicesAfterSort 保住 _currentIndex；
+        /// - case "UserPlaylist"：RenumberCollection 重写队列序号（播放列表保持添加顺序，不排序）。
+        /// 其余分支（Albums/Artists/Genres/收藏/评分/文件夹等）只刷旧控件与旧集合（_albums/_artists 等无网页读者），
+        /// 对网页世界不可观察，活路径不再执行。壳内调用点继续走旧版 ApplyCategoryView，随壳退场。
+        /// </summary>
+        private void ApplyCategoryViewData()
+        {
+            switch (_currentCategory)
+            {
+                case "Songs":
+                {
+                    string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                        ? _playlist[_currentIndex].FilePath
+                        : null;
+                    _sortField = SortField.Title;
+                    _sortAscending = true;
+                    ApplySort(playingPath);
+                    break;
+                }
+
+                case "UserPlaylist":
+                    RenumberCollection(_queue.Items);
+                    break;
+            }
+        }
+
         /// <summary>执行会改变中间界面的导航，并写入后退栈（清空前进栈）。</summary>
         private void CommitLibraryNavigation(Action navigate)
         {

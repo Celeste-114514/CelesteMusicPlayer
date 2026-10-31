@@ -1264,7 +1264,7 @@ namespace CelesteMusicPlayer
             CommitLibraryNavigation(() =>
             {
                 _currentCategory = "UserPlaylist";
-                ApplyCategoryView();
+                ApplyCategoryViewData();
             });
             ApplySwitchPlaylistPausePreference();
         }
@@ -1291,7 +1291,7 @@ namespace CelesteMusicPlayer
                 _queue.Index = -1;
                 if (PlaylistView.ItemsSource == _queue.Items || PlaylistView.ItemsSource != null)
                 {
-                    ApplyCategoryView();
+                    ApplyCategoryViewData();
                 }
 
                 StopEngineIfActive();
@@ -1879,7 +1879,7 @@ namespace CelesteMusicPlayer
             CommitLibraryNavigation(() =>
             {
                 _currentCategory = "UserPlaylist";
-                ApplyCategoryView();
+                ApplyCategoryViewData();
             });
         }
 

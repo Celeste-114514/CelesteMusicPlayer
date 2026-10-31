@@ -95,7 +95,7 @@ namespace CelesteMusicPlayer
                 if (!loc.IsConfigured && string.Equals(_currentCategory, WebDavCategory, StringComparison.Ordinal))
                 {
                     _currentCategory = "Songs";
-                    ApplyCategoryView();
+                    ApplyCategoryViewData();
                     return;
                 }
 

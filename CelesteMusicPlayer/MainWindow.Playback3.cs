@@ -622,7 +622,7 @@ namespace CelesteMusicPlayer
             UpdateFavoriteButtonUi();
             if (string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal))
             {
-                ApplyCategoryView();
+                ApplyCategoryViewData();
             }
 
             if (NowPlayingText != null)
@@ -2080,7 +2080,7 @@ namespace CelesteMusicPlayer
 
             // 从播放面板跳转：先切到「艺术家」分类并真正显示其视图根，再打开详情，保证左侧分类与右侧面板同步
             _currentCategory = "Artists";
-            ApplyCategoryView();
+            ApplyCategoryViewData();
             DispatcherQueue.TryEnqueue(() => OpenArtistDetail(entry!));
         }
 
@@ -2109,7 +2109,7 @@ namespace CelesteMusicPlayer
 
             // 从播放面板跳转：先切到「专辑」分类并真正显示视图根，再打开详情，左侧分类与右侧面板同步
             _currentCategory = "Albums";
-            ApplyCategoryView();
+            ApplyCategoryViewData();
             DispatcherQueue.TryEnqueue(() => OpenAlbumDetail(entry!, fromArtist: false));
         }
 

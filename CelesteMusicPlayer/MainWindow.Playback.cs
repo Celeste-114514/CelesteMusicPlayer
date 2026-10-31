@@ -1130,7 +1130,7 @@ namespace CelesteMusicPlayer
             CommitLibraryNavigation(() =>
             {
                 _currentCategory = "PlaylistWall";
-                ApplyCategoryView();
+                ApplyCategoryViewData();
             });
         }
 
@@ -1206,7 +1206,7 @@ namespace CelesteMusicPlayer
             CommitLibraryNavigation(() =>
             {
                 _currentCategory = "UserPlaylist";
-                ApplyCategoryView();
+                ApplyCategoryViewData();
             });
             ApplySwitchPlaylistPausePreference();
         }
@@ -1308,7 +1308,7 @@ namespace CelesteMusicPlayer
             PlaylistDetailCountText.Text = _playlistDetailItems.Count + " 首";
             PlaylistDetailListView.ItemsSource = _playlistDetailItems;
             _ = LoadPlaylistDetailCoverAsync(_playlistDetailItems.FirstOrDefault()?.FilePath, name);
-            ApplyCategoryView();
+            ApplyCategoryViewData();
         }
 
 
@@ -1469,7 +1469,7 @@ namespace CelesteMusicPlayer
         private void PlaylistDetailBackButton_Click(object sender, RoutedEventArgs e)
         {
             _currentPlaylistDetail = null;
-            ApplyCategoryView();
+            ApplyCategoryViewData();
             ApplyPlaylistWallCategory();
         }
 
@@ -1976,7 +1976,7 @@ namespace CelesteMusicPlayer
             CommitLibraryNavigation(() =>
             {
                 _currentCategory = _currentCategory == "Genres" ? "GenreSongs" : "YearSongs";
-                ApplyCategoryView();
+                ApplyCategoryViewData();
             });
         }
 
