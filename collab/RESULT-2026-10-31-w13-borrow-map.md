@@ -112,3 +112,19 @@ Utilities 只保留真正该搬的 GeekUiStyleCached 字段+属性。**教训：
 - 托盘动作尾巴：`ToggleFavoriteForCurrent`/`ToggleMainWindowVisibility`/`RestoreLastLibraryAsync`
 - 房间校正面板：`LoadRoomCorrectionIntoPanel`(4)/`_roomIrLoaded`(4) —— 归 DSP 域一起
 - 设置实时应用族：`ApplySettingsLive` 大 switch —— 独立刀
+
+### 第十一刀（提交 `30e0d42`，2026-10-31）：小件清完
+搬（12 件）：IdleLevel/EnumerateRealizedListViewItems/ResolveRowHoverBrush → Utilities；
+SyncHeaderColumnsFromState+SetColumnWidthIfChanged、ScheduleFitColumns+_fitColumnsTimer+FitColumnsTimer_Tick、
+HideHoverTip、DisableContainerSelectionCheckMark、CreateMultiSelectFrostBrush → Playback；
+SetListSelectionMode+AttachRangeMultiSelect → Playback2（多选域）；
+ToggleMainWindowVisibility+_geekAsciiButtons/GeekButtonBackup → AppFlow。
+删调用点（纯占位视觉，5 处）：DrawWaveformStyle(1)/ScrollLyricToCenter(3)/RetargetStoryboard(1)。
+跳过（连锅）：ApplyGeekRowDetailChrome→GeekBrowse、ToggleFavoriteForCurrent→ApplyCategoryView（导航刀）、
+RestoreLastLibraryAsync→Library.cs。
+**492 → 456 错 / 181 → 170 成员**。四道验证全过。回退件 `pre-w13-smallitems-20261031`。
+
+### ⚠ 第十一刀过程坑：脚本 bytes 字面量含中文 = SyntaxError 静默丢块
+python heredoc 里 `b'...中文...'` 直接 SyntaxError——若删除源已执行而插入目标未执行，**代码块就丢了**。
+本轮 GeekShell 丢过一次（git checkout 秒回）。修复：搬家脚本一律全程 str + UTF-8，杜绝 bytes 中文。
+另：`&&` 链上脚本失败会静默跳过后续（上一轮教训），本轮已两次靠探针残账兜底。
