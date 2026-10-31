@@ -85,8 +85,6 @@ namespace CelesteMusicPlayer
         /// <summary>「选择文件夹」选定的根目录；文件夹分类只展示其内容</summary>
         private string? _browseFolderPath;
 
-        private ArtistEntry? _avatarContextArtist;
-        private PlaylistItem? _contextMenuSong;
         private bool _isMultiSelectMode;
         private bool _isEnginePaused;
         private bool _usingEnginePlayback;
@@ -131,12 +129,6 @@ namespace CelesteMusicPlayer
         private long _lastSmtcTimelineMs; // SMTC timeline 限频（约 500ms 一次）
         private long _lastSmtcTimelineLogMs; // SMTC timeline 诊断日志限频（约 3s 一次）
         /// <summary>SMTC 专用宿主 MediaPlayer：挂静音循环源激活播放会话，独立于主播放器，避免污染主播放的事件/UI。</summary>
-        private Style? _playlistItemDefaultStyle;
-        private Style? _artistTrackItemDefaultStyle;
-        private Style? _albumTrackItemDefaultStyle;
-        private Style? _artistAlbumItemDefaultStyle;
-        private Style? _libraryAlbumItemDefaultStyle;
-        private Style? _folderItemDefaultStyle;
         /// <summary>多选当前作用的歌曲列表（歌曲库 / 艺术家详情 / 专辑详情曲目）</summary>
         private ListView? _multiSelectTargetList;
         /// <summary>多选当前作用的专辑网格（音乐库专辑 / 艺术家详情专辑）</summary>
@@ -144,7 +136,6 @@ namespace CelesteMusicPlayer
         /// <summary>多选当前作用的文件夹浏览列表</summary>
         private ListView? _multiSelectFolderList;
         /// <summary>批量改选中时跳过 SelectionChanged 里的昂贵 UI 刷新</summary>
-        private bool _suppressSelectionUiUpdates;
         private Brush? _cachedMultiSelectFrostBrush;
 
         private int _currentIndex = -1;

@@ -784,9 +784,6 @@ namespace CelesteMusicPlayer
         /// ② 兜底上限必须无条件检查：曾把 Stop 写在 if(changed) 的 else 里，
         ///    changed 恒真时永远走不到，定时器跑一辈子。
         /// </summary>
-        private DispatcherQueueTimer? _startupCenteringTimer;
-        private int _startupCenteringStable;
-        private int _startupCenteringTicks;
 
 
 
@@ -1190,11 +1187,16 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 按播放位置算出"当前唱到第几句"，写进 <see cref="_currentLyricIndex"/>。
+        /// 网页歌词区与桌面歌词都通过 LyricsBridge 读这个下标，所以这一步必须保留；
+        /// 旧界面那份逐行改字号/改色的排版在垫片控件上不可见，已随 XAML 一起删掉。
+        /// </summary>
         private void SyncLyricsToPosition(TimeSpan position, bool force = false, bool applyOffset = true)
         {
             TimeSpan adj = applyOffset ? OffsetLyricPosition(position) : position;
 
-            if (_lyricLines.Count == 0 || _lyricTextBlocks.Count == 0)
+            if (_lyricLines.Count == 0)
             {
                 return;
             }
@@ -1204,7 +1206,7 @@ namespace CelesteMusicPlayer
             {
                 if (_lyricLines[i].Time <= adj)
                 {
-                    // 跳过翻译行：高亮停在原文行（翻译行紧跟原文、同一时刻，若不清跳会让主题色落到译文上）
+                    // 跳过翻译行：高亮停在原文行（翻译行紧跟原文、同一时刻）
                     if (!_lyricLines[i].IsTranslation)
                     {
                         index = i;
@@ -1216,99 +1218,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            if (!force && index == _currentLyricIndex)
-            {
-                // 当前行未变：保持整行主题色，不把 Run 染成灰白
-                if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
-                {
-                    Color? curGeek = GeekLyricAccentColor();
-                    Brush curAccent = curGeek is Color curGeekColor
-                        ? new SolidColorBrush(curGeekColor)
-                        : ResolveAccentBrush();
-                    TextBlock row = _lyricTextBlocks[_currentLyricIndex];
-                    row.Foreground = curAccent;
-                    row.Opacity = 1.0;
-                    if (curAccent is SolidColorBrush scbCur2)
-                    {
-                        ResetRowRunColors(row, scbCur2.Color);
-                    }
-                }
-
-                return;
-            }
-
             _currentLyricIndex = index;
-            if (force)
-            {
-                StartupLog.Write("歌词强制重渲染 index=" + index + " 行数=" + _lyricTextBlocks.Count);
-            }
-
-            // 方案A：当前句主题色强调 + 相邻句微亮（纯属性调整，不改行结构、不用 Inlines）
-            // 极客模式三层全换磷光色（画刷 alpha 分层，Opacity 不动）；经典模式保持原灰阶
-            // 字号/字体跟随「主歌词」设置（四档：当前=设置值，邻-4、远-5；翻译行建时-7）
-            (double sizeCur, double sizeNear, double sizeFar, _) = MainLyricFontSizes();
-            FontFamily? lyricFontSync = MainLyricFontFamily();
-            Color? geekLyric = GeekLyricAccentColor();
-            Brush accent = geekLyric is Color geekAccent
-                ? new SolidColorBrush(geekAccent)
-                : ResolveAccentBrush();
-            for (int i = 0; i < _lyricTextBlocks.Count; i++)
-            {
-                TextBlock row = _lyricTextBlocks[i];
-                // 同 BuildLyricsUi：未选字体（跟随系统）时不碰 FontFamily，赋 null 会抛异常
-                if (lyricFontSync != null)
-                {
-                    row.FontFamily = lyricFontSync;
-                }
-                int dist = Math.Abs(i - index);
-                if (dist == 0)
-                {
-                    row.FontSize = sizeCur;
-                    row.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
-                    row.Foreground = accent;
-                    row.Opacity = 1.0;
-                    // 当前行整行保持主题色（不把 Run 染成灰白，避免播放中被掩盖成灰色）
-                    if (accent is SolidColorBrush scbCur)
-                    {
-                        ResetRowRunColors(row, scbCur.Color);
-                    }
-                    else
-                    {
-                        ResetRowRunColors(row, Color.FromArgb(255, 255, 255, 255));
-                    }
-                }
-                else if (dist == 1)
-                {
-                    row.FontSize = sizeNear;
-                    row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
-                    row.Foreground = geekLyric is Color geekNear
-                        ? PhosphorShade(geekNear, 0xB3)
-                        : new SolidColorBrush(Color.FromArgb(255, 205, 205, 205));
-                    row.Opacity = 0.85;
-                    ResetRowRunColors(row, geekLyric is Color geekNearRun
-                        ? Color.FromArgb(0xB3, geekNearRun.R, geekNearRun.G, geekNearRun.B)
-                        : Color.FromArgb(255, 205, 205, 205));
-                }
-                else
-                {
-                    row.FontSize = sizeFar;
-                    row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
-                    row.Foreground = geekLyric is Color geekFar
-                        ? PhosphorShade(geekFar, 0x8C)
-                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
-                    row.Opacity = 0.55;
-                    ResetRowRunColors(row, geekLyric is Color geekFarRun
-                        ? Color.FromArgb(0x8C, geekFarRun.R, geekFarRun.G, geekFarRun.B)
-                        : Color.FromArgb(255, 154, 154, 154));
-                }
-
-            }
-
-            // 用户手动滚动中：仅更新颜色高亮，不强制视口吸附（避免抢走用户正在看的滚动位置）
-            if (!_userScrollingLyrics)
-            {
-                ScrollLyricToCenter(_lyricTextBlocks[index]);
-            }
         }
 
 
@@ -1324,100 +1234,6 @@ namespace CelesteMusicPlayer
 
 
 
-        /// <summary>
-        /// 把播放跳到某一句歌词的时刻。
-        /// playAfter=false（点进度条的语义）：跳过去后暂停，方便反复定位；
-        /// playAfter=true（歌词行里的播放按钮）：跳过去后继续播，即"从这句开始听"。
-        /// </summary>
-        private void SeekToLyricLine(TimeSpan target, bool playAfter = false)
-        {
-            // 跳到目标时间（引擎 seek；若 MediaPlayer 播放也用其 seek）
-            bool handled = false;
-            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
-            {
-                // 歌词时刻是"原歌曲时间"，换算回 WAV 时间再 seek
-                _audioEngine.Seek(TimeSpan.FromSeconds(target.TotalSeconds / TempoScale()));
-                handled = true;
-            }
-
-            MediaPlayer? player = GetPlayer();
-            if (player != null && player.Source != null && !handled)
-            {
-                try { player.PlaybackSession.Position = target; handled = true; }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            }
-
-            if (!handled)
-            {
-                // 启动就绪态：还没开播（引擎没建、MediaPlayer 没源），没有可 seek 的会话。
-                // 这时点歌词不能没反应 —— 记下目标位置直接起播，等于"从这句开始听"。
-                StartPlaybackFromPendingPosition(target.TotalSeconds, pauseAfter: false);
-                return;
-            }
-
-            if (_audioEngine != null)
-            {
-                if (playAfter)
-                {
-                    // 从这句开始听：暂停中的话先恢复，本来就播着的保持不动
-                    if (_isEnginePaused)
-                    {
-                        _audioEngine.Resume();
-                        _isEnginePaused = false;
-                    }
-
-                    UpdateWaveformTimerForPlaybackState(true);
-                    MediaSession.SetStatus(MediaPlaybackStatus.Playing);
-
-
-                    _taskbarButtons?.UpdatePlayPause(true);
-                }
-                else if (_audioEngine.IsPlaying)
-                {
-                    // 与点进度条一致：seek 后暂停，方便定位（用户再按播放继续）
-                    _audioEngine.Pause();
-                    _isEnginePaused = true;
-                    UpdateWaveformTimerForPlaybackState(false);
-                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
-
-
-                    _taskbarButtons?.UpdatePlayPause(false);
-                }
-
-            }
-            else if (player != null && player.Source != null)
-            {
-                // 非引擎（普通 MediaPlayer）路径
-                if (playAfter)
-                {
-                    if (player.PlaybackSession.PlaybackState != MediaPlaybackState.Playing)
-                    {
-                        player.Play();
-                    }
-
-                    MediaSession.SetStatus(MediaPlaybackStatus.Playing);
-                    _taskbarButtons?.UpdatePlayPause(true);
-                }
-                else if (player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-                {
-                    player.Pause();
-                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
-                    _taskbarButtons?.UpdatePlayPause(false);
-                }
-            }
-
-            // 重挂下一首（seek 丢弃无缝源里的 next）
-            _ = Session.PreloadNextAsync();
-
-            // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
-            global::CelesteMusicPlayer.StartupLog.Write(
-                $"[歌词] 双击跳转 target={target.TotalSeconds:F2}s → 强制同步(force=true, applyOffset=false)");
-            SyncLyricsToPosition(target, force: true, applyOffset: false);
-            // 单击选中：无视用户滚动状态，把该行滚到中间
-            if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
-            {
-            }
-        }
 
 
         private void WaveformTimer_Tick(dynamic sender, dynamic e)

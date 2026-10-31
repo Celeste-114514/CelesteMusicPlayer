@@ -16,7 +16,6 @@ namespace CelesteMusicPlayer;
 /// <summary>W13 第三十四刀（2026-10-31）：导航外观：分类图标配色/字形、导航选中动画、胶囊排序按钮、边框取色。</summary>
 public sealed partial class MainWindow
 {
-        private string? _lastAnimatedNavTag;
 
         private static Microsoft.UI.Xaml.Controls.FontIcon? FindFirstFontIcon(DependencyObject? root)
         {

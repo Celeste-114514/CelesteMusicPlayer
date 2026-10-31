@@ -51,138 +51,23 @@ namespace CelesteMusicPlayer
 
 
 
+        /// <summary>
+        /// 记录当前曲目的歌词。真正的消费者只有两个：桌面歌词窗口，以及网页歌词区通过
+        /// LyricsBridge 读的「当前第几句」。旧界面那套逐行 TextBlock + 白框选中 + 自动吸附
+        /// 滚动全部作用在垫片控件上，看不见也点不到，已随 XAML 一起删掉。
+        /// </summary>
         private void BuildLyricsUi(List<LyricLine> lyrics)
         {
             _lyricLines = lyrics;
             _currentLyricIndex = -1;
-            _lyricTextBlocks.Clear();
-            _lyricRows.Clear();
-            _lyricRowFrames.Clear();
-            _selectedLyricRow = -1;
             // 所有调用点都带"当前曲目"守卫（Playback3 换曲 / Features 下载歌词），
             // 所以这份歌词就是对应当前曲子的——记下来，网页歌词区靠它防张冠李戴。
             _lyricsLoadedPath = _nowPlayingPath ?? "";
-            LyricsPanel.Children.Clear();
 
             if (lyrics.Count == 0)
             {
-                // 无歌词：右侧歌词区固定显示简短说明
                 ClearLyricsUi("该音频没有歌词");
                 return;
-            }
-
-
-            AppSettingsState uiSettings = AppSettingsStore.Load();
-            TextAlignment align = uiSettings.LyricAlign switch
-            {
-                "Left" => TextAlignment.Left,
-                "Right" => TextAlignment.Right,
-                _ => TextAlignment.Center
-            };
-
-            foreach (LyricLine line in lyrics)
-            {
-                // 极客模式：连"还没唱到的远处行"也是暗磷光而不是灰（建完 SyncLyricsToPosition 会立刻重染）
-                Color? geekLyricInit = GeekLyricAccentColor();
-                (double sizeCurrent, double sizeNear, double sizeFar, double sizeTrans) = MainLyricFontSizes();
-                FontFamily? lyricFont = MainLyricFontFamily();
-                var tb = new TextBlock
-                {
-                    TextAlignment = align,
-                    TextWrapping = TextWrapping.WrapWholeWords,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    FontSize = sizeFar,
-                    Foreground = geekLyricInit is Color geekFar
-                        ? PhosphorShade(geekFar, 0x8C)
-                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
-                    Opacity = 0.55,
-                    Tag = line
-                };
-                // ⚠️ 字体只在真的选了字体时才赋值：FontFamily 属性不接受 null ——
-                // WinRT 会把 null 变成字符串 "Unknown"，XAML 解析不过就抛
-                // COMException(0x800F1001)，建行循环在第一句当场中断，
-                // 表现就是「播放页一句歌词都没有」（主歌词字体=跟随系统时必中）。
-                if (lyricFont != null)
-                {
-                    tb.FontFamily = lyricFont;
-                }
-                if (line.IsTranslation)
-                {
-                    // 翻译行：小号、更淡，且不作为主题色高亮的目标
-                    tb.FontSize = sizeTrans;
-                    tb.Opacity = 0.40;
-                }
-                else
-                {
-                    tb.Foreground = geekLyricInit is Color geekPlain
-                        ? PhosphorShade(geekPlain, 0x8C)
-                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
-                }
-                if (line.CharTimes != null && line.CharTimes.Count == line.Text.Length)
-                {
-                    // 逐字歌词：每字一个 Run，便于按字高亮
-                    tb.Text = null;
-                    var unplayedBrush = geekLyricInit is Color geekUnplayedInit
-                        ? PhosphorShade(geekUnplayedInit, 0x8C)
-                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
-                    foreach (char c in line.Text)
-                    {
-                        tb.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
-                        {
-                            Text = c.ToString(),
-                            Foreground = unplayedBrush
-                        });
-                    }
-                }
-                else
-                {
-                    tb.Text = line.Text;
-                }
-
-                // 歌词区宽约=面板宽/2-左右留边；给每条歌词设最大宽使其在右半区换行(不依赖 layout 时序)
-                double lyricMax = NowPlayingPane != null && NowPlayingPane.ActualWidth > 0
-                    ? Math.Max(200, NowPlayingPane.ActualWidth / 2.0 - 76)
-                    : 520;
-                tb.MaxWidth = lyricMax;
-
-                // ---- 行容器 ----
-                // 外层 Grid：整行可点（Stretch 铺满，透明画刷保证参与命中测试）。
-                // 内层 Border：选中时的圆角白框，只裹住这句歌词本身（居中、紧贴文字宽度），
-                // 不会像"整行色条"那样在宽屏下拉成一条。它一直存在（平时透明），
-                // 所以选中/取消选中时行高完全不变 —— 歌词不会上下跳。
-                var row = new Grid
-                {
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    // 必须给透明画刷而不是 null：Background=null 的 Grid 不参与命中测试，
-                    // 点在这一行的空白处不会触发选中（点击会漏到下面的界面）。
-                    Background = new SolidColorBrush(Colors.Transparent)
-                };
-
-                var frame = new Border
-                {
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    CornerRadius = new CornerRadius(8),
-                    Padding = new Thickness(14, 4, 14, 4),
-                    Background = new SolidColorBrush(Colors.Transparent),
-                    Child = tb
-                };
-                row.Children.Add(frame);
-
-                int rowIndex = _lyricRows.Count;
-                // 单击 = 选中（只是加个白框，不动播放），约 3 秒后自动取消、回到正在播的那句
-                row.Tapped += (_, _) => SelectLyricRow(rowIndex);
-                if (!line.IsTranslation)
-                {
-                    // 双击 = 从这句开始播放（界面上不再摆按钮，双击是唯一入口）
-                    TimeSpan target = line.Time;
-                    row.DoubleTapped += (_, _) => PlayFromLyricLine(target);
-                }
-
-                _lyricTextBlocks.Add(tb);
-                _lyricRows.Add(row);
-                _lyricRowFrames.Add(frame);
-                LyricsPanel.Children.Add(row);
             }
 
             SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
@@ -190,36 +75,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 主歌词四档字号：当前行=设置值，邻行-4、远处行-5、翻译行-7。
-        /// 早期写死 19/15/14/12，现由「主歌词字号」设置驱动。
-        /// </summary>
-        private static (double Current, double Near, double Far, double Translation) MainLyricFontSizes()
-        {
-            double baseSize = Math.Clamp(AppSettingsStore.Load().MainLyricFontSize, 12, 48);
-            return (baseSize, baseSize - 4, baseSize - 5, baseSize - 7);
-        }
-
-        /// <summary>主歌词字体；未设置=null（跟随系统默认）。</summary>
-        private static FontFamily? MainLyricFontFamily()
-        {
-            string? name = AppSettingsStore.Load().MainLyricFontFamily;
-            return string.IsNullOrWhiteSpace(name) ? null : new FontFamily(name);
-        }
-
-
         private void ClearLyricsUi(string hint)
         {
             _lyricLines = new List<LyricLine>();
             _currentLyricIndex = -1;
-            _lyricTextBlocks.Clear();
-            _lyricRows.Clear();
-            _lyricRowFrames.Clear();
-            _selectedLyricRow = -1;
-            LyricsPanel.Children.Clear();
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
         }
-
 
         // ---- 歌词手动滚动 + 单击跳进度 ----
 
@@ -231,119 +92,17 @@ namespace CelesteMusicPlayer
 
         // ---- 歌词行选中（经典式：选中 → 右侧时间 + 左侧播放按钮）----
 
-        /// <summary>选中某一行：给它套上圆角白框，并把上一行的白框撤掉。</summary>
-        private void SelectLyricRow(int index)
-        {
-            ClearLyricRowSelection();
-            if (index < 0 || index >= _lyricRows.Count)
-            {
-                return;
-            }
-
-            _selectedLyricRow = index;
-            if (index < _lyricRowFrames.Count)
-            {
-                // 一层很淡的白：深色/浅色背景上都看得出来，但不抢歌词本身
-                _lyricRowFrames[index].Background = new SolidColorBrush(Color.FromArgb(38, 255, 255, 255));
-            }
-
-            // 复用"用户手动滚动"那套计时：3 秒内暂停自动吸附（歌词不自己跑），
-            // 到点后 Tick 里会取消选中并把当前播放句重新滚回中间 —— 即"恢复成正在播放的状态"。
-            MarkUserScrollingLyrics();
-        }
-
-
-        /// <summary>撤掉当前选中行的白框。</summary>
-        private void ClearLyricRowSelection()
-        {
-            if (_selectedLyricRow >= 0 && _selectedLyricRow < _lyricRowFrames.Count)
-            {
-                // 透明画刷而不是 null：null 会让这一行不再参与命中测试，点不中。
-                _lyricRowFrames[_selectedLyricRow].Background = new SolidColorBrush(Colors.Transparent);
-            }
-
-            _selectedLyricRow = -1;
-        }
 
 
 
 
-        /// <summary>点行内播放按钮：跳到这句并继续播放（与"点进度条/单击行"不同，后者是跳过去暂停）。</summary>
-        private void PlayFromLyricLine(TimeSpan target)
-        {
-            ClearLyricRowSelection();
-            SeekToLyricLine(target, playAfter: true);
-        }
 
 
 
 
-        /// <summary>标记用户正在手动滚动，并在停止 3 秒后恢复自动吸附 + 隐藏滚动条。</summary>
-        private void MarkUserScrollingLyrics()
-        {
-            if (LyricsPanel.Children.Count == 0)
-            {
-                return;
-            }
-
-            _userScrollingLyrics = true;
-            // 滚动条永远 Hidden：能滚，但一根都不显示（用户明确要求）。
-            // 必须是 Hidden 而不是 Disabled —— Disabled 会连滚动本身一起禁掉。
-            if (_lyricScrollResumeTimer == null)
-            {
-                _lyricScrollResumeTimer = DispatcherQueue.CreateTimer();
-                _lyricScrollResumeTimer.Interval = TimeSpan.FromMilliseconds(3000);
-                _lyricScrollResumeTimer.Tick += (_, _) =>
-                {
-                    _lyricScrollResumeTimer!.Stop();
-                    _userScrollingLyrics = false;
-                    // 恢复成"正在播放"的样子：白框撤掉、高亮回到当前句
-                    ClearLyricRowSelection();
-                    // 恢复吸附：把当前高亮行滚回中间（即"回到原进度"）
-                    if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
-                    {
-                        ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
-                    }
-                };
-            }
-
-            _lyricScrollResumeTimer.Stop();
-            _lyricScrollResumeTimer.Start();
-        }
 
 
-        private void ScrollLyricToCenter(FrameworkElement line)
-        {
-            LyricsScrollViewer.UpdateLayout();
-            line.UpdateLayout();
 
-            double viewport = LyricsScrollViewer.ViewportHeight;
-            if (viewport <= 0)
-            {
-                return;
-            }
 
-            GeneralTransform transform = line.TransformToVisual(LyricsPanel);
-            Windows.Foundation.Point topLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
-            double lineCenter = topLeft.Y + line.ActualHeight / 2;
-            double target = lineCenter - viewport / 2;
-            target = Math.Max(0, Math.Min(target, LyricsScrollViewer.ScrollableHeight));
-
-            _lyricScrollFrom = LyricsScrollViewer.VerticalOffset;
-            _lyricScrollTo = target;
-            if (Math.Abs(_lyricScrollTo - _lyricScrollFrom) < 0.5)
-            {
-                return;
-            }
-
-            _lyricScrollStartMs = Environment.TickCount64;
-            if (_lyricScrollTimer == null)
-            {
-                _lyricScrollTimer = DispatcherQueue.CreateTimer();
-                _lyricScrollTimer.Interval = TimeSpan.FromMilliseconds(8);
-            }
-
-            _lyricScrollTimer.Start();
-        }
     }
 }

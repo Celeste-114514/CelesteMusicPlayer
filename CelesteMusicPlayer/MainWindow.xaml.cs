@@ -449,7 +449,6 @@ namespace CelesteMusicPlayer
         // 读写播放顺序一律走 _orderResolver.Order，随机索引走 _orderResolver.NextRandomIndex。
         private readonly PlaybackOrderResolver _orderResolver = new();
         private string _librarySearchText = string.Empty;
-        private DispatcherQueueTimer? _librarySearchDebounceTimer;
         private readonly List<string> _folderSearchMatches = new();
         private int _folderSearchIndex = -1;
         private string? _folderSearchHighlightPath;
@@ -468,7 +467,6 @@ namespace CelesteMusicPlayer
         /// SeekToSliderValue() → 同一次拖动 seek 两遍，还会触发两次「下一首无缝预加载」（转码 + 重整缓冲），
         /// 表现就是「顿一下、响两声才恢复正常」。这里按手势去重，一次拖动只 seek 一次。
         /// </summary>
-        private bool _seekGestureConsumed;
 
         // ---------- 排序状态 ----------
         private SortField _sortField = SortField.Title;
@@ -507,10 +505,6 @@ namespace CelesteMusicPlayer
 
         // ---------- 列表列分割线拖动 ----------
         private bool _isDraggingColumnSplitter;
-        private string? _columnSplitPair;
-        private double _columnSplitStartX;
-        private double _columnLeftStartWidth;
-        private double _columnRightStartWidth;
 
         // ---------- 单元格悬停详情 ----------
         private DispatcherQueueTimer? _hoverTipTimer;
@@ -539,10 +533,7 @@ namespace CelesteMusicPlayer
         private readonly List<Border> _lyricRowFrames = new();
         private int _selectedLyricRow = -1;
         // 歌词手动滚动协调
-        private bool _userScrollingLyrics;
-        private DispatcherQueueTimer? _lyricScrollResumeTimer;
         private string? _nowPlayingPath;
-        private bool _nowPlayingPaneOpen;
         // 当前播放曲目的 ReplayGain 元数据（SetReplayGain 时缓存，供 UI 显示/面板重应用）
         private (double TrackGainDb, double AlbumGainDb, double Peak)? _currentRgData;
 
@@ -555,10 +546,6 @@ namespace CelesteMusicPlayer
         private readonly System.Threading.SemaphoreSlim _coverLoadGate = new(4);
 
         // 歌词平滑滚动
-        private DispatcherQueueTimer? _lyricScrollTimer;
-        private double _lyricScrollFrom;
-        private double _lyricScrollTo;
-        private long _lyricScrollStartMs;
         private const int LyricScrollDurationMs = 480;
 
         [DllImport("user32.dll")]

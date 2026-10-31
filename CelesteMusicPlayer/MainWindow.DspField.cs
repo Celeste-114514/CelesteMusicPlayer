@@ -30,9 +30,7 @@ namespace CelesteMusicPlayer
         /// （写 dsp-rack.json + 下发内核），拖一次要写几百次盘。拖动期间由本标志压住，
         /// 松手（PointerReleased）时统一补一次下发。
         /// </summary>
-        private bool _dspFieldSuppressPush;
 
-        private bool _dspFieldDragging;
 
         /// <summary>拖动杆的垂直分量能影响的中间/两侧偏向范围（dB）。刻意留±6，避免拖一把就极端。</summary>
         private const double FieldDragTiltDb = 6.0;

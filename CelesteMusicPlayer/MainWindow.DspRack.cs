@@ -60,8 +60,6 @@ namespace CelesteMusicPlayer
         // 在此之前任何 handler 都不准回写——否则 XAML 默认值会在存档读取前覆盖用户设置
 
         // 压缩器 GR 轮询（仅压缩器页可见时跑）
-        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dspCompGrTimer;
-        private bool _dspCompGrOn;
 
         // ─────────────────────────────────────────────────────────────
         // 下发：UI → store → 内核

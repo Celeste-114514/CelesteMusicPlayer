@@ -20,7 +20,6 @@ namespace CelesteMusicPlayer
         /// <summary>抽屉宽度（px）。与 XAML 里 AudioChainPanelHost.Width、两个 Storyboard 的 From/To 必须一致。</summary>
         private const double AudioChainPanelWidth = 420;
 
-        private bool _audioChainCloseHooked;
 
         /// <summary>
         /// 收起动画 Completed 的订阅去重：早期版本每次收起都 += 一个新 handler，
@@ -105,7 +104,6 @@ namespace CelesteMusicPlayer
             try
             {
                 AudioSignalPath.RecordEvent(kind, text);
-                RefreshAudioChainPanelIfOpen();
             }
             catch (Exception caught)
             {
@@ -176,7 +174,6 @@ namespace CelesteMusicPlayer
             try
             {
                 AudioSignalPath.RecordEventDedup(key, "dsp", text);
-                RefreshAudioChainPanelIfOpen();
             }
             catch (Exception caught)
             {
@@ -184,25 +181,5 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>
-        /// 外部（切歌 / 切设备 / 切输出模式 / 变速 / DSP 开关）可以主动喊一声刷新。
-        /// 面板关着就什么都不做；开着也不必重抓——节拍定时器马上就会刷。
-        /// </summary>
-        internal void RefreshAudioChainPanelIfOpen()
-        {
-            if (AudioChainOverlayHost == null || AudioChainOverlayHost.Visibility != Visibility.Visible)
-            {
-                return;
-            }
-
-            try
-            {
-                AudioChainPanel?.Refresh(AudioSignalPath.Capture(_audioEngine, DspRackGlobalBypassed));
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.RefreshAudioChainPanelIfOpen", caught);
-            }
-        }
     }
 }

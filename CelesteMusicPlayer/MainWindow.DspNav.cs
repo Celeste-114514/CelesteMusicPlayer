@@ -60,7 +60,6 @@ namespace CelesteMusicPlayer
         }
 
         private int _dspPageIndex = -1;
-        private DispatcherQueueTimer? _dspMonitorTimer;
 
 
         /// <summary>导航项运行时态：标题 / 所属组 / 右侧页面 / 徽章控件。</summary>
@@ -78,7 +77,6 @@ namespace CelesteMusicPlayer
         }
 
         private readonly List<DspNavEntry> _dspNavEntries = new();
-        private bool _dspNavBuilt;
 
         /// <summary>首次进入音效页面时构建导航、定位到第一个模块，并刷新各模块启用指示。</summary>
         private void InitDspNav()

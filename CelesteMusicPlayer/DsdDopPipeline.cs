@@ -464,9 +464,6 @@ namespace CelesteMusicPlayer
         private readonly long[] _stallFrame = new long[StallCap];
         private readonly long[] _stallAvail = new long[StallCap];
         private readonly long[] _stallWaitUs = new long[StallCap];
-        private int _stallIdx;
-        private int _stallTotal;
-        private long _lastStallFlushTicks;
 
         /// <summary>诊断：读到整曲末尾补"合法静音"帧累计。</summary>
         public long PrefillFrames { get; private set; }

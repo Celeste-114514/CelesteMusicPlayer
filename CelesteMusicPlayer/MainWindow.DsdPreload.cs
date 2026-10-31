@@ -17,8 +17,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private readonly List<string> _albumDetailDsdFiles = new();
-        private CancellationTokenSource? _dsdPreloadCts;
-        private bool _dsdPreloadRunning;
 
 
 

@@ -27,7 +27,6 @@ namespace CelesteMusicPlayer
     {
         /// <summary>预览曲线当前画的是哪条（收藏 / 重画要用）。</summary>
         private OpraProductEqSummary? _opraPreviewEq;
-        private OpraSearchResult? _opraPreviewProduct;
 
         /// <summary>来源筛选：null=全部，"community"=只看社区测量，"opra"=只看 OPRA 库。</summary>
         private string? _opraSourceFilter;

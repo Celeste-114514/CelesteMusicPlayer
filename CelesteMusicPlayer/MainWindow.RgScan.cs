@@ -18,8 +18,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private readonly ReplayGainScanner _rgScanScanner = new();
-        private CancellationTokenSource? _rgScanCts;
-        private bool _rgScanRunning;
 
 
 

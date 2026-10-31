@@ -38,9 +38,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>拖动截止竖线期间置 true：一次拖动会触发几百次 ValueChanged → ApplyDspToEngine
         /// （写档 + 下发），没必要每帧做，松手时统一补一次。</summary>
-        private bool _dspXfeedSuppressPush;
 
-        private bool _dspXfeedDragging;
 
         // ─────────────────────────────────────────────────────────────
         // 事件入口

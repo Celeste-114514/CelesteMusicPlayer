@@ -13,12 +13,8 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private CancellationTokenSource? _opraCts;
-        private bool _opraDbLoadStarted;
         private List<OpraSearchResult> _opraResults = new();
-        private OpraSearchResult? _opraSelectedProduct;
         private List<OpraProductEqSummary> _opraEqs = new();
-        private OpraProductEqSummary? _opraSelectedEq;
 
 
 
