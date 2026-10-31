@@ -2558,58 +2558,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>异步加载当前歌曲波形(供波形进度条)，完成后重绘。</summary>
-        private async void LoadWaveformForCurrentAsync(string path, double startSeconds = 0, double lengthSeconds = 0)
-        {
-            try
-            {
-
-            _waveformPath = path;
-
-            // CUE 分轨：没显式带区间时按当前播放条目补（同一文件的多轨要各自的波形）
-            if (startSeconds <= 0 && _queue.Index >= 0 && _queue.Index < _queue.Items.Count
-                && string.Equals(_queue.Items[_queue.Index].FilePath, path, StringComparison.OrdinalIgnoreCase))
-            {
-                startSeconds = _queue.Items[_queue.Index].StartTimeSeconds;
-                lengthSeconds = startSeconds > 0 ? _queue.Items[_queue.Index].Duration.TotalSeconds : 0;
-            }
-
-            // 守卫键带区间：同文件切轨时路径相同，靠起点区分
-            string rangeKey = startSeconds > 0
-                ? path + "#t=" + startSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
-                : path;
-            _waveformRangeKey = rangeKey;
-
-            // 错峰（2026-09-21）：起播那一瞬间会同时跑两个满负荷的 ffmpeg —— 一个整轨转码、
-            // 一个整轨解波形。两个一起抢 CPU，独占渲染线程就饿着 → 每首歌开头最容易顿。
-            // 波形不是立刻要看的东西，让转码先跑 900ms 再开工。
-            await System.Threading.Tasks.Task.Delay(900);
-            if (!string.Equals(_waveformRangeKey, rangeKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return; // 已切歌/切轨
-            }
-
-            // 桶数 = 波形柱子根数。2026-10-16 用户反馈「每根竖线太细」：
-            // 180 根摊在 720px 上每根只有约 2.6px（还要再扣柱间缝），看着就是一撮细丝。
-            // 降到 120 根后每根约 4.8px，是 Poweramp 那种能看清起伏的柱状波形。
-            // ⚠️ 改这个值会让已缓存的波形全部重算一次（缓存按桶数校验），属预期。
-            float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 120, startSeconds, lengthSeconds);
-            if (!string.Equals(_waveformRangeKey, rangeKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return; // 已切歌/切轨
-            }
-
-            _waveformData = wave;
-            StartupLog.Write("波形回调: " + (wave?.Length > 0 ? "有数据" : "空") + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
-            if (_waveformProgress)
-            {
-                RedrawProgressStyle();
-            }
-        
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }}
-
-
         /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
         private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)
         {

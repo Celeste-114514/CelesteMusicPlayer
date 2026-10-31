@@ -85,6 +85,25 @@ def main():
         ranges.append((s, e))
         print(f"  找到 {pattern!r}: 行 {s + 1}..{e + 1}（{e - s + 1} 行）")
 
+    # ⚠ 顺序很重要（2026-10-31 踩过）：先准备好目标内容并写目标，最后才动源文件。
+    # 反过来一旦目标侧失败，源文件已经被删了方法，内容直接丢失。
+    nl_t = b"\r\n" if b"\r\n" in dst_raw[-4000:] else b"\n"
+    tail_marker = nl_t + b"    }" + nl_t + b"}" + nl_t
+    if not dst_raw.endswith(tail_marker):
+        raise SystemExit("目标文件尾部不是预期的 `    }\\n}\\n`，先确认结构")
+    body = dst_raw[: -len(tail_marker)]
+    body = body.replace(b"\r\n", nl_t)
+    chunk = b""
+    if a.note:
+        chunk += nl_t
+        for ln in a.note.split("\n"):
+            chunk += ("        // " + ln if ln.strip() else "        //").encode("utf-8") + nl_t
+    for blk in blocks:
+        chunk += nl_t
+        chunk += nl_t.join(blk) + nl_t
+    open(a.dst, "wb").write(body + chunk + b"    }" + nl_t + b"}" + nl_t)
+    print(f"已写入 {a.dst}（换行 {'CRLF' if nl_t == b'\\r\\n' else 'LF'}），开始删源文件")
+
     # 从后往前删，避免行号漂移
     for s, e in sorted(ranges, reverse=True):
         # 连同方法后面的两个空行一起删（保持段落间距不变）
@@ -96,21 +115,6 @@ def main():
         del src[s:tail]
 
     open(a.src, "wb").write(b"\r\n".join(src))
-
-    # 插到目标文件最后一个 class 闭合之前
-    tail_marker = b"\r\n    }\r\n}\r\n"
-    if not dst_raw.endswith(tail_marker):
-        raise SystemExit("目标文件尾部不是预期的 `    }\n}\n`，先确认结构")
-    body = dst_raw[: -len(tail_marker)]
-    chunk = b""
-    if a.note:
-        chunk += b"\r\n"
-        for ln in a.note.split("\n"):
-            chunk += ("        // " + ln if ln.strip() else "        //").encode("utf-8") + b"\r\n"
-    for blk in blocks:
-        chunk += b"\r\n"
-        chunk += b"\r\n".join(blk) + b"\r\n"
-    open(a.dst, "wb").write(body + chunk + b"    }\r\n}\r\n")
     print(f"已搬 {len(blocks)} 个方法 -> {a.dst}")
 
 

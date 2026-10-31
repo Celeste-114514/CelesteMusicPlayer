@@ -32,5 +32,10 @@ public sealed partial class MainWindow
         if (operation == "opraPreview")
             return new { eqId=id, title=correction.VendorName+" "+correction.ProductName, author=correction.Author, details=correction.Details, preampDb=correction.Curve.PreampDb, count=correction.ImportedBandCount, warnings=correction.Warnings, favorite=OpraHistoryStore.IsFavorite(id), bands=correction.Curve.Bands.Select(b=>new { freq=b.FrequencyHz,gain=b.GainDb,q=b.Q,type=b.FilterType.ToString(),enabled=b.Enabled }) };
         throw new ArgumentException("不支持的耳机校正操作。");
+
     }
+
+    // 歌剧墙服务实例（2026-10-31 从 MainWindow.Opra.cs 搬来）：唯一的用户是 WebOpra 网页命令。
+    private readonly OpraService _opra = new();
+
 }

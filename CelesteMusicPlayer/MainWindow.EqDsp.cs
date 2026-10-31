@@ -98,7 +98,6 @@ namespace CelesteMusicPlayer
         private int _audioFxEqSelected = -1;
         private bool _audioFxEqDragging;
         private bool _audioFxEqBuilt;
-        private bool _audioFxLoading;
         // 外部曲线（耳机校正 opra-* / Equalizer APO 导入等）在预设下拉里的动态展示项：
         // 按需创建、挂在「管理（删除）我的预设…」之前，选中它纯展示、不切预设
         // （守卫见 AudioFxEqPreset_SelectionChanged 顶部）。

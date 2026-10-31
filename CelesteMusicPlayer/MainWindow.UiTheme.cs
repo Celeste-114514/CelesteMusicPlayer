@@ -2334,15 +2334,6 @@ namespace CelesteMusicPlayer
         /// <summary>最近一次当前播放曲目的封面大图（迷你播放器整窗背景同步用，读大图不是播放栏缩略图）。</summary>
         private ImageSource? _lastCoverImage;
 
-        /// <summary>
-        /// 最近一次当前播放曲目的封面**缩略图**（Thumb 160 档，与播放栏同一张）。
-        /// 迷你播放器 72×72 小封面用这张 —— 不能拿 <see cref="_lastCoverImage"/>（Large 768）硬缩：
-        /// 768→72 十倍缩小，WinUI bilinear 出来必糊（用户 10-19 报「迷你播放器的专辑封面
-        /// 缩略图也糊」，和之前「播放栏糊」同一个病根：没用对应显示尺寸的分档）。
-        /// 由 UpdateTransportCoverAsync 取到 Thumb 档后一并写这里，两边共用一张图、零额外解码。
-        /// </summary>
-        private ImageSource? _lastCoverThumbImage;
-
         /// <summary>自定义背景图的请求序号：连续换图时丢弃过期结果，避免旧图盖掉新图。</summary>
         private int _customBackgroundRequest;
 

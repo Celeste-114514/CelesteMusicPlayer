@@ -25,8 +25,6 @@ namespace CelesteMusicPlayer
     {
         private readonly List<DspPowerEntry> _dspPowerEntries = new();
         private bool _dspPowerReady;
-        private bool _dspPowerSyncing;
-
         // 各「开关关掉再打开」要恢复的上次值（0/关闭 = 电源断开，记忆的是断开前的档位）
         // ReplayGain / SRC 不在其中：它们的「断开前档位」由各自的参数模型自己持有。
         private double _dspHeadroomMemory { get => ExtraParameters.HeadroomMemory; set => ExtraParameters.HeadroomMemory = value; }
