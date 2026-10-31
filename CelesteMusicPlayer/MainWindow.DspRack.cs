@@ -68,7 +68,7 @@ namespace CelesteMusicPlayer
         /// <summary>收集三模块的当前参数并下发。<see cref="LoadDspRackUi"/> 期间不得调用。</summary>
         private void PushDspRackToEngine()
         {
-            if (!_dspRackReady || _dspRackLoading || DspCompToggle == null)
+            if (!_dspRackReady || _dspRackLoading)
             {
                 return;
             }
@@ -88,41 +88,12 @@ namespace CelesteMusicPlayer
         }
 
         // ─────────────────────────────────────────────────────────────
-        // 读数刷新（每个控件旁的数值文字）
-        // ─────────────────────────────────────────────────────────────
-
-        private void RefreshDspCompReadouts()
-        {
-
-        }
-
-        private void RefreshDspFieldReadouts()
-        {
-
-        }
-
-        private void RefreshDspMatrixReadouts()
-        {
-
-        }
-
-        private void RefreshCrossfeedCutoffReadout()
-        {
-            if (AudioFxChannelCrossfeedCutoffText == null || AudioFxChannelCrossfeedCutoffSlider == null)
-            {
-                return;
-            }
-
-        }
-
-        // ─────────────────────────────────────────────────────────────
         // 事件：压缩器
         // ─────────────────────────────────────────────────────────────
 
         /// <summary>把模型里的压缩器参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyCompParameters()
         {
-            RefreshDspCompReadouts();
             PushDspRackToEngine();
         }
 
@@ -133,7 +104,6 @@ namespace CelesteMusicPlayer
         /// <summary>把模型里的声场参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyFieldParameters()
         {
-            RefreshDspFieldReadouts();
             PushDspRackToEngine();
         }
 
@@ -144,7 +114,6 @@ namespace CelesteMusicPlayer
         /// <summary>把模型里的矩阵参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyMatrixParameters()
         {
-            RefreshDspMatrixReadouts();
             PushDspRackToEngine();
         }
 

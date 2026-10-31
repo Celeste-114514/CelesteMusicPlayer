@@ -59,12 +59,5 @@ namespace CelesteMusicPlayer
             return 48000.0;
         }
 
-        private (double padL, double plotW) GetXfeedPlotRect()
-        {
-            double w = DspXfeedCurveCanvas?.ActualWidth ?? 0;
-            double padL = 44;
-            return (padL, Math.Max(0.0, w - padL - 14));
-        }
-
     }
 }

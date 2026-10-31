@@ -31,24 +31,10 @@ public sealed partial class MainWindow
             _folderSearchIndex = index;
             string targetPath = _folderSearchMatches[index];
             _folderSearchHighlightPath = targetPath;
-            UpdateFolderSearchNavUi();
 
             // PDF 式：先收起全部，再展开到目标歌曲所在路径
             RefreshFolderBrowserRoots();
             ExpandFolderPathToFile(targetPath);
-
-            FolderBrowserItem? item = _folderBrowserItems.FirstOrDefault(i =>
-                !i.IsFolder
-                && string.Equals(i.FullPath, targetPath, StringComparison.OrdinalIgnoreCase));
-
-            if (item != null)
-            {
-                try
-                {
-                    FolderBrowserView.ScrollIntoView(item);
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            }
 
         }
 
@@ -107,25 +93,6 @@ public sealed partial class MainWindow
                     ToggleFolderExpand(folder);
                 }
             }
-        }
-
-        private void UpdateFolderSearchNavUi()
-        {
-            if (FolderSearchNavPanel == null || FolderSearchCountText == null)
-            {
-                return;
-            }
-
-            bool show = _currentCategory == "Folders"
-                && !_isMultiSelectMode
-                && _folderSearchMatches.Count > 0
-                && !string.IsNullOrWhiteSpace(_librarySearchText);
-
-            if (!show)
-            {
-                return;
-            }
-
         }
 
         /// <summary>显示媒体库根（设置里的文件夹列表）或其直接子项；未配置则回退旧单根。</summary>

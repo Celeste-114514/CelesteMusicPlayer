@@ -548,20 +548,6 @@ public sealed partial class MainWindow
                 s.Bands.Add(new EqBand { Enabled = Math.Abs(g) > 0.01, FrequencyHz = f, GainDb = g, Q = 1.0, FilterType = EqFilterType.Peaking });
             }
         }
-
-        // DSP 批 5：单声道下拉构建离壳
-
-        private void SelectAudioFxMonoMode(string mode)
-        {
-            for (int i = 0; i < AudioFxChannelMonoCombo.Items.Count; i++)
-            {
-                if (AudioFxChannelMonoCombo.Items[i] is ComboBoxItem { Tag: string m } && string.Equals(m, mode, StringComparison.Ordinal))
-                {
-                    return;
-                }
-            }
-
-        }
         // ---- DSP 批 5：极客 DSP 状态 / EQ 外部曲线入口 / 简单模式 / 预设保存 / 面板构建 ----
         private bool _geekDspActive;
         private Color? _geekDspPhosphor;
@@ -630,9 +616,7 @@ public sealed partial class MainWindow
                 var ch = extra.ChannelBalance;
                 ReplayGainState rglog = ReplayGainStore.Load();
                 StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
-                SelectAudioFxMonoMode(ch.MonoMode);
                 // Crossfeed 已独立成页：强度和截止的两处读数要在加载时同步一次
-                RefreshCrossfeedCutoffReadout();
                 // 老存档没有这个字段 → 反序列化得到默认 700，正好等于旧版写死值，行为不变
 
                 var safety = extra.Safety;
@@ -657,7 +641,7 @@ public sealed partial class MainWindow
         private void ApplySimpleTones()
         {
             PushEqUndoSnapshot(coalesce: true);
-            var s = new EqCurveState { Enabled = AudioFxEqEnableToggle.IsOn, PreampDb = EqState.Current.PreampDb, PresetId = "simple", PresetName = "简单模式" };
+            var s = new EqCurveState { Enabled = EqState.Current.Enabled, PreampDb = EqState.Current.PreampDb, PresetId = "simple", PresetName = "简单模式" };
             SimpleEqStore.Save(new SimpleEqState { Bass = _eqSimpleBass, Vocal = _eqSimpleVocal, Air = _eqSimpleAir, Warm = _eqSimpleWarm });
             if (_eqSimpleBass > 0.01) AppendSimple(s, "bass", _eqSimpleBass);
             if (_eqSimpleVocal > 0.01) AppendSimple(s, "vocal", _eqSimpleVocal);

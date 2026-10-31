@@ -1275,7 +1275,6 @@ namespace CelesteMusicPlayer
                 || string.IsNullOrWhiteSpace(_browseFolderPath)
                 || !Directory.Exists(_browseFolderPath))
             {
-                UpdateFolderSearchNavUi();
                 return;
             }
 
@@ -1306,7 +1305,6 @@ namespace CelesteMusicPlayer
                 System.Diagnostics.Debug.WriteLine("文件夹搜索失败: " + ex.Message);
             }
 
-            UpdateFolderSearchNavUi();
 
             if (_folderSearchMatches.Count > 0)
             {

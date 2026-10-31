@@ -39,18 +39,5 @@ namespace CelesteMusicPlayer
         /// 真实值取决于当前这首歌，只能取一个常见混音的代表值，UI 上如实写明是估算。
         /// </summary>
         private const double FieldAssumedInputCorrelation = 0.5;
-
-        /// <summary>圆环几何：圆心 + 半径（画布较短边的 40% 上下，留出标签空间）。</summary>
-        private (double cx, double cy, double r) GetDspFieldRingGeometry()
-        {
-            Canvas? canvas = DspFieldRingCanvas;
-            double w = canvas?.ActualWidth ?? 0;
-            double h = canvas?.ActualHeight ?? 0;
-
-            double cx = w / 2.0;
-            double cy = h / 2.0;
-            double r = Math.Min(w, h) / 2.0 - 20.0;
-            return (cx, cy, Math.Max(0.0, r));
-        }
     }
 }

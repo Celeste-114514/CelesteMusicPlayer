@@ -135,52 +135,6 @@ public sealed partial class MainWindow
             _abLoopHint = text;
         }
 
-        // ---- 组合框填充 + 输出模式切换（网页 ChangeOutputMode 直通路径）----
-
-        private async System.Threading.Tasks.Task FillAudioSettingsDevicesAsync()
-        {
-            try
-            {
-
-                var s = AppSettingsStore.Load();
-                string mode = string.IsNullOrWhiteSpace(s.OutputMode) ? "Shared" : s.OutputMode;
-                string selectedId = s.OutputDeviceId ?? string.Empty;
-
-                if (string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase))
-                {
-                    var drivers = HiFiOutputBackend.EnumerateAsioDrivers();
-                    if (drivers.Count == 0)
-                    {
-                    }
-                    else
-                    {
-                        foreach (string d in drivers)
-                        {
-                        }
-                    }
-                }
-                else
-                {
-                    var devices = HiFiOutputBackend.EnumerateWasapiDevices();
-                    string defaultId = HiFiOutputBackend.GetDefaultWasapiDeviceId();
-                    foreach ((string id, string name) in devices)
-                    {
-                        string label = string.Equals(id, defaultId, System.StringComparison.OrdinalIgnoreCase) ? name + " (默认)" : name;
-                    }
-                }
-
-                // 选中已保存设备
-                foreach (var o in AudioOutputDeviceCombo.Items)
-                {
-                    if (o is ComboBoxItem it && it.Tag is string t && string.Equals(t, selectedId ?? "", System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        break;
-                    }
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
         // Both shells use this path; changing a preference does not restart audio.
         private async Task ChangeOutputModeAsync(string mode)
         {
@@ -195,7 +149,6 @@ public sealed partial class MainWindow
             _audioCombosLoading = true;
             try
             {
-                await FillAudioSettingsDevicesAsync();
             }
             finally
             {
@@ -252,7 +205,6 @@ public sealed partial class MainWindow
                 _audioCombosLoading = true;
                 try
                 {
-                    await FillAudioSettingsDevicesAsync();
                 }
                 finally
                 {
