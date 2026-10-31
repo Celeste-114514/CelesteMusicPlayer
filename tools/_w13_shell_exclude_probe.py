@@ -34,7 +34,6 @@ MARKER = b'    <Compile Remove="SettingsPanelControl.About.cs" />'
 SHELL = [
     "MainWindow.Features.cs",
     "MainWindow.Misc.cs",
-    "MainWindow.Misc2.cs",
     "MainWindow.UiTheme.cs",
     "MainWindow.Library.cs",
     "MainWindow.Library2.cs",
@@ -46,13 +45,10 @@ SHELL = [
     "MainWindow.GeekTables.cs",
     "MainWindow.GeekBrowse.cs",
     "MainWindow.ShellPages.cs",
-    "MainWindow.Lyrics.cs",
     "MainWindow.ArtistDetail.cs",
-    "MainWindow.Search.cs",
     "MainWindow.Settings.cs",
     "MainWindow.ThemeFiles.cs",
     "MainWindow.CelesteTheme.cs",
-    "MainWindow.StartupLoading.cs",
 ]
 
 ENV = dict(os.environ)

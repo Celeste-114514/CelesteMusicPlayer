@@ -48,57 +48,6 @@ namespace CelesteMusicPlayer
         // （纯状态查询，18 + 10 处调用点全在活代码里，定义留在壳里等于壳被拴住）。
 
 
-        /// <summary>对主窗口进行窗口过程子类化，拦截 WM_GETMINMAXINFO 设置最小尺寸。</summary>
-        private void SetupMinSizeHooks()
-        {
-            try
-            {
-                if (_minMaxWndProc != null || _mainWindowHwnd == IntPtr.Zero)
-                {
-                    return;
-                }
-
-                uint dpi = GetDpiForWindow(_mainWindowHwnd);
-                if (dpi == 0)
-                {
-                    dpi = 96;
-                }
-
-                _minTrackScale = dpi / 96.0;
-                _minMaxWndProc = MainMinMaxWndProc;
-                _prevWndProc = SetWindowLongPtr64(_mainWindowHwnd, (int)GWL_WNDPROC, System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_minMaxWndProc));
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        private static nint MainMinMaxWndProc(nint hWnd, uint msg, nint wParam, nint lParam)
-        {
-            if (msg == WM_GETMINMAXINFO && lParam != IntPtr.Zero)
-            {
-                try
-                {
-                    MINMAXINFO mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
-                    mmi.ptMinTrackSize.X = (int)Math.Round(MinWindowWidthDip * _minTrackScale);
-                    mmi.ptMinTrackSize.Y = (int)Math.Round(MinWindowHeightDip * _minTrackScale);
-                    System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, false);
-                    return IntPtr.Zero;
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            }
-
-            // 系统 resize 边框（hasBorder）已提供四边/四角调大小；这里只需同步最大化/还原状态
-            // （自绘最大化按钮图标，含从最大化拖拽还原场景）。
-            if (msg == WM_SIZE && MainWindow.Instance is MainWindow mw)
-            {
-                int sizeType = (int)(wParam.ToInt64() & 0xFFFF);
-                mw.OnWindowMaximizeStateChanged(sizeType == SIZE_MAXIMIZED);
-            }
-
-            return CallWindowProcW(_prevWndProc, hWnd, msg, wParam, lParam);
-        }
-
-
         /// <summary>延后设置 Desktop Acrylic（壁纸色毛玻璃）；失败则回退 Mica / 纯色。</summary>
         private void TryApplySystemBackdrop()
         {

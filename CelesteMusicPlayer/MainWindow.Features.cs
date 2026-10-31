@@ -2221,7 +2221,6 @@ namespace CelesteMusicPlayer
         // ---------------- 评分分类（未评分 + 1..5 星） ----------------
 
         /// <summary>右上角刷新当前页面：按当前分类重载对应数据。</summary>
-        private bool _windowMaximized;
 
         /// <summary>设置窗口四角风格（无边框自绘按钮窗口用；ROUND=圆角、DONOTROUND=全屏填满直角）。</summary>
         private void ApplyWindowCorners(bool rounded)
@@ -2279,25 +2278,6 @@ namespace CelesteMusicPlayer
             // 自绘关闭按钮不能直接 Close()：WinUI 3 的 Window.Close() 不触发 AppWindow.Closing，
             // 会绕过关闭策略（最小化到托盘/每次询问）导致直接退出。统一走 HandleCloseRequestAsync。
             try { await HandleCloseRequestAsync(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
-        private void UpdateMaxRestoreIcon()
-        {
-            try
-            {
-                if (WindowMaxRestoreIcon != null)
-                {
-                    WindowMaxRestoreIcon.Glyph = _windowMaximized ? "\uE923" : "\uE922";
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
-        /// <summary>由 WndProc(W M_SIZE) 同步最大化/还原状态：自绘最大化按钮图标始终反映真实窗口状态（含拖拽还原）。</summary>
-        internal void OnWindowMaximizeStateChanged(bool maximized)
-        {
-            _windowMaximized = maximized;
-            UpdateMaxRestoreIcon();
         }
 
         // ---------------- 音频设置右侧面板（输出模式 / 链路状态 / 专业播放状态） ----------------

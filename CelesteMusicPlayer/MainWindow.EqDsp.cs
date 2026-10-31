@@ -1516,38 +1516,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async Task HandleCloseRequestAsync()
-        {
-            if (_closePromptOpen)
-            {
-                return;
-            }
-
-            _closePromptOpen = true;
-            try
-            {
-                AppClosePreferencesState prefs = AppClosePreferences.Load();
-                CloseWindowAction action = AppClosePreferences.ResolveAction(prefs);
-                if (action == CloseWindowAction.Ask)
-                {
-                    action = await ShowCloseChoiceDialogAsync();
-                }
-
-                switch (action)
-                {
-                    case CloseWindowAction.MinimizeToTray:
-                        MinimizeToTray();
-                        break;
-                    case CloseWindowAction.Exit:
-                        ExitApplication();
-                        break;
-                }
-            }
-            finally
-            {
-                _closePromptOpen = false;
-            }
-        }
         // 频谱带缓存与音效面板构建（2026-10-31 误切归还）。
 
         private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];
