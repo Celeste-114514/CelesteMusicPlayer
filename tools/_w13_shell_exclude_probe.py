@@ -32,15 +32,7 @@ MARKER = b'    <Compile Remove="SettingsPanelControl.About.cs" />'
 # 旧界面壳（旧 WinUI 页面/皮肤/特效/页面级代码）。不含：播放域、网页桥、宿主接线、
 # LegacyControls（控件容器，第③步才收）、LegacyBusinessState。
 SHELL = [
-    "MainWindow.Features.cs",
-    "MainWindow.Misc.cs",
-    "MainWindow.UiTheme.cs",
-    "MainWindow.Library.cs",
-    "MainWindow.Library2.cs",
-    "MainWindow.EqDsp.cs",
-    "MainWindow.ShellPages.cs",
-    "MainWindow.ArtistDetail.cs",
-    "MainWindow.Settings.cs",
+    # W13 已收官（2026-10-31）：旧界面壳文件全部删除，这里不再有需要排除的文件。
 ]
 
 ENV = dict(os.environ)
