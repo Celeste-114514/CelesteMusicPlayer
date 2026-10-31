@@ -2056,28 +2056,9 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>点击艺术家超链接：收起播放面板并跳转到对应艺术家详情页。</summary>
-        private void NowPlayingArtistLinkButton_Click(object sender, RoutedEventArgs e)
-        {
-            string artistName = NowPlayingArtistText?.Text?.Trim() ?? "";
-            if (string.IsNullOrWhiteSpace(artistName))
-            {
-                return;
-            }
-
-            ArtistEntry? entry = _artists.FirstOrDefault(
-                a => string.Equals(a.Name, artistName, StringComparison.OrdinalIgnoreCase));
-            if (entry == null)
-            {
-                entry = new ArtistEntry { Name = artistName };
-            }
-
-            // 从播放面板跳转：先切到「艺术家」分类并真正显示其视图根，再打开详情，保证左侧分类与右侧面板同步
-            _currentCategory = "Artists";
-            ApplyCategoryViewData();
-            DispatcherQueue.TryEnqueue(() => OpenArtistDetail(entry!));
-        }
-
+        // 「点艺术家超链接进详情」的处理器已于 2026-10-31 删除：它从未接到任何按钮的 Click
+        // （LegacyControls 造的那个 Button 只被设置 IsEnabled，没人订阅），属于死代码；
+        // 新外壳的艺术家详情在 artists.js 里，走网页导航。
 
         /// <summary>点击专辑超链接：收起播放面板并跳转到对应专辑详情页。</summary>
         private void NowPlayingAlbumLinkButton_Click(dynamic sender, dynamic e)
