@@ -230,3 +230,58 @@ Rebuild 0 错误；publish 2,978,816 字节 / 269 文件；接口回归 failures
 **结论：下一步必须拔「枢纽」而不是搬成员。**
 两个枢纽：`ApplyCategoryView`（闭包 39）和 `ApplyUiStyleMode`（牵动 ArtistDetail / Settings / ThemeFiles）。
 拔掉一个能连带解锁 2-4 个壳文件，但要整块连闭包一起搬，属于一次独立的大活。
+
+---
+
+# 批 29-30：曲库视图 + 主题链（36 → 26，壳清单 11 → 9）
+
+## 批 29（`b783ff7`）：曲库视图刷新域，36 → 28
+
+新 `MainWindow.LibraryViewHost.cs`，一次搬 18 个成员（4 个文件里的同一功能域）：
+
+| 来源 | 成员 |
+|---|---|
+| Library2.cs | `RefreshAlbumViewAsync`、`ApplyAlbumSortToList`、`OpenAlbumDetail`+`OpenAlbumDetailCore`、`RefreshAlbumWallSelectionChrome` |
+| Library.cs | `UpdateLibrarySearchUi`、`ApplyLibrarySearchNow`、`ClearFolderSearchHighlightOnly`、`RefreshArtistViewAsync`、`ArtistAvatarStoreKey`、`ResolveArtistAvatarAsync`、`ResolveArtistDefaultAvatarAsync`、`TryLoadWebArtistAvatarAsync` |
+| EqDsp.cs | `ApplyAlbumsSearchFilter`、`ApplyArtistsSearchFilter` |
+| Misc.cs | `EnumerateRealizedGridViewItems` |
+
+另手工搬两个静态字段（`WebArtistAvatarCache` / `WebArtistAvatarGate`）——
+按铁律「分号结尾字段绝不用配平工具」，手工按行搬。
+
+## 批 30（同提交）：主题链 + 两个文件转活，28 → 26
+
+新 `MainWindow.ThemeHost.cs`（16 个成员）：`MainWindow_Loaded`、`ApplyCelesteThemeAsync`、
+`LoadCelesteActiveTheme`、`ResolveIsDark`、`ApplyCelesteTokensToTree`、`CountTokenKeys`、
+`RefreshDetailPagesForTheme`、`ReloadThemeFromSettings`、两个空实现的强调条刷新，
+以及 4 个字段/事件/属性（`_celesteTokenDictionary`、`_celesteAppliedThemeName`、
+`CelesteThemeApplied`、`AppliedCelesteThemeName`、`_themeAppliedOnce`、`_lastAppliedThemeName`）。
+
+**连带效果**：`MainWindow.CelesteTheme.cs`（剩 3 个强调色解析）与 `MainWindow.ThemeFiles.cs`
+（剩 7 个主题文件读写）的壳依赖全部消失 → 两个文件**整文件转活**，壳清单 11 → 9。
+
+⚠ 但这俩文件目前**没有活调用方**（探针里从没出现过它们的成员）。它们是被「重新编进来」的死代码：
+要么以后接回网页设置页的主题导入/导出，要么确认不需要后删掉。**这件事需要用户拍板，我没擅自删。**
+
+## 验证
+
+Rebuild 0 错误；publish DLL 2,978,816 字节 / 269 文件；接口回归 failures+jsErrors 空、exitCode 0；
+实播 `ok=true`、pos 8.09。出货已同步，回退件 `dist/web-ui-20261028-pre-w13-themechain-20261031`。
+
+## 剩余 26：12 个成员，每个都是一整块功能
+
+| 成员 | 闭包 | 是什么 |
+|---|---|---|
+| `ApplySettingsLive` | 74 | 设置实时应用（最大的一块） |
+| `RescanLocalLibraryButton_Click` | 51 | 重扫曲库 |
+| `LibraryPaneRoot_PointerPressed` | 40 | 鼠标侧键前进/后退 |
+| `MainWindow_FirstActivated` | 40 | 首窗口激活（标题栏扩展） |
+| `RestoreLastLibraryAsync` | 34 | 启动恢复上次曲库 |
+| `MainWindow_Closed` | 32 | 关闭序列 |
+| `RestartLibraryWatchFromSettings` | 32 | 曲库监听重启 |
+| `AppendPlaylistContextFeatureItems` | 27 | 播放列表右键菜单 |
+| `OnTagsSaved` / `OpenArtistDetail` | 25 / 25 | 标签保存后刷新 / 艺术家详情 |
+| `InitializeMusicPlayer2Features` / `ToggleFavoriteForCurrent` | 23 / 23 | 播放器初始化 / 收藏切换 |
+
+每个都要连 20-70 个闭包成员一起搬，属于「一块功能一刀」。下一步建议先打 `MainWindow_Closed`
+（关闭序列，行为最独立、验证最容易：启停一次就知道有没有问题）。
