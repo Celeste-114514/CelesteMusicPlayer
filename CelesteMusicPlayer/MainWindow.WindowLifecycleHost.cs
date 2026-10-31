@@ -16,6 +16,12 @@ namespace CelesteMusicPlayer;
 /// <summary>W13 第三十四刀（2026-10-31）：窗口生命周期：首激活/关闭序列/窗口框架配置/背景视频的窗口状态跟随。</summary>
 public sealed partial class MainWindow
 {
+    // UI 线程的调度队列：**不要用 Window.DispatcherQueue 判断线程** ——
+    // 在非 UI 线程上它会返回那个线程自己的队列，HasThreadAccess 于是误判成 true。
+    // 桌面歌词就是被这个坑到的（Compositor 构造报 DispatcherQueue 未初始化）。
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue =
+        Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
         // 视频背景「最小化暂停」：最小化时暂停解码省电，还原后继续
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);

@@ -47,6 +47,21 @@ namespace CelesteMusicPlayer
 
         private void SetDesktopLyricsEnabled(bool enabled, bool persistPreference = true)
         {
+            // ⚠ WebView2 的网页消息回调不在 UI 线程上（WebShellWindow.OnMessage）。
+            // 直接在这里构造桌面歌词会炸：Compositor 要求当前线程有 DispatcherQueue，
+            // 报「拒绝访问 / The caller must initialize DispatcherQueue on this thread」。
+            // 所以先把整个开关动作切回 UI 线程，再建窗口。
+            // 另注：这条守卫解决的是线程，不是根因。桌面歌词目前仍会在 Compositor 处报错，
+            // 根因是 NativeDispatcherQueue.cs 用手写 Win32 泵替掉了 Windows App SDK 的
+            // DispatcherQueue —— 进程里没有「真」队列，Windows.UI.Composition 起不来。
+            // 单独排期修，见 collab 战报「桌面歌词」一节。
+            var ui = _uiQueue;
+            if (ui != null && !ui.HasThreadAccess)
+            {
+                ui.TryEnqueue(() => SetDesktopLyricsEnabled(enabled, persistPreference));
+                return;
+            }
+
             _desktopLyricsEnabled = enabled;
             if (_desktopLyricsEnabled)
             {

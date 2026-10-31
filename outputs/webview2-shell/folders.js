@@ -64,7 +64,7 @@
   function playing(){const current=shell.getState();list.querySelectorAll('[data-track-id]').forEach(row=>row.setAttribute('aria-current',String(live?row.dataset.trackId===current.trackId:Number(row.dataset.trackId)===current.index)));}
   refresh.addEventListener('click',()=>load());add.addEventListener('click',()=>load('add'));play.addEventListener('click',()=>action('play'));queue.addEventListener('click',()=>action('queue'));more.addEventListener('click',()=>{limit+=200;renderSongs();});
   document.getElementById('search').addEventListener('input',()=>{if(active){limit=200;renderSongs();}});
-  document.addEventListener('celeste:navigate',event=>{active=event.detail==='folders';page.hidden=!active;if(active){document.getElementById('browse-page').hidden=true;shell.setPath([{label:'文件夹',action:()=>load()}]);document.getElementById('search').placeholder='搜索当前文件夹歌曲';load();}else{epoch++;selectionEpoch++;}});
+  document.addEventListener('celeste:navigate',event=>{active=event.detail==='folders';page.hidden=!active;if(active){document.getElementById('browse-page').hidden=true;shell.setPath([{label:'文件夹',action:()=>load()}]);document.getElementById('search').placeholder='搜索当前文件夹歌曲';/* 目录是异步读的：外壳那次淡入跑在空页面上，等数据回来再补一次内容淡入，否则内容会「蹦」出来，看着像没有动画。 */load().then(()=>{if(active)window.CelesteMotion?.page(page,'forward');});}else{epoch++;selectionEpoch++;}});
   document.addEventListener('celeste:library',()=>{if(active)load();});document.addEventListener('celeste:message',event=>{if(active&&event.detail.kind==='celeste.state')playing();});
   document.addEventListener('celeste:tracksChanged',event=>{if(active&&current&&event.detail?.source!=='folders')select(current);});
 })();
