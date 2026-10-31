@@ -55,3 +55,50 @@
 
 **下一仗建议**：Playback 族要的「多选视觉 / 行选中框」横跨 Misc + UiTheme + Library2 三处，
 按域整块搬能一次削三个文件；`ApplySettingsLive` 仍卡在 `ApplyUiStyleMode`（UiTheme 大域）。
+
+---
+
+# 批 11（同会话续）：行选中框样式族整体转活，142 → 128
+
+批 10 提交后继续按闭包挑目标。选中框样式族是 Playback 族里最「横跨三处」的一块：
+播放列表 / 专辑墙 / 艺术家专辑 / 文件夹浏览 / 网页桥都用同一套「左侧 3px 主题色竖条 +
+半透明灰底」的行选中款，成员却散在 UiTheme / Misc / Library / Library2 四个壳文件里。
+
+## 做了什么（提交 `3a11e1f`）
+
+新 `MainWindow.SelectionChromeHost.cs`（286 行），一次搬入 7 个成员：
+
+| 成员 | 原位置 | 作用 |
+|---|---|---|
+| `ResolveClassicRowSelectionColor` | UiTheme.cs | 经典选中底色（深色浅灰/浅色灰） |
+| `TryApplyBarStyleRowSelection` | UiTheme.cs | 行选中款统一入口（竖条+半透明底） |
+| `SoftenItemPresenterCorners` | UiTheme.cs | 关闭系统勾选层、给 Presenter 圆角 |
+| `CreateMultiSelectFrostBrush` | Misc.cs | 多选时未选中行的毛玻璃底（带缓存） |
+| `DisableContainerSelectionCheckMark` | Misc.cs | 容器加载后关闭系统选中勾 |
+| `ApplyAlbumGridItemSelectionChrome` | Library2.cs | 专辑墙卡片行样式入口 |
+| `ApplyFolderBrowserItemSelectionChrome` | Library.cs | 文件夹浏览行样式入口 |
+
+**零新借用**：多选状态字段（`_isMultiSelectMode`/`_multiSelectAlbumGrid`/`_multiSelectFolderList`）、
+取色入口（`ResolveAccentBrush`/`IsOpaqueUiStyleActive`）、前景色工具
+（`ApplyForegroundToDescendants`/`ClearForegroundOnDescendants`）全在活文件里。
+
+⚠ 两个坑：①手写垫底成员后忘删原件 → CS0111 重复定义（工具只搬它负责的那几个）；
+②`ListViewItemPresenter`/`GridViewItemPresenter` 在 `Microsoft.UI.Xaml.Controls.Primitives`，
+漏 using 会报 CS0246。
+
+## 验证
+
+Rebuild 0 错误；publish DLL 3,019,264 字节/269 文件；接口回归 failures+jsErrors 空、exitCode 0；
+实播 `ok=true`、Diana pos 8.1。出货已同步 `dist/web-ui-20261028`，
+回退件 `dist/web-ui-20261028-pre-w13-selectionchrome-20261031`。
+
+## 剩余 128（56 个成员）
+
+Playback.cs 46 / Playback2 28 / Playback3 20 / xaml.cs 16 / SettingsHost 6 / Playback4 4 /
+AppFlow 2 / ExternalFile 2 / WebBrowseActions 2 / WebTags 2。
+
+**下一步可切的簇**（已算过闭包）：
+- 多选模式域 8 成员（`IsMultiSelectSelection`/`SetListSelectionMode`/`ResolveMultiSelectTargetList`/
+  `Exit*MultiSelectUiOnly`/`ConfigureMultiSelectPrimaryAction`/`UpdateLibrarySearchUi`/`ResolveCellDetailText`）
+  闭包 24 个成员、牵连 Geek 搜索占位符 + 曲库筛选 + 选中框刷新——要连搜索域一起打包才划算。
+- 极客播放状态三件闭包 79 个成员——必须整片极客域一起做，不适合小刀。
