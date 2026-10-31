@@ -1715,28 +1715,6 @@ namespace CelesteMusicPlayer
             ApplySleepSelection(radio.SelectedIndex, numberBox.Value);
         }
 
-        /// <summary>播放结束拦截：返回 true 表示已按睡眠定时器停止，调用方不应继续切歌。</summary>
-        private bool ConsumeSleepStopIfDue()
-        {
-            if (_sleepMode == SleepStopMode.AfterTrack)
-            {
-                StopForSleep("睡眠定时器：当前曲目已播完，播放已停止");
-                return true;
-            }
-
-            if (_sleepMode == SleepStopMode.AfterTracks)
-            {
-                _sleepTracksRemaining--;
-                if (_sleepTracksRemaining <= 0)
-                {
-                    StopForSleep("睡眠定时器：指定曲目数已播完，播放已停止");
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         /// <summary>
         /// 打开 ReplayGain 扫描：2026-10-12 阶段 2 起不再弹独立窗口 ——
         /// 扫描功能已内嵌到音效处理的「响度 · ReplayGain」页，这里直接跳过去。
@@ -1752,51 +1730,6 @@ namespace CelesteMusicPlayer
         {
             int index = FindLibraryIndex(path);
             return index >= 0 ? _playlist[index] : null;
-        }
-
-        /// <summary>
-        /// 导入 M3U/M3U8 播放列表（入口：播放列表墙页眉；2026-10-15 从播放页更多菜单挪来）。
-        /// 语义（用户定案）：弹选择器存进某个命名单 —— 不往媒体库塞歌；
-        /// 不在音乐库的文件照常进歌单（命名单只存路径，与标签面板「排序编号」同口径），
-        /// 摘要里单独提示「有几首不在音乐库」。
-        /// </summary>
-        private async void ImportM3u_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var picker = new FileOpenPicker();
-                nint hwnd = NativeHandle;
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                picker.FileTypeFilter.Add(".m3u");
-                picker.FileTypeFilter.Add(".m3u8");
-                Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
-                if (file == null)
-                {
-                    return;
-                }
-
-                // existingOnly:false：丢不丢自己算，摘要要报「几首不在音乐库」
-                List<string> all = M3uPlaylistIO.Parse(file.Path, existingOnly: false)
-                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                if (all.Count == 0)
-                {
-                    await ShowErrorAsync("导入 M3U", "未找到任何条目。");
-                    return;
-                }
-
-                int notInLibrary = all.Count(p => FindLibraryIndex(p) < 0);
-
-                await AddPathsToNamedPlaylistAsync(all);
-                NowPlayingText.Text = notInLibrary > 0
-                    ? $"已导入 M3U：{all.Count} 首进入歌单（其中 {notInLibrary} 首不在音乐库，仅存于歌单）"
-                    : $"已导入 M3U：{all.Count} 首进入歌单";
-            }
-            catch (Exception ex)
-            {
-                await ShowErrorAsync("导入 M3U 失败", ex.Message);
-            }
         }
 
         private async void ExportM3u_Click(object sender, RoutedEventArgs e)
@@ -1825,85 +1758,6 @@ namespace CelesteMusicPlayer
             {
                 await ShowErrorAsync("导出 M3U 失败", ex.Message);
             }
-        }
-
-        private async void OpenCue_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var picker = new FileOpenPicker();
-                nint hwnd = NativeHandle;
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                picker.FileTypeFilter.Add(".cue");
-                Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
-                if (file == null)
-                {
-                    return;
-                }
-
-                await PlayCueFileAsync(file.Path);
-            }
-            catch (Exception ex)
-            {
-                await ShowErrorAsync("打开 CUE 失败", ex.Message);
-            }
-        }
-
-        /// <summary>
-        /// 解析 .cue 分轨表并播放（手动「打开 CUE…」与双击 .cue 文件关联共用）。
-        /// 分轨条目带 StartTimeSeconds，由引擎按区间转码播出（见 PlayExtendedWithEngineAsync）。
-        /// </summary>
-        private async Task PlayCueFileAsync(string cuePath)
-        {
-            List<CueTrack> tracks = CueSheetParser.LoadCue(cuePath);
-            if (tracks.Count == 0)
-            {
-                await ShowErrorAsync("打开 CUE", "未能解析曲目。");
-                return;
-            }
-
-            var cueItems = new List<PlaylistItem>();
-            foreach (CueTrack cueTrack in tracks)
-            {
-                if (string.IsNullOrWhiteSpace(cueTrack.FilePath) || !System.IO.File.Exists(cueTrack.FilePath))
-                {
-                    continue;
-                }
-
-                PlaylistItem cueItem = CreatePlaylistItemFromPath(cueTrack.FilePath);
-                if (!string.IsNullOrWhiteSpace(cueTrack.Title))
-                {
-                    cueItem.Title = cueTrack.Title;
-                }
-
-                if (!string.IsNullOrWhiteSpace(cueTrack.Artist))
-                {
-                    cueItem.Artist = cueTrack.Artist;
-                    cueItem.AlbumArtist = cueTrack.Artist;
-                }
-
-                cueItem.Album = string.IsNullOrWhiteSpace(cueTrack.Album) ? cueItem.Album : cueTrack.Album;
-                cueItem.AlbumArtist = string.IsNullOrWhiteSpace(cueTrack.AlbumArtist) ? cueItem.AlbumArtist : cueTrack.AlbumArtist;
-                cueItem.Track = (uint)cueTrack.Number;
-                cueItem.IsCueSegment = true;
-                cueItem.SourceTrackId = "cue-" + NetworkIdentity.Hash(Path.GetFullPath(cueItem.FilePath).ToUpperInvariant() + "\n" + cueItem.Track);
-                double start = cueTrack.StartTime.TotalSeconds;
-                var nextCue = tracks.FirstOrDefault(t => t.FilePath == cueTrack.FilePath && t.StartTime > cueTrack.StartTime);
-                double end = nextCue?.StartTime.TotalSeconds ?? cueItem.Duration.TotalSeconds;
-                cueItem.Duration = TimeSpan.FromSeconds(Math.Max(0, end - start));
-                cueItem.StartTimeSeconds = start;
-                cueItems.Add(cueItem);
-            }
-
-            if (cueItems.Count == 0)
-            {
-                await ShowErrorAsync("打开 CUE", "CUE 引用的音频文件不存在。");
-                return;
-            }
-
-            AddSongsToUserPlaylist(cueItems);
-            NowPlayingText.Text = $"已从 CUE 导入 {cueItems.Count} 轨";
-            PlayPlaylistItem(cueItems[0]);
         }
 
         private async void ConvertCurrent_Click(object sender, RoutedEventArgs e)
@@ -1972,44 +1826,6 @@ namespace CelesteMusicPlayer
 
             await UpdateNowPlayingPanelAsync(item);
             NowPlayingText.Text = "封面已更新";
-        }
-
-        private async Task MaybeAutoDownloadExtrasAsync(PlaylistItem item, List<LyricLine> existingLyrics, byte[]? coverBytes)
-        {
-            AppSettingsState settings = AppSettingsStore.Load();
-            bool tagsFull = !string.IsNullOrWhiteSpace(item.Title)
-                && !string.Equals(item.Title, Path.GetFileNameWithoutExtension(item.FilePath), StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrWhiteSpace(item.Artist)
-                && !string.Equals(item.Artist, "未知艺术家", StringComparison.Ordinal);
-
-            if (settings.AutoDownloadOnlyWhenTagFull && !tagsFull)
-            {
-                return;
-            }
-
-            if (settings.AutoDownloadLyrics && existingLyrics.Count == 0)
-            {
-                string? lyricPath = await OnlineMusicApi.SearchAndDownloadLyricAsync(item.Title, item.Artist, item.FilePath);
-                if (lyricPath != null && string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    List<LyricLine> lyrics = await Task.Run(() => LyricsLoader.LoadForAudio(item.FilePath));
-                    BuildLyricsUi(lyrics);
-                }
-            }
-
-            if (settings.AutoDownloadCover && (coverBytes == null || coverBytes.Length == 0))
-            {
-                bool ok = await OnlineMusicApi.DownloadAndEmbedCoverAsync(item.Title, item.Artist, item.FilePath);
-                if (ok)
-                {
-                    InvalidateCoverCache(item.FilePath);
-                }
-
-                if (ok && string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    await UpdateNowPlayingPanelAsync(item);
-                }
-            }
         }
 
         private void ApplyFavoritesOrRecentCategory()

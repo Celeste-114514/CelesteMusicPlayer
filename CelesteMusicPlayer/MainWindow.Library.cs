@@ -264,55 +264,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 选择文件夹：递归扫描其中所有支持的音频，再交给 LoadAndAddFiles。
-        /// </summary>
-        private async void OpenFolderButton_Click(dynamic sender, dynamic e)
-        {
-            try
-            {
-                FolderPicker picker = new();
-                nint hwnd = NativeHandle;
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
-                // FolderPicker 至少要加一个过滤器，常用 "*"
-                picker.FileTypeFilter.Add("*");
-
-                StorageFolder? folder = await picker.PickSingleFolderAsync();
-                if (folder == null || string.IsNullOrWhiteSpace(folder.Path))
-                {
-                    return;
-                }
-
-                // 后台枚举路径，避免大文件夹卡住 UI 太久；读标签仍在 LoadAndAddFiles
-                string folderPath = folder.Path;
-                _browseFolderPath = folderPath;
-
-                string[] paths = await System.Threading.Tasks.Task.Run(() =>
-                    LibraryFolderScan.AudioFiles(folderPath).ToArray());
-
-                LibrarySessionStore.SaveFolder(folderPath, paths);
-                if (_currentCategory == "Folders")
-                {
-                    RefreshFolderBrowserRoots();
-                }
-
-                if (paths.Length == 0)
-                {
-                    await ShowErrorAsync("未找到音频", "该文件夹（含子文件夹）中没有支持的音频文件。");
-                    return;
-                }
-
-                LoadAndAddFiles(paths, persist: false, replace: true);
-            }
-            catch (Exception ex)
-            {
-                await ShowErrorAsync("选择文件夹失败", ex.Message);
-            }
-        }
-
-
         private async void RescanLocalLibraryButton_Click(dynamic sender, dynamic e)
         {
             if (_libraryRescanInProgress)

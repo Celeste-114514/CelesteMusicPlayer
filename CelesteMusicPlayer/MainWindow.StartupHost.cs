@@ -255,4 +255,14 @@ public sealed partial class MainWindow
                 _closePromptOpen = false;
             }
         }
+
+        /// <summary>窗口小于最小尺寸时强制涨回（1200×760，按 DPI 换算）。
+        /// 实际通过 WM_GETMINMAXINFO 系统级锁定最小尺寸，拖到最小后不能再缩小。</summary>
+        private void EnforceMinimumWindowSize()
+        {
+            if (_mainWindowHwnd != IntPtr.Zero)
+            {
+                SetupMinSizeHooks();
+            }
+        }
     }

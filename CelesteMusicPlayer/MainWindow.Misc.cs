@@ -82,58 +82,6 @@ namespace CelesteMusicPlayer
         // =====================================================================
 
 
-        /// <summary>
-        /// 「打开文件」菜单项（Playback.cs:943 动态挂到 fileItem.Click）。
-        /// 2026-10-31 曾随纯工具函数一起搬到 MainWindow.Utilities.cs，但它的落点是
-        /// LoadAndAddFiles，当时搬走会给工具文件引入壳依赖，已退回。
-        /// 2026-10-31 第十四刀：LoadAndAddFiles 已搬 MainWindow.Playback.cs（依赖现全在活文件）。
-        /// </summary>
-        private async void OpenFileButton_Click(dynamic sender, dynamic e)
-        {
-            try
-            {
-                FileOpenPicker picker = new();
-                nint hwnd = NativeHandle;
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                picker.ViewMode = PickerViewMode.List;
-                picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
-                picker.FileTypeFilter.Add(".mp3");
-                picker.FileTypeFilter.Add(".wav");
-                picker.FileTypeFilter.Add(".m4a");
-                picker.FileTypeFilter.Add(".flac");
-                picker.FileTypeFilter.Add(".wma");
-                picker.FileTypeFilter.Add(".ogg");
-                picker.FileTypeFilter.Add(".aac");
-                picker.FileTypeFilter.Add(".ape");
-                picker.FileTypeFilter.Add(".wv");
-                picker.FileTypeFilter.Add(".tta");
-                picker.FileTypeFilter.Add(".mpc");
-                picker.FileTypeFilter.Add(".tak");
-                picker.FileTypeFilter.Add(".opus");
-                picker.FileTypeFilter.Add(".dsf");
-                picker.FileTypeFilter.Add(".dff");
-
-                var files = await picker.PickMultipleFilesAsync();
-                if (files == null || files.Count == 0)
-                {
-                    return;
-                }
-
-                string[] paths = files
-                    .Select(f => f.Path)
-                    .Where(p => !string.IsNullOrWhiteSpace(p))
-                    .ToArray();
-
-                LoadAndAddFiles(paths, persistAsFiles: true, replace: true);
-            }
-            catch (Exception ex)
-            {
-                await ShowErrorAsync("打开文件失败", ex.Message);
-            }
-        }
-
-
         /// <summary>把本地路径构造成 file URI,转义 # % ? 避免被解析为 fragment/query。</summary>
         private static Uri CreateFileMediaUri(string path)
         {
@@ -1538,24 +1486,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void UpdateCurrentIndexByPath(string? path)
-        {
-            if (string.IsNullOrEmpty(path))
-            {
-                return;
-            }
-
-            for (int i = 0; i < _playlist.Count; i++)
-            {
-                if (string.Equals(_playlist[i].FilePath, path, StringComparison.OrdinalIgnoreCase))
-                {
-                    _currentIndex = i;
-                    return;
-                }
-            }
-        }
-
-
         // =====================================================================
         // 播放列表交互 / 右键菜单 / 多选
         // =====================================================================
@@ -1796,25 +1726,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static bool MoveToRecycleBin(string path)
-        {
-            try
-            {
-                SHFILEOPSTRUCT op = new()
-                {
-                    wFunc = 3, // FO_DELETE
-                    pFrom = path + "\0\0",
-                    fFlags = 0x40 | 0x10 | 0x04 // FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT
-                };
-                return SHFileOperation(ref op) == 0;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-
         private Brush ResolveNavCapsuleBorderBrush()
         {
             // 经典界面：Application.Resources 里的这些键取到的是"系统主题"那一份色值，
@@ -1899,24 +1810,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
-        private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)
-        {
-            try
-            {
-                string? info = await System.Threading.Tasks.Task.Run(() => AudioInfoFormatter.Format(path));
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (NowPlayingAudioInfoText != null && string.Equals(_nowPlayingPath, path, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        NowPlayingAudioInfoText.Text = info ?? string.Empty;
-                    }
-                });
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
 
         /// <summary>波形倒影的画刷缓存（按序号缓存渐变画刷，避免每帧重建 40 个画刷造成 GC 抖动）。
         /// 颜色变化（换主题）时自动重建。</summary>
@@ -1965,33 +1858,6 @@ namespace CelesteMusicPlayer
             return brush;
         }
 
-
-
-        /// <summary>引擎开播淡入（约 320ms 渐入到当前音量）。</summary>
-        private async Task FadeInEngineAsync()
-        {
-            try
-            {
-                // 独占/ASIO（bit-perfect）：设备主音量由用户拖动音量条设置，切歌不重置（避免拉回 100%）。
-                if (IsHiFiModeSelected())
-                {
-                    return;
-                }
-
-                // 共享用「用户持久化的真实音量」（防切模式后滑块被独占锁成 100% 导致巨声）。
-                // 共享引擎音量 = NAudio 软件增益 0..1。
-                double target = Math.Clamp(AppSettingsStore.Load().Volume, 0, 100) / 100.0;
-                const int steps = 8;
-                for (int i = 1; i <= steps; i++)
-                {
-                    _audioEngine?.SetVolume(target * i / steps);
-                    await Task.Delay(40);
-                }
-
-                _audioEngine?.SetVolume(target);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
 
 
     }

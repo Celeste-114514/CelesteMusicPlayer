@@ -1484,9 +1484,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private ObservableCollection<AlbumEntry> GetAlbumCollectionForGrid(GridView grid)
-            => ReferenceEquals(grid, AlbumGridView) ? _albums : _artistAlbums;
-
         // 频谱带缓存与音效面板构建（2026-10-31 误切归还）。
 
         private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];
