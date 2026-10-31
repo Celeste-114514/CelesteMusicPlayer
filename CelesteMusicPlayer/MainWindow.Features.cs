@@ -440,17 +440,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
-            try
-            {
-                // 按当前可视化档位重绘（波形 / 频谱柱 / 示波器 / 径向），
-                // 不能写死 DrawWaveformBars —— 那样切到频谱柱后一换主题色就会被画回波形。
-                DrawVisualSlot();
-            }
-            catch (Exception waveEx)
-            {
-                StartupLog.Write("主题色应用-波形重绘异常: " + waveEx.Message);
-            }
-
             // 歌词:用新主题色重新渲染当前行
             try
             {
@@ -485,7 +474,6 @@ namespace CelesteMusicPlayer
             try
             {
                 UpdateLibraryNavHighlight();
-                ApplyNowPlayingTitleColor();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -698,7 +686,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            ApplyNowPlayingVisual();
         }
 
         private void ApplyCoverVisibilityFromSettings(AppSettingsState settings)
@@ -1158,10 +1145,6 @@ namespace CelesteMusicPlayer
                 TrySwitchTitleBar(NowPlayingTitleBarDragArea);
                 StartupLog.Write($"[深度] 展开播放页：mcBack={(mcBack != null)} depthIn={(depthIn != null)} " +
                                  $"左栏={LeftCategoryGrid?.Visibility}");
-                DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
-                // 进入播放页时按当前设置套用布局（经典/水面），并重算倒影尺寸
-                ApplyNowPlayingLayout();
-                UpdateNowPlayingReflectionGeometry();
                 // 沉浸式：隐藏底部常驻状态条，改由页内悬浮控制条承担播放控制
                 ShowFloatingTransport();
                 // Begin 前把 TargetName 全部换成代码 SetTarget（否则 mcBack.Begin() 必抛

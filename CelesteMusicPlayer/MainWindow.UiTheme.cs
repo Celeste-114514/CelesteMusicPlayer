@@ -274,17 +274,6 @@ namespace CelesteMusicPlayer
                     _playlist.CollectionChanged -= OnPlaylistForWaveformPreview;
                     _playlist.CollectionChanged += OnPlaylistForWaveformPreview;
 
-                    // 首次激活兜底：确保信息卡波形已绘制（无论是否播放）
-                    if (WaveformCanvas != null
-                        && (WaveformCanvas.Children.Count == 0 || _waveLevels.All(v => v < 0.05)))
-                    {
-                        for (int i = 0; i < WaveBarCount; i++)
-                        {
-                            _waveLevels[i] = IdleLevel(i);
-                        }
-
-                        DrawVisualSlot();
-                    }
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             });
@@ -690,10 +679,6 @@ namespace CelesteMusicPlayer
                 ApplyGeekButtonCorner(SortFieldButton, geek, 4);
                 ApplyGeekButtonCorner(SortOrderButton, geek, 4);
                 ApplyGeekButtonCorner(ChangeSortButton, geek, 4);
-
-                // 终端页底板配色跟模式走；播放页布局菜单也要重建（极客下只有终端一项）
-                ApplyTerminalChrome();
-                RebuildLayoutFlyout();
 
                 // 右侧浏览区重塑：直角 / 细线 / 无药丸（真正把它做成终端风，而不是经典换皮）
                 ApplyGeekBrowseSkin(geek);
@@ -3061,7 +3046,6 @@ namespace CelesteMusicPlayer
             try
             {
                 _waveAccentColor = accent;
-                DrawVisualSlot();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 

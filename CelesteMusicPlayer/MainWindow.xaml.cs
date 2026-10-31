@@ -653,10 +653,6 @@ namespace CelesteMusicPlayer
             // 不弹对话框、不阻塞启动。检查在后台 Low 优先级进行，主界面先渲染、曲库恢复先跑完。
             ScheduleStartupUpdateCheck();
 
-            // 播放信息页布局（经典/水面…）：订阅设置变更让"改设置即时生效"，并先按当前设置套用一次
-            HookNowPlayingLayoutSettings();
-            ApplyNowPlayingLayout();
-
             // 默认 1600×1000；Resize 按 DPI 换算为物理像素。
             // 2026-10-16 用户要求整体 UI 放大：宽 +200（左栏 156→200、进度条 660→720、
             // 波形柱加粗都要地方），高 +200（底部播放栏 86→106 吃掉 20，其余留给内容区）。

@@ -237,7 +237,6 @@ namespace CelesteMusicPlayer
                 {
                     // 布局变了 → 封面尺寸预算也变（水面要给倒影留高度），重算一次。
                     // 面板尚未布局时该方法会自行早退，不必额外判断。
-                    UpdateNowPlayingCardLayout();
                     UpdateNowPlayingReflectionGeometry();
                 }
 

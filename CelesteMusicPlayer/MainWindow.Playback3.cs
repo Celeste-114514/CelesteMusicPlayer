@@ -828,10 +828,6 @@ namespace CelesteMusicPlayer
                     _waveformTimer.Start();
                 }
             }
-            else if (!_waveformTimer.IsRunning)
-            {
-                DrawVisualSlot();
-            }
             // 暂停/停止：若定时器仍在跑，由 Tick 做回落动画后自行 Stop
         }
 
@@ -1791,19 +1787,10 @@ namespace CelesteMusicPlayer
             NowPlayingCoverImage.Source = null;
             _lastCoverImage = null;   // 迷你播放器整窗背景同步清（它读的是大图，不是播放栏缩略图）
             _lastCoverThumbImage = null;   // 迷你播放器 72×72 小封面同步清（Thumb 160 档，见 UpdateTransportCoverAsync）
-            UpdateVinylArt(null);
-            SyncNowPlayingReflection(null);
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             ApplyNowPlayingPaneTransparent();
             UpdateTransportNowPlaying(null, null);
             ClearLyricsUi("开始播放后显示歌词");
-            // 未播放时也填充静态频谱，保证信息卡波形始终可见
-            for (int i = 0; i < WaveBarCount; i++)
-            {
-                _waveLevels[i] = IdleLevel(i);
-            }
-
-            DrawVisualSlot();
             ClearAlbumArtBackground();
         }
 
@@ -1955,8 +1942,6 @@ namespace CelesteMusicPlayer
                     "模式=" + exclusivo + (hifi ? "" : "（系统混音）") +
                     " | DSP: " + dsp;
 
-                // 终端布局的左栏用的是同一批数据，这里顺带刷一次
-                UpdateTerminalInfo();
             }
             catch
             {
@@ -2011,8 +1996,6 @@ namespace CelesteMusicPlayer
 
             NowPlayingCoverImage.Source = coverImage;
             _lastCoverImage = coverImage;   // 迷你播放器整窗背景同步（它读的是大图，不是播放栏缩略图）
-            UpdateVinylArt(coverImage);
-            SyncNowPlayingReflection(coverBytes);
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             UpdateTransportNowPlaying(item, coverImage, applyCover: false);
             _ = UpdateTransportCoverAsync(item.FilePath, coverBytes);
@@ -2166,15 +2149,6 @@ namespace CelesteMusicPlayer
         {
             TimeSpan adj = applyOffset ? OffsetLyricPosition(position) : position;
 
-            // 终端布局歌词面板：与主歌词页同一节拍推进（独立高亮，互不干扰）。
-            // ⚠️ 位置刻意放在主歌词页的早退之前：终端面板有行就该同步，
-            // 不该被主歌词页 TextBlock 列表的状态绑架（用户 2026-09-29 实测
-            // 「高亮不随进度走」，这条尾依赖是排查重点之一）。
-            if (_layoutIsTerminal && _terminalLyricTexts.Count > 0)
-            {
-                SyncTerminalLyricsToPosition(adj);
-            }
-
             if (_lyricLines.Count == 0 || _lyricTextBlocks.Count == 0)
             {
                 return;
@@ -2283,14 +2257,6 @@ namespace CelesteMusicPlayer
                         : Color.FromArgb(255, 154, 154, 154));
                 }
 
-                // 「水面」布局：非当前行按距离连续衰减，离当前句越远越淡（像没入水里）。
-                // 用逐行 Opacity 实现，不是遮罩 —— WinUI 3 的 UIElement 没有 OpacityMask，
-                // 而 ScrollViewer 又没有独立背景，盖一层渐变会露出色带。
-                // 设下限 0.10 保证远处的字仍可辨认（不为了好看牺牲可读性）。
-                if (_layoutIsWater && dist > 0)
-                {
-                    row.Opacity = Math.Max(0.10, 1.0 - dist * 0.16);
-                }
             }
 
             // 用户手动滚动中：仅更新颜色高亮，不强制视口吸附（避免抢走用户正在看的滚动位置）
@@ -2464,8 +2430,7 @@ namespace CelesteMusicPlayer
 
             // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
             global::CelesteMusicPlayer.StartupLog.Write(
-                $"[终端歌词] 双击跳转 target={target.TotalSeconds:F2}s → 强制同步(force=true, applyOffset=false) " +
-                $"layout={_layoutIsTerminal} rows={_terminalLyricTexts.Count}");
+                $"[歌词] 双击跳转 target={target.TotalSeconds:F2}s → 强制同步(force=true, applyOffset=false)");
             SyncLyricsToPosition(target, force: true, applyOffset: false);
             // 单击选中：无视用户滚动状态，把该行滚到中间
             if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
@@ -2548,15 +2513,6 @@ namespace CelesteMusicPlayer
 
                 _waveLevels[i] = next;
             }
-
-            if (changed || playing)
-            {
-                // 按当前可视化模式分发：波形 / 频谱柱 / 示波器（径向由封面画布自己画）
-                DrawVisualSlot();
-            }
-
-            // 终端布局：自己的频谱/电平/相位/播放头（非终端布局里这行直接返回）
-            UpdateTerminalTick();
 
             if (!playing)
             {

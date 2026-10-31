@@ -1471,7 +1471,8 @@ namespace CelesteMusicPlayer
             // 「经典」严格跟随设置里的「背景高斯模糊」开关，你关掉它就是全程序都不糊。
             // ⚠️ 曾经试过改成"播放页单独加一层背景图"，用户反馈像"在主程序上加了一块板子"，
             //    已回退 —— 背景只有这一张整窗图，别再另起一层。
-            bool immersiveLayout = _nowPlayingLayoutName != LayoutClassic;
+            // 布局名直接读设置：求值 _nowPlayingLayoutName 的原生播放页已下线（W13），这里只要那个值。
+            bool immersiveLayout = !string.Equals(AppSettingsStore.Load().NowPlayingLayout, "Classic", StringComparison.OrdinalIgnoreCase);
             int blurRadius = immersiveLayout
                 ? 1
                 : (settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0);

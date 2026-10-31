@@ -181,6 +181,14 @@
     <Compile Remove="MainWindow.FullScreen.cs" />
     <Compile Remove="MainWindow.DspStatus.cs" />
     <!-- _w13_leafcut end -->
+
+    <!-- _w13_npcluster begin -->
+    <!-- 原生播放信息页布局 / 终端页 / 可视化：只写无视觉树的占位控件 -->
+    <Compile Remove="MainWindow.NowPlayingLayout.cs" />
+    <Compile Remove="MainWindow.Terminal.cs" />
+    <Compile Remove="MainWindow.TerminalLyrics.cs" />
+    <Compile Remove="MainWindow.Visualizer.cs" />
+    <!-- _w13_npcluster end -->
 </ItemGroup>
 
   <ItemGroup>

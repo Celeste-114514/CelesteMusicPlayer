@@ -3035,12 +3035,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void WaveformCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            // 按当前可视化模式重绘（波形 / 频谱柱 / 示波器都共用这块画布）
-            DrawVisualSlot();
-        }
-
 
         /// <summary>未播放时的静态频谱形状（始终可见，中间高两边低）。</summary>
         private static double IdleLevel(int index)
@@ -3097,108 +3091,6 @@ namespace CelesteMusicPlayer
             return brush;
         }
 
-
-        private void DrawWaveformBars()
-        {
-            if (WaveformCanvas == null)
-            {
-                return;
-            }
-
-            double width = WaveformCanvas.ActualWidth;
-            double height = WaveformCanvas.ActualHeight;
-            if (width <= 1 || height <= 1)
-            {
-                return;
-            }
-
-            // 兜底：_waveLevels 全为 0 时填充静态频谱
-            bool allFlat = true;
-            for (int i = 0; i < WaveBarCount; i++)
-            {
-                if (_waveLevels[i] > 0.05)
-                {
-                    allFlat = false;
-                    break;
-                }
-            }
-
-            if (allFlat)
-            {
-                for (int i = 0; i < WaveBarCount; i++)
-                {
-                    _waveLevels[i] = IdleLevel(i);
-                }
-            }
-
-            double gap = 2;
-            bool water = _layoutIsWater;
-            int mainCount = WaveBarCount;
-            int total = water ? mainCount * 2 : mainCount;
-            double barWidth = Math.Max(2, (width - gap * (mainCount - 1)) / mainCount);
-
-            // 扩容到 total（水面需 main + 倒影两组）
-            while (WaveformCanvas.Children.Count < total)
-            {
-                WaveformCanvas.Children.Add(new Border
-                {
-                    CornerRadius = new CornerRadius(2.5),
-                    IsHitTestVisible = false
-                });
-            }
-
-            while (WaveformCanvas.Children.Count > total)
-            {
-                WaveformCanvas.Children.RemoveAt(WaveformCanvas.Children.Count - 1);
-            }
-
-            for (int i = 0; i < mainCount; i++)
-            {
-                if (WaveformCanvas.Children[i] is not Border bar)
-                {
-                    continue;
-                }
-
-                Color accent = WaveColorFor(i);
-                bar.Background = new SolidColorBrush(accent);
-
-                double level = Math.Clamp(_waveLevels[i], 0.12, 1.0);
-                if (water)
-                {
-                    // 水面：主柱从 midline 向上长（占上半部分），下半区是从 midline 向下长的镜像倒影（淡出）。
-                    // 这样主柱"在上半部分显示"，倒影"在下半部分"——水面倒影的标准样式。
-                    double half = height * 0.5;
-                    double barHeight = Math.Max(10, Math.Min(half, half * level * 1.15));
-                    double left = i * (barWidth + gap);
-                    bar.Width = barWidth;
-                    bar.Height = barHeight;
-                    Canvas.SetLeft(bar, left);
-                    Canvas.SetTop(bar, half - barHeight);  // 主柱底部贴 midline，向上延伸
-
-                    if (WaveformCanvas.Children[mainCount + i] is Border refl)
-                    {
-                        // 镜像在下半区：从 midline 向下延伸、高度一致，用渐变画刷自上而下淡出。
-                        // 原来用固定 alpha 的纯色块，底部会出现一条"戛然而止"的硬边（用户反馈过于突兀）。
-                        refl.Width = barWidth;
-                        refl.Height = barHeight;
-                        refl.Background = ReflectionBrushFor(i, accent);
-                        Canvas.SetLeft(refl, left);
-                        Canvas.SetTop(refl, half);  // 倒影顶部贴 midline，向下延伸
-                    }
-                }
-                else
-                {
-                    // 经典：整条居中对称
-                    double barHeight = Math.Max(10, Math.Min(height, height * level * 1.15));
-                    double left = i * (barWidth + gap);
-                    double top = (height - barHeight) / 2;
-                    bar.Width = barWidth;
-                    bar.Height = barHeight;
-                    Canvas.SetLeft(bar, left);
-                    Canvas.SetTop(bar, top);
-                }
-            }
-        }
 
 
         /// <summary>引擎开播淡入（约 320ms 渐入到当前音量）。</summary>
