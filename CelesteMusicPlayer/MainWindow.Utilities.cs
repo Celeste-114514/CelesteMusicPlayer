@@ -44,7 +44,6 @@ namespace CelesteMusicPlayer
                 || string.Equals(mode, "Asio", System.StringComparison.OrdinalIgnoreCase);
         }
 
-
         /// <summary>HiFi 独占/ASIO 下主界面音量条是否应解冻：设置页「HiFi 软件音量」开关开启，
         /// 且当前不是 DSD 直出播放（DSD 数据源绕过 DSP 链，软件音量无效，滑块保持冻结）。
         /// 共享模式恒 false（共享下滑条本就实时可调，不经此判断）。</summary>
@@ -65,7 +64,6 @@ namespace CelesteMusicPlayer
                 || src.IndexOf("DSD", System.StringComparison.OrdinalIgnoreCase) < 0;
         }
 
-
         private static string FormatTime(TimeSpan time)
         {
             if (time < TimeSpan.Zero)
@@ -80,7 +78,6 @@ namespace CelesteMusicPlayer
 
             return time.ToString(@"mm\:ss");
         }
-
 
         private static bool ContainsIgnoreCase(string? source, string query)
         {
@@ -108,7 +105,6 @@ namespace CelesteMusicPlayer
 
             return false;
         }
-
 
         /// <summary>中文搜索友好归一化：转小写 → 全角转半角 → 繁体转简体，实现容错匹配（搜繁体命中简体、搜全角命中半角等）。</summary>
         private static string SearchNormalize(string text)
@@ -146,7 +142,6 @@ namespace CelesteMusicPlayer
             return sb.ToString().ToLowerInvariant();
         }
 
-
         private static bool IsAsciiLetters(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -166,7 +161,6 @@ namespace CelesteMusicPlayer
             return true;
         }
 
-
         private static bool ContainsHan(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -185,7 +179,6 @@ namespace CelesteMusicPlayer
             return false;
         }
 
-
         /// <summary>取汉字串的拼音首字母（如“周杰伦”→“zjl”），基于 ToolGood.Words 拼音库。</summary>
         private static string PinyinInitials(string text)
         {
@@ -199,7 +192,6 @@ namespace CelesteMusicPlayer
                 return string.Empty;
             }
         }
-
 
         private static readonly (char Trad, char Simp)[] _tradSimpPairs = new[]
         {
@@ -421,7 +413,6 @@ namespace CelesteMusicPlayer
             ('強','强'),
         };
 
-
         // ⚠ 声明顺序有讲究：_tradSimpPairs 必须在 _tradToSimp 之前，
         // 否则静态初始化器先跑 BuildTradToSimpMap() 时表还是 null，启动即 TypeInitializationException。
         // （2026-10-31 实测踩过：搬把两个声明的先后写反，程序直接起不来。）
@@ -436,7 +427,6 @@ namespace CelesteMusicPlayer
             }
             return d;
         }
-
 
         /// <summary>
         /// 封面解码目标像素 = 元素当前显示尺寸 × 屏幕缩放。
@@ -459,7 +449,6 @@ namespace CelesteMusicPlayer
             return (int)Math.Clamp(Math.Ceiling(layoutPx * CoverRasterizationScale()), 96, 1024);
         }
 
-
         /// <summary>当前屏幕缩放（RasterizationScale，100%=1.0）。取不到按 1.0。</summary>
         private double CoverRasterizationScale()
         {
@@ -474,12 +463,10 @@ namespace CelesteMusicPlayer
             return 1.0;
         }
 
-
         // 封面字节缓存（原在 MainWindow.Library2.cs）。ExtractCoverBytes 搬来这里时把它一起带走，
         // 否则工具文件反过来被壳文件拴住：Library2 一旦退出编译，ExtractCoverBytes 就 CS0103。
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]?> CoverBytesCache = new();
         private const int CoverBytesCacheMax = 200;
-
 
         internal static byte[]? ExtractCoverBytes(string audioPath)
         {
@@ -505,11 +492,6 @@ namespace CelesteMusicPlayer
             CoverBytesCache[audioPath] = result;
             return result;
         }
-
-
-
-
-
 
         // ==== 错误对话框（2026-10-31 从 MainWindow.Misc.cs 搬来）====
         // 22 处调用点分散在 Playback / Playback2 / Playback3 / Library2 / Features，
@@ -600,7 +582,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         // 界面风格与强调色（2026-10-31 从 MainWindow.UiTheme.cs 搬来；只读设置 + 纯计算，不碰控件）
 
         /// <summary>极客界面模式的设置值（设置项「界面风格」下拉里的「极客」）。</summary>
@@ -646,7 +627,6 @@ namespace CelesteMusicPlayer
             return new SolidColorBrush(Color.FromArgb(255, 0, 120, 212));
         }
 
-
         // 极客磷光色（2026-10-31 从 MainWindow.GeekTransport.cs 搬来；纯查表 + 解析设置里的色值）
 
         private static Color PhosphorColor(string? name)
@@ -687,7 +667,6 @@ namespace CelesteMusicPlayer
         /// <summary>当前设置选中的磷光色（极客界面里唯一的彩色）。供桌面歌词等自绘窗口取色。</summary>
         internal static Color GeekPhosphorColor()
             => PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
-
 
         // 封面字节→位图（2026-10-31 从 MainWindow.Misc.cs 搬来）：纯静态解码，与 ExtractCoverBytes 同属封面域。
 

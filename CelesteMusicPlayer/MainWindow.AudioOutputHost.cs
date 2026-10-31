@@ -151,7 +151,6 @@ public sealed partial class MainWindow
 
         // ---- 组合框填充 + 输出模式切换（网页 ChangeOutputMode 直通路径）----
 
-
         private async System.Threading.Tasks.Task FillAudioSettingsDevicesAsync()
         {
             try
@@ -246,7 +245,6 @@ public sealed partial class MainWindow
             card.Background = active ? activeBg : null;
         }
 
-
         /// <summary>内核卡片高亮：只剩原生内核一项（2026-10-16 ECHO 选项已删），恒高亮表示当前生效。</summary>
         private void UpdateEngineCardHighlight(string engine)
         {
@@ -326,11 +324,6 @@ public sealed partial class MainWindow
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
-
-
-
-
-
 
         // ---- 输出设备热插拔（USB DAC / 蓝牙耳机插拔自动切换）----
 
@@ -420,7 +413,6 @@ public sealed partial class MainWindow
         {
             try
             {
-
 
                 _hotplugNoticeTimer ??= DispatcherQueue.CreateTimer();
                 _hotplugNoticeTimer.Interval = TimeSpan.FromSeconds(10);

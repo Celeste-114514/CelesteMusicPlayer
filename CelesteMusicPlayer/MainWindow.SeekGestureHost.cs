@@ -13,7 +13,4 @@ namespace CelesteMusicPlayer;
 public sealed partial class MainWindow
 {
 
-
-
-
     }

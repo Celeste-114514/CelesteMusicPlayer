@@ -52,7 +52,6 @@ namespace CelesteMusicPlayer
             SetPlaybackOrder(order);
         }
 
-
         internal void WebPlayTrack(PlaylistItem item)
         {
             if (item.SourceTrackId.Length == 0 && !_playlist.Contains(item)) throw new InvalidOperationException("曲库已变化，请刷新后重试。");
@@ -76,7 +75,6 @@ namespace CelesteMusicPlayer
             if (_webShellWindow == null) return;
             DispatcherQueue.TryEnqueue(() => _webShellWindow?.NotifyHomeChanged());
         }
-
 
     }
 }

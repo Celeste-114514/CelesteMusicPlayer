@@ -26,9 +26,6 @@ namespace CelesteMusicPlayer
         /// 这里只留页面的行缓存。</summary>
         private readonly List<DspProfile> _dspProfileRows = new();
 
-
-
-
         /// <summary>
         /// 生效方案与当前设置比对：不一致 = 用户已经在别处改过，就地降级为「手动设置」。
         /// 每个刷新入口（导航圆点 / 页面徽章 / 进页面）先过这一道，判断是懒执行但最终一定成立。
@@ -82,7 +79,6 @@ namespace CelesteMusicPlayer
                 SrcDither = string.IsNullOrWhiteSpace(settings.SrcDither) ? "off" : settings.SrcDither
             };
         }
-
 
         // ─────────────────────────────────────────────────────────────
         // 应用：一份方案快照 → store → 面板 → 引擎
@@ -189,8 +185,6 @@ namespace CelesteMusicPlayer
         // 页面事件：保存 / 应用 / 更新 / 删除
         // ─────────────────────────────────────────────────────────────
 
-
-
         /// <summary>保存方案核心（网页「音效处理」页直接调，name 由调用方给）。</summary>
         internal void SaveDspProfileCore(string rawName)
         {
@@ -233,7 +227,6 @@ namespace CelesteMusicPlayer
 
                 ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
 
-
                 UpdateDspNavIndicators();
                 StartupLog.Write("[听音方案] 已保存「" + name + "」(覆盖=" + replaced + ") EQ段=" + (fresh.Eq?.Bands?.Count ?? 0));
             }
@@ -242,7 +235,6 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.DspProfiles.cs", caught);
             }
         }
-
 
         /// <summary>应用选中方案核心（网页「音效处理」页直接调）。</summary>
         internal void ApplySelectedDspProfileCore()
@@ -255,7 +247,6 @@ namespace CelesteMusicPlayer
 
             ApplyDspProfile(row);
         }
-
 
         /// <summary>更新选中方案为当前设置核心（网页「音效处理」页直接调）。</summary>
         internal void UpdateSelectedDspProfileCore()
@@ -302,7 +293,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>删除选中方案核心（网页「音效处理」页直接调）。</summary>
         internal void DeleteSelectedDspProfileCore()
         {
@@ -330,7 +320,6 @@ namespace CelesteMusicPlayer
                 {
                     ProfileCoordinator.Clear();
                 }
-
 
                 UpdateDspNavIndicators();
                 StartupLog.Write("[听音方案] 已删除「" + name + "」");

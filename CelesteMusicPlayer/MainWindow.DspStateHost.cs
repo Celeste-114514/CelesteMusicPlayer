@@ -197,7 +197,6 @@ public sealed partial class MainWindow
             StartupLog.Write($"房间校正已应用: enabled={state.Enabled} ir={state.IrPath} gain={state.GainDb}dB");
         }
 
-
         /// <summary>
         /// 把开关状态同步成各模块真实状态（导航指示刷新的末端一步）。
         /// 全程 <see cref="_dspPowerSyncing"/> 守卫，避免回写 IsOn 时二次触发 handler 形成回路。
@@ -208,8 +207,6 @@ public sealed partial class MainWindow
         private double _dspHeadroomMemory { get => ExtraParameters.HeadroomMemory; set => ExtraParameters.HeadroomMemory = value; }
         private double _dspXfeedMemory { get => ExtraParameters.CrossfeedMemory; set => ExtraParameters.CrossfeedMemory = value; } // 耳机 Crossfeed 的强度百分比
         // DSP 批 2：bit-perfect 徽章口径三件套离壳
-
-
 
         // DSP 批 3：EQ 撤销/快照族的干净伴生离壳
 
@@ -483,10 +480,7 @@ public sealed partial class MainWindow
         internal Brush DspAccentBrush()
             => GeekDspAccentColor() is Color accent ? new SolidColorBrush(accent) : ResolveAccentBrush();
 
-
-
         // DSP 批 5：EQ 简单模式族与面板构建离壳
-
 
         /// <param name="restoreFromStore">true=从持久化恢复上次滑块值；false=清空（用于重置按钮）。</param>
         private void SyncAudioFxEqSimpleFromState(bool restoreFromStore = true)
@@ -557,7 +551,6 @@ public sealed partial class MainWindow
 
         // DSP 批 5：单声道下拉构建离壳
 
-
         private void SelectAudioFxMonoMode(string mode)
         {
             for (int i = 0; i < AudioFxChannelMonoCombo.Items.Count; i++)
@@ -574,7 +567,6 @@ public sealed partial class MainWindow
         private Color? _geekDspPhosphor;
         private bool _audioFxEqBuilt;
         private double _eqSimpleBass, _eqSimpleVocal, _eqSimpleAir, _eqSimpleWarm;
-
 
         /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ。</summary>
         internal void ApplyOpraCurve(EqCurveState curve)

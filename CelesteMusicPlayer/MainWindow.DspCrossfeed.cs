@@ -36,8 +36,6 @@ namespace CelesteMusicPlayer
         private const double XfeedDbMin = -66.0;
         private const double XfeedDbMax = 6.0;
 
-
-
         /// <summary>
         /// 曲线用的采样率：crossfeed 位于 SRC 之后，看到的是重采样后的流，
         /// 所以 SRC 开了就用 SRC 目标值；没开则取 48 kHz 这个最常见的基准，

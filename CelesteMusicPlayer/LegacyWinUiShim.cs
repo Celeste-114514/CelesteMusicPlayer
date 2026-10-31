@@ -302,7 +302,6 @@ namespace Microsoft.UI.Xaml
 
         public event global::Microsoft.UI.Xaml.AnyEventHandler? TextChanging;
 
-
         public event global::Microsoft.UI.Xaml.AnyEventHandler? DropDownOpened;
 
         public event global::Microsoft.UI.Xaml.AnyEventHandler? DropDownClosed;
@@ -343,7 +342,6 @@ namespace Microsoft.UI.Xaml
 
         public event global::Microsoft.UI.Xaml.AnyEventHandler? SelectionChanged;
 
-
         public bool Focus(object? value = null) => true;
         public void UpdateLayout() { }
         public void InvalidateMeasure() { }
@@ -380,9 +378,6 @@ namespace Microsoft.UI.Xaml
         protected virtual Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize) => new Windows.Foundation.Size(0, 0);
         protected virtual Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize) => finalSize;
         protected virtual void OnApplyTemplate() { }
-
-
-
 
         public double ActualOffset { get; set; }
 
@@ -443,8 +438,6 @@ namespace Microsoft.UI.Xaml
     public partial class DataTemplate : DependencyObject
     {
     }
-
-
 
     public partial class ItemsPanelTemplate : DependencyObject
     {
@@ -716,7 +709,6 @@ namespace Microsoft.UI.Xaml.Controls
     {
     }
 
-
     public partial class ContentPresenter : Microsoft.UI.Xaml.FrameworkElement
     {
     }
@@ -752,7 +744,6 @@ namespace Microsoft.UI.Xaml.Controls
     public partial class SplitView : Control
     {
     }
-
 
     public partial class InfoBar : Control
     {
@@ -806,7 +797,6 @@ namespace Microsoft.UI.Xaml.Controls
     {
     }
 
-
     public partial class Inline : Microsoft.UI.Xaml.FrameworkElement
     {
     }
@@ -834,7 +824,6 @@ namespace Microsoft.UI.Xaml.Controls
     public partial class Paragraph : Microsoft.UI.Xaml.FrameworkElement
     {
     }
-
 
     public partial class ComboBox2 : Control
     {
@@ -961,8 +950,6 @@ namespace Microsoft.UI.Xaml.Controls
 
     public enum TeachingTipPlacementMode { Auto = 0, Top = 1, Bottom = 2, Left = 3, Right = 4, TopLeft = 5, TopRight = 6, BottomLeft = 7, BottomRight = 8, LeftTop = 9, LeftBottom = 10, RightTop = 11, RightBottom = 12, Center = 13 }
 
-
-
     public enum ContentDialogResult { None = 0, Primary = 1, Secondary = 2 }
 
     public sealed partial class ContentDialog : ContentControl
@@ -988,7 +975,6 @@ namespace Microsoft.UI.Xaml.Controls
     {
         public double Value { get; set; }
     }
-
 
 }
 
@@ -1217,27 +1203,6 @@ namespace Microsoft.UI.Xaml.Media
     public partial class VisualTransition : Microsoft.UI.Xaml.DependencyObject
     {
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     public static class EasingFunctionBase2 { }
 

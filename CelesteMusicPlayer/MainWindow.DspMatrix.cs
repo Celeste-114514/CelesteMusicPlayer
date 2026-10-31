@@ -27,9 +27,5 @@ namespace CelesteMusicPlayer
         /// <summary>两条对角弧在中点的分离距离（px）。不分开的话会重成一条线。</summary>
         private const double MatrixArcSpread = 26.0;
 
-
-
-
-
     }
 }

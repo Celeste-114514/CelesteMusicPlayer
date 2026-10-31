@@ -119,7 +119,6 @@ namespace CelesteMusicPlayer
         // 事件：压缩器
         // ─────────────────────────────────────────────────────────────
 
-
         /// <summary>把模型里的压缩器参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyCompParameters()
         {
@@ -127,14 +126,9 @@ namespace CelesteMusicPlayer
             PushDspRackToEngine();
         }
 
-
-
-
-
         // ─────────────────────────────────────────────────────────────
         // 事件：立体声场
         // ─────────────────────────────────────────────────────────────
-
 
         /// <summary>把模型里的声场参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyFieldParameters()
@@ -143,12 +137,9 @@ namespace CelesteMusicPlayer
             PushDspRackToEngine();
         }
 
-
-
         // ─────────────────────────────────────────────────────────────
         // 事件：声道矩阵
         // ─────────────────────────────────────────────────────────────
-
 
         /// <summary>把模型里的矩阵参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyMatrixParameters()
@@ -156,8 +147,6 @@ namespace CelesteMusicPlayer
             RefreshDspMatrixReadouts();
             PushDspRackToEngine();
         }
-
-
 
         // ─────────────────────────────────────────────────────────────
         // 机架编排（链路全景视图）—— 行模型 DspRackRow 见本文件底部顶层类
@@ -171,7 +160,6 @@ namespace CelesteMusicPlayer
             Bypassed = 2
         }
 
-
         private List<DspRackRow> _dspRackRows = new();
 
         /// <summary>当前是否被 DSP 总旁路（总旁路时机架行一律显示"已旁路"）。</summary>
@@ -180,14 +168,6 @@ namespace CelesteMusicPlayer
         // ─────────────────────────────────────────────────────────────
         // 事件：机架编排
         // ─────────────────────────────────────────────────────────────
-
-
-
-
-
-
-
-
 
         /// <summary>恢复默认机架顺序核心（网页「音效处理」页直接调）。</summary>
         internal void ResetDspRackOrderCore()
@@ -212,9 +192,6 @@ namespace CelesteMusicPlayer
         // 新模块的"是否生效"判定（供导航圆点 / 页徽章）
         // 口径沿用既有约定：并非"开关打开"就算，而是真的对声音产生影响才算。
         // ─────────────────────────────────────────────────────────────
-
-
-
 
     }
 

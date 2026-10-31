@@ -31,8 +31,6 @@ namespace CelesteMusicPlayer
             (ResamplingSourceProvider.QualityTransparent, 0.94),
         };
 
-
-
         internal void RedrawSrcCanvas()
         {
             RedrawSrcChain();
@@ -42,7 +40,6 @@ namespace CelesteMusicPlayer
         // ─────────────────────────────────────────────────────────────
         // 用法卡片
         // ─────────────────────────────────────────────────────────────
-
 
         // ─────────────────────────────────────────────────────────────
         // 链路图

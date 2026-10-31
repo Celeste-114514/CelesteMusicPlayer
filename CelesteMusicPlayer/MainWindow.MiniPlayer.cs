@@ -45,7 +45,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>设置里开了「启动时打开迷你播放器」时，首次激活后调一次。</summary>
         internal void OpenMiniPlayerIfStartupEnabled()
         {

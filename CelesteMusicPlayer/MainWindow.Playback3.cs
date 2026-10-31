@@ -37,7 +37,6 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
@@ -54,7 +53,6 @@ namespace CelesteMusicPlayer
                 }
             }
         }
-
 
         private void ApplySongListItemSelectionChrome(
             ListView list,
@@ -165,8 +163,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
         // =====================================================================
         // 底部控制按钮
         // =====================================================================
@@ -263,20 +259,9 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
         // =====================================================================
         // 进度条 / 音量
         // =====================================================================
-
-
-
-
-
-
-
-
 
         private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
         {
@@ -302,7 +287,6 @@ namespace CelesteMusicPlayer
 
         }
 
-
         /// <summary>音量写盘去抖:停止拖动 300ms 后才保存一次,避免每 tick 全量写盘。</summary>
         private void ScheduleVolumeSave(double value)
         {
@@ -315,7 +299,6 @@ namespace CelesteMusicPlayer
             _volumeSaveTimer.Start();
         }
 
-
         private void OnVolumeSaveTick(dynamic sender, dynamic e)
         {
             try
@@ -327,14 +310,11 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
-
-
         // 迷你播放器相关方法（MiniPlayerButton_Click / SetMiniPlayerEnabled /
         // EnsureMiniPlayerWindow / OnMiniPlayerClosedByUser / UpdateMiniPlayerBadge）
         // 2026-10-19 全部移除：用户对现在的迷你播放器很不满意，删掉重做，
         // 重建方案见 outputs/迷你播放器重建方案-2026-10-19.md。
         // 主窗口这侧的入口按钮（MiniPlayerButton）也一并从 MainWindow.xaml 里去掉了。
-
 
         // ---- Mini player / desktop lyrics helpers ----
 
@@ -378,7 +358,6 @@ namespace CelesteMusicPlayer
         /// <summary>下标与实际播放不一致的日志签名，避免每秒刷屏。</summary>
         private string _stateMismatchLogged = "";
 
-
         internal ImageSource? GetCurrentCoverImage() => _lastCoverImage;
 
         /// <summary>
@@ -417,7 +396,6 @@ namespace CelesteMusicPlayer
                 PlaybackOrder.TrackOnce => "\uE72A",
                 _ => "\uE8EE"
             };
-
 
         internal void CyclePlaybackOrderPublic() => PlaybackOrderButton_Click(this, new RoutedEventArgs());
 
@@ -458,14 +436,12 @@ namespace CelesteMusicPlayer
                 ApplyCategoryViewData();
             }
 
-
             // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
             _taskbarButtons?.UpdateFavorite(fav);
 
             NotifyWebHomeChanged();
             StartupLog.Write("[托盘] " + (fav ? "已收藏 " : "已取消收藏 ") + path);
         }
-
 
         /// <summary>迷你播放器等外部入口：按"原歌曲时间"跳转（自动处理变速倍率换算）。</summary>
         internal void SeekSourceSeconds(double seconds)
@@ -500,7 +476,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
-
 
         // =====================================================================
         // 迷你播放器专用公开接口
@@ -548,7 +523,6 @@ namespace CelesteMusicPlayer
                 && (TrackStatsStore.Get(path)?.IsFavorite ?? false);
         }
 
-
         private void PersistDesktopLyricPosition()
         {
             try
@@ -568,7 +542,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
-
 
         // =====================================================================
         // MediaPlayer 事件
@@ -606,7 +579,6 @@ namespace CelesteMusicPlayer
             });
         }
 
-
         private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
         {
             DispatcherQueue.TryEnqueue(() =>
@@ -617,7 +589,6 @@ namespace CelesteMusicPlayer
                 _desktopLyricsWindow?.SetPlaybackPaused(!playing && sender.PlaybackState != MediaPlaybackState.Opening);
             });
         }
-
 
         private void UpdateWaveformTimerForPlaybackState(bool playing)
         {
@@ -637,12 +608,10 @@ namespace CelesteMusicPlayer
             // 暂停/停止：若定时器仍在跑，由 Tick 做回落动画后自行 Stop
         }
 
-
         private void Player_MediaEnded(MediaPlayer sender, object args)
         {
             DispatcherQueue.TryEnqueue(HandleMediaEnded);
         }
-
 
         private void Player_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
         {
@@ -670,7 +639,6 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-
                 // args.ErrorMessage 在某些场景（如设备独占失败、续播恢复时源已释放）下为空，
                 // 仅靠它无法定位根因。补上 Error / HResult / ExtendedErrorCode / 当前源，
                 // 并同时写日志，方便用户把详细信息发回来定位。
@@ -687,7 +655,6 @@ namespace CelesteMusicPlayer
                 await ShowErrorAsync("无法播放", detail);
             });
         }
-
 
         private void UpdateTaskbarProgress(TimeSpan position)
         {
@@ -714,7 +681,6 @@ namespace CelesteMusicPlayer
 
             _taskbarProgress.SetProgress(position.TotalSeconds, totalSeconds, paused);
         }
-
 
         private void PositionTimer_Tick(dynamic sender, dynamic e)
         {
@@ -752,7 +718,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>按钮组相对播放栏中轴的偏移量（px）：0 = 正好落在窗口左右中轴上。</summary>
         private const double TransportButtonsShiftX = 0;
 
@@ -785,24 +750,14 @@ namespace CelesteMusicPlayer
         ///    changed 恒真时永远走不到，定时器跑一辈子。
         /// </summary>
 
-
-
-
         private static Color Darken(Color c, double t)
             => Color.FromArgb(255, (byte)(c.R * (1 - t)), (byte)(c.G * (1 - t)), (byte)(c.B * (1 - t)));
-
-
-
-
-
-
 
         /// <summary>播放列表内容变化时,若未播放则尝试预览波形(列表恢复完成后自动触发)。</summary>
         private void OnPlaylistForWaveformPreview(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
             TryLoadWaveformPreview();
         }
-
 
         /// <summary>未播放时加载列表选中(或第一首)歌曲的波形预览。</summary>
         private void TryLoadWaveformPreview()
@@ -821,7 +776,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>延迟重试:等媒体库异步恢复完成后再尝试加载预览波形。</summary>
         private async System.Threading.Tasks.Task RetryWaveformPreviewLaterAsync()
         {
@@ -832,7 +786,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
-
 
         /// <summary>将当前播放队列保存为命名播放列表（Poweramp 式持久化，不影响当前队列）。</summary>
         internal void SaveCurrentQueueAsPlaylist(string name)
@@ -858,7 +811,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>把命名单歌曲追加到当前播放队列（不播放、不替换）。</summary>
         internal void AddNamedPlaylistToQueue(string name)
         {
@@ -880,7 +832,6 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("AddNamedPlaylistToQueue", ex);
             }
         }
-
 
         /// <summary>把命名播放列表载入当前队列并开始播放（队列替换为列表内容）。</summary>
         internal async System.Threading.Tasks.Task LoadNamedPlaylistToQueueAndPlayAsync(string name)
@@ -924,7 +875,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>已保存的命名播放列表名（供 UI 列示，含“我喜欢的音乐”）。</summary>
         internal IReadOnlyList<string> ListNamedPlaylists() => NamedPlaylistStore.List();
 
@@ -951,9 +901,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
         private void ClearNowPlayingPanel()
         {
             // 保留旧波形:停止/切歌时进度条静态显示上次波形,不闪占位
@@ -967,7 +914,6 @@ namespace CelesteMusicPlayer
             ClearLyricsUi("开始播放后显示歌词");
             ClearAlbumArtBackground();
         }
-
 
         /// <param name="coverKnown">
         /// false = 封面还在后台解析中（切歌瞬间先刷标题的那次调用）：
@@ -991,7 +937,6 @@ namespace CelesteMusicPlayer
             {
             }
         }
-
 
         /// <summary>
         /// 播放栏（底部条）左侧那颗小封面的加载：按自己的显示尺寸取 **Thumb 档**（分档磁盘缓存）。
@@ -1029,13 +974,11 @@ namespace CelesteMusicPlayer
             global::CelesteMusicPlayer.StartupLog.Write(
                 $"[播放栏封面] 缓存={(fromCache ? "命中" : "现解码")} 像素={thumb.PixelWidth}x{thumb.PixelHeight}");
 
-
             // 迷你播放器 72×72 小封面共用这一张（Thumb 160 档）：它以前拿播放页大图
             // （Large 768）硬缩到 72，十倍缩小必糊 —— 用户 10-19 报「缩略图也糊」。
             // 与播放栏共用同一张图、零额外解码；切歌竞态上面已挡（旧结果不会覆盖新状态）。
             _lastCoverThumbImage = thumb;
         }
-
 
         /// <summary>独占/HiFi 输出时显示实际输出格式（WASAPI 设备端采样率/位深）；无则清空该行。</summary>
         private void UpdateNowPlayingOutputFormat()
@@ -1046,7 +989,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
-
 
         /// <summary>信号链调试面板：实时显示 源格式→输出格式→是否独占→是否经过 DSP（对标 foobar 排障"假 bit-perfect"）。</summary>
         internal void UpdateSignalChainDisplay()
@@ -1082,13 +1024,11 @@ namespace CelesteMusicPlayer
                     dsp = eqOn ? "EQ=on" : "EQ=off";
                 }
 
-
             }
             catch
             {
             }
         }
-
 
         private async Task UpdateNowPlayingPanelAsync(PlaylistItem item)
         {
@@ -1159,21 +1099,16 @@ namespace CelesteMusicPlayer
             _ = MaybeAutoDownloadExtrasAsync(item, lyrics, coverBytes);
         }
 
-
         // 「点艺术家超链接进详情」的处理器已于 2026-10-31 删除：它从未接到任何按钮的 Click
         // （LegacyControls 造的那个 Button 只被设置 IsEnabled，没人订阅），属于死代码；
         // 新外壳的艺术家详情在 artists.js 里，走网页导航。
-
-
 
         private void UpdateNowPlayingArtistAlbumText(PlaylistItem item)
         {
             bool hasArtist = !string.IsNullOrWhiteSpace(item.Artist) && item.Artist != "未知艺术家";
             bool hasAlbum = !string.IsNullOrWhiteSpace(item.Album) && item.Album != "未知专辑";
 
-
         }
-
 
         /// <summary>播放面板背景保持透明，与专辑详情页一致（露出主程序背景，非浮层）。
         /// ⚠️ 必须用"透明画刷"而不是 null：WinUI 里 Background=null 的元素不参与命中测试，
@@ -1185,7 +1120,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
-
 
         /// <summary>
         /// 按播放位置算出"当前唱到第几句"，写进 <see cref="_currentLyricIndex"/>。
@@ -1221,20 +1155,12 @@ namespace CelesteMusicPlayer
             _currentLyricIndex = index;
         }
 
-
         /// <summary>把播放位置按用户手动偏移换算成歌词匹配位置（正偏移=歌词延后显示）。</summary>
         private static TimeSpan OffsetLyricPosition(TimeSpan position)
         {
             double ms = AppSettingsStore.Load()?.LyricOffsetMs ?? 0.0;
             return position - TimeSpan.FromMilliseconds(ms);
         }
-
-
-
-
-
-
-
 
         private void WaveformTimer_Tick(dynamic sender, dynamic e)
         {
@@ -1305,7 +1231,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         // =====================================================================
         // 播放核心
         // =====================================================================
@@ -1337,7 +1262,6 @@ namespace CelesteMusicPlayer
 
             StartPlayback(item);
         }
-
 
         private void PlayUserPlaylistAt(int index)
         {
@@ -1375,7 +1299,6 @@ namespace CelesteMusicPlayer
             PersistPlaybackSession();
             NotifyCurrentPlaylistWindow();
         }
-
 
         /// <summary>
         /// 把队列里 index 处的 .iso 抽取为逐轨 DSF，并就地展开进队列（首轨留在原 index），
@@ -1448,7 +1371,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         private void StartPlayback(PlaylistItem item)
         {
             // 所有起播（手点、自动续播、无缝重建、命令行）都经过这里：
@@ -1500,7 +1422,6 @@ namespace CelesteMusicPlayer
 
         }
 
-
         /// <summary>
         /// 就绪态（还没开播）下用户点了歌词或拖了进度条：记下目标位置，直接把当前这首起播。
         /// 引擎起来后由 ApplyPendingStartPosition 定位过去。
@@ -1518,7 +1439,6 @@ namespace CelesteMusicPlayer
             _pendingStartPath = item.FilePath;
             StartPlayback(item);
         }
-
 
         /// <summary>
         /// 起播成功后，把"待应用的起始位置"真正落下去。
@@ -1581,14 +1501,12 @@ namespace CelesteMusicPlayer
                     UpdateWaveformTimerForPlaybackState(false);
                     MediaSession.SetStatus(MediaPlaybackStatus.Paused);
 
-
                     _taskbarButtons?.UpdatePlayPause(false);
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             }
 
         }
-
 
         /// <summary>引擎播放前异步设置源实际时长（DSD 用 ffmpeg 探测真实音轨时长，其它用元数据时长），
         /// 作为进度/播完上限规避 DSD 转 PCM 转码 WAV 尾部 padding 的时长越界。</summary>
@@ -1610,8 +1528,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
-
-
         /// <summary>用 FFmpeg 引擎播放扩展格式（APE/WavPack 等）。</summary>
         private async Task PlayExtendedWithEngineAsync(PlaylistItem item)
         {
@@ -1622,7 +1538,6 @@ namespace CelesteMusicPlayer
             {
                 Journal.RecordHistory(completed: false);
             }
-
 
             // 引擎接线（建引擎 / 输出模式 / 设备 / EQ / DSP / 房间校正 / ReplayGain）全部在会话里。
             // 这里只要两样：给面板用的 ReplayGain 数据，以及"能不能刷读数"。
@@ -1696,8 +1611,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
         private async Task FadeInEngineAfterResumeAsync(double target)
         {
             // 防御：若读到的暂停音量异常(<=1%≈静音误判)，回退全音量，避免恢复后设备音量停在约 0 造成"系统托盘音量归0"。
@@ -1727,7 +1640,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         private void OnEnginePlaybackEnded()
         {
             _ = DispatcherQueue.TryEnqueue(() =>
@@ -1743,7 +1655,6 @@ namespace CelesteMusicPlayer
                 HandleMediaEnded();
             });
         }
-
 
         /// <summary>顺序播放时确定"当前曲目之后"的一首（播放队列优先，否则媒体库列表）。</summary>
         private PlaylistItem? ResolveSequentialNextItem(PlaylistItem current)
@@ -1784,7 +1695,6 @@ namespace CelesteMusicPlayer
 
             return null;
         }
-
 
         /// <summary>
         /// 无缝切到预加载的下一首：更新正在播放信息与索引，并继续预加载下下首。
@@ -1829,7 +1739,6 @@ namespace CelesteMusicPlayer
             });
         }
 
-
         /// <summary>无缝切歌后同步用户播放队列当前索引（命中则设为该项）。</summary>
         private void AdvanceUserPlaylistIndexTo(PlaylistItem item)
         {
@@ -1840,7 +1749,6 @@ namespace CelesteMusicPlayer
                 _queue.Index = idx;
             }
         }
-
 
         /// <summary>
         /// 拿到 SMTC 专用宿主 MediaPlayer（懒创建），并确保它挂着"静音循环占位源"真正开始一个音频播放会话。

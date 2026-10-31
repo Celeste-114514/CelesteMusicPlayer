@@ -21,8 +21,6 @@ public sealed partial class MainWindow
 
         // W13 第二十八刀：导入 M3U / 播放 CUE
 
-
-
         /// <summary>
         /// 解析 .cue 分轨表并播放（手动「打开 CUE…」与双击 .cue 文件关联共用）。
         /// 分轨条目带 StartTimeSeconds，由引擎按区间转码播出（见 PlayExtendedWithEngineAsync）。
@@ -78,6 +76,5 @@ public sealed partial class MainWindow
             AddSongsToUserPlaylist(cueItems);
             PlayPlaylistItem(cueItems[0]);
         }
-
 
     }

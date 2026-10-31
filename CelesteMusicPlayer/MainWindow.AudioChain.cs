@@ -20,22 +20,14 @@ namespace CelesteMusicPlayer
         /// <summary>抽屉宽度（px）。与 XAML 里 AudioChainPanelHost.Width、两个 Storyboard 的 From/To 必须一致。</summary>
         private const double AudioChainPanelWidth = 420;
 
-
         /// <summary>
         /// 收起动画 Completed 的订阅去重：早期版本每次收起都 += 一个新 handler，
         /// 多点几次就会叠加（同一收起动作被重复处理）。先退订再订，只留一个。
         /// </summary>
         private EventHandler<object>? _audioChainCloseCompleted;
 
-
-
         /// <summary>打开动画的兜底复查定时器（只跑一次，用完即弃）。</summary>
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _chainOpenFallbackTimer;
-
-
-
-
-
 
         private void HideAudioChainPanel()
         {

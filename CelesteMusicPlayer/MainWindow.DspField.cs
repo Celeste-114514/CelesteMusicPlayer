@@ -31,7 +31,6 @@ namespace CelesteMusicPlayer
         /// 松手（PointerReleased）时统一补一次下发。
         /// </summary>
 
-
         /// <summary>拖动杆的垂直分量能影响的中间/两侧偏向范围（dB）。刻意留±6，避免拖一把就极端。</summary>
         private const double FieldDragTiltDb = 6.0;
 
@@ -40,11 +39,6 @@ namespace CelesteMusicPlayer
         /// 真实值取决于当前这首歌，只能取一个常见混音的代表值，UI 上如实写明是估算。
         /// </summary>
         private const double FieldAssumedInputCorrelation = 0.5;
-
-
-
-
-
 
         /// <summary>圆环几何：圆心 + 半径（画布较短边的 40% 上下，留出标签空间）。</summary>
         private (double cx, double cy, double r) GetDspFieldRingGeometry()

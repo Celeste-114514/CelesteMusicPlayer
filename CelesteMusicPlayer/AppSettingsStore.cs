@@ -42,7 +42,6 @@ namespace CelesteMusicPlayer
         /// 音量由 DAC 硬件旋钮 / 系统端点音量控制（不破坏直通）。DSD/DoP 直出时此开关无效。默认关。</summary>
         public bool HiFiSoftwareVolume { get; set; }
 
-
         /// <summary><see cref="PlaybackOrder"/> 名称</summary>
         public string PlaybackOrder { get; set; } = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
 

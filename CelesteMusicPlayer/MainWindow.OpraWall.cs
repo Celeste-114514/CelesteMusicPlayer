@@ -86,7 +86,6 @@ namespace CelesteMusicPlayer
             bool active = _opraSourceFilter != null
                 && _opraSourceFilter == (community ? "community" : "opra");
 
-
             // 主动筛查时加一圈强调边框，让「点了有效果」看得见
         }
 
@@ -113,14 +112,12 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-
             }
             catch (Exception caught)
             {
                 StartupLog.WriteException("MainWindow.BuildOpraVendorWall", caught);
             }
         }
-
 
         // ─────────────────────────────────────────────────────────────
         // 最近用过 / 收藏
@@ -162,8 +159,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
         /// <summary>应用成功后把这条记进「最近用过」（收藏不动）。</summary>
         private void NoteOpraApplied(OpraCorrection corr)
         {
@@ -177,9 +172,6 @@ namespace CelesteMusicPlayer
         // ─────────────────────────────────────────────────────────────
         // 徽章 + 曲线预览
         // ─────────────────────────────────────────────────────────────
-
-
-
 
         internal void RedrawOpraCanvas()
         {
@@ -376,7 +368,6 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("MainWindow.RedrawOpraPreview", caught);
             }
         }
-
 
         private static UIElement MakeOpraLabel(string text, double x, double y, double width, TextAlignment align, Color color)
         {

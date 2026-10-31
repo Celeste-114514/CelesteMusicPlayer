@@ -286,8 +286,6 @@ public sealed partial class MainWindow
 
         // W13 第二十五刀：专辑墙/艺术家专辑 行样式事件入口
 
-
-
         // W13 第二十五刀：文件夹浏览 行样式事件入口
 
     }

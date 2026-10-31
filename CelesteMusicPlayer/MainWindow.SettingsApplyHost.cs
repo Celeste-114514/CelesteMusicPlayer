@@ -24,7 +24,6 @@ public sealed partial class MainWindow
 {
         private int _recentRangeDaysApplied = -1;
         private double _appliedMainLyricFontSize = -1;
-        private string? _appliedMainLyricFontFamily;
         private string? _lastAppliedUiStyleMode;
         // ---- 置顶 / 桌面歌词设置联动 ----
 
@@ -266,7 +265,6 @@ public sealed partial class MainWindow
             if (!settings.ShowSpectrum)
             {
 
-
                 return;
             }
 
@@ -456,8 +454,6 @@ public sealed partial class MainWindow
                     _cachedMultiSelectFrostBrush = null;
 
                     // 背景图层全部隐藏（含视频暂停）
-
-
 
                     StopCustomBackgroundVideo();
                     StopBackgroundMotion();

@@ -37,7 +37,6 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
@@ -59,7 +58,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>受支持的音频扩展名：单一真相源在 LibraryFolderScan（这里只是给本文件的老调用点留个名字）。</summary>
         private static readonly string[] AudioExtensions = LibraryFolderScan.AudioExtensions;
-
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", CharSet = CharSet.Unicode)]
         private static extern nint SetWindowLongPtr64(nint hWnd, int nIndex, nint dwNewLong);
@@ -141,7 +139,6 @@ namespace CelesteMusicPlayer
         private int _currentIndex = -1;
         // W13：旧「当前播放列表 / 播放队列」独立窗口随 XAML 界面下线（网页界面自带队列）。
 
-
         private void InitializePlayerAndTimers()
         {
             if (_mediaPlayer != null)
@@ -163,7 +160,6 @@ namespace CelesteMusicPlayer
             UpdateSignalChainDisplay();
             UpdateDesktopLyricsBadge();
             InitializeMusicPlayer2Features();
-
 
             _positionTimer = DispatcherQueue.CreateTimer();
             _positionTimer.Interval = TimeSpan.FromMilliseconds(200);
@@ -219,7 +215,6 @@ namespace CelesteMusicPlayer
             _ = RestoreLastLibraryThenPendingFileAsync();
         }
 
-
         /// <summary>音量、播放模式等可立即应用的启动设置。</summary>
         private void ApplyStartupPlaybackSettings()
         {
@@ -257,7 +252,6 @@ namespace CelesteMusicPlayer
             _ = ApplyOutputDeviceAsync(settings.OutputDeviceId);
             OutputMode.Apply(settings);
         }
-
 
         /// <summary>应用 HiFi 输出设备：记录到引擎偏好并设置 MediaPlayer 输出设备。</summary>
         private async System.Threading.Tasks.Task ApplyOutputDeviceAsync(string deviceId)
@@ -302,7 +296,6 @@ namespace CelesteMusicPlayer
             // 按设备记忆：应用设备后套用该设备的 DSP 配置档（无存档则跳过，不覆盖全局配置）
             ApplyDeviceDspProfileIfEnabled(deviceId);
         }
-
 
         /// <summary>
         /// 当前是否"真的在出声"。引擎优先、其次 MediaPlayer —— 两条播放路径都问一遍，
@@ -353,12 +346,6 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.SyncTransportPlayState", caught);
             }
         }
-
-
-
-
-
-
 
         /// <summary>恢复上次正在播放的歌曲到界面（暂停，不自动开播）。</summary>
         private async Task RestoreLastPlayingTrackAsync()
@@ -466,7 +453,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         private async Task PrepareTrackPausedAsync(int userPlaylistIndex)
         {
             if (userPlaylistIndex < 0 || userPlaylistIndex >= _queue.Items.Count)
@@ -483,7 +469,6 @@ namespace CelesteMusicPlayer
             _pendingStartSeconds = ReadSavedPositionSeconds(item.FilePath, item.Duration);
             _pendingStartPauseAfter = false;
             _pendingStartPath = _pendingStartSeconds > 0 ? item.FilePath : null;
-
 
             // 就绪态也要把进度条/总时长/波形准备好：否则进度条停在默认的 0~100，
             // 总时长显示 00:00，点播放前拖不了进度条，波形也是空的。
@@ -535,7 +520,6 @@ namespace CelesteMusicPlayer
             NotifyCurrentPlaylistWindow();
         }
 
-
         /// <summary>
         /// 读上次存档里这首歌听到哪儿了。文件不匹配 / 位置太小 / 已经听到底都当作从头开始。
         /// </summary>
@@ -569,7 +553,6 @@ namespace CelesteMusicPlayer
             return 0;
         }
 
-
         /// <summary>
         /// 就绪态（还没开播）也要把进度条、总时长、波形准备好。
         /// 以前这些只在真正开播时才做 → 启动后进度条是默认的 0~100、总时长 00:00、拖了也没用。
@@ -595,14 +578,12 @@ namespace CelesteMusicPlayer
                     _isUpdatingProgressUi = false;
                 }
 
-
                 // 波形：就绪态也解码一份，别等到点播放才出现
                 _waveformPath = null;
                 LoadWaveformForCurrentAsync(item.FilePath);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
         }
-
 
         /// <summary>就绪态下把播放列表里的当前项高亮并滚动到可见位置（与真正开播时保持一致）。</summary>
         private void HighlightUserPlaylistItem(int userPlaylistIndex, PlaylistItem item)
@@ -629,7 +610,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
         }
-
 
         private void PersistPlaybackSession()
         {
@@ -662,7 +642,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
-
         /// <summary>取当前播放进度（秒）：优先引擎（FFmpeg/NAudio 路径），回退 MediaPlayer。</summary>
         private double GetLivePositionSeconds()
         {
@@ -683,7 +662,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
             return 0;
         }
-
 
         private void SavePlayQueue()
         {
@@ -714,11 +692,8 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
         }
 
-
-
         // 2026-10-16：原「播放速度」按钮 + 六档预设菜单（PlaybackRateButton_Click）已删除——
         // 换成音频设置面板「播放速度」页里的拖动滑块（0.01 步进、拖动即时变声）。
-
 
         /// <summary>
         /// 当前播放的"源时间刻度"倍率。2026-10-16 起恒为 1.0：变速从"烧 atempo 进转码"
@@ -750,7 +725,6 @@ namespace CelesteMusicPlayer
                 return 1.0;
             }
         }
-
 
         /// <summary>
         /// 设播放倍速（2026-10-15 重写为实时）：持久化 + 直接推给引擎的托管变速，
@@ -798,7 +772,6 @@ namespace CelesteMusicPlayer
             return Task.CompletedTask;
         }
 
-
         private void UpdatePlaybackRateButtonText()
         {
 
@@ -806,8 +779,6 @@ namespace CelesteMusicPlayer
         }
 
         private MediaPlayer? GetPlayer() => _mediaPlayer;
-
-
 
         // ---------------------------------------------------------------------
         // 文件加载入口（2026-10-31 第十四刀自壳 Misc.cs 原样搬来，依赖全在活文件：
@@ -1032,7 +1003,6 @@ namespace CelesteMusicPlayer
             };
         }
 
-
         /// <summary>
         /// TTA 专用建条目（2026-10-31 补）：TagLib 没有 TTA 容器解析器，
         /// <c>File.Create("xxx.tta")</c> 直接抛 UnsupportedFormatException，以前这条路
@@ -1077,7 +1047,6 @@ namespace CelesteMusicPlayer
             };
         }
 
-
         /// <summary>
         /// 由索引缓存的元数据直接构造条目（不打开音频文件，省掉整个 TagLib 解析）。
         /// 字段语义必须与 CreatePlaylistItemFromPath 严格一致，否则同一首歌
@@ -1102,11 +1071,6 @@ namespace CelesteMusicPlayer
                 Rating = TrackStatsStore.Get(meta.FilePath)?.Rating ?? 0
             };
         }
-
-
-
-
-
 
         /// <summary>收集 ReplayGain 面板状态 → 持久化 + 应用到引擎（带上当前曲目的增益/peak）。</summary>
         private void ApplyReplayGainToEngine()
@@ -1133,7 +1097,6 @@ namespace CelesteMusicPlayer
                 : $"{rg.Mode}，前级 {rg.PreampDb:0.#}dB"));
         }
 
-
         /// <summary>刷新当前曲目 ReplayGain 标签信息文本。</summary>
         private void RefreshAudioFxRgInfo()
         {
@@ -1144,9 +1107,6 @@ namespace CelesteMusicPlayer
 
             var d = _currentRgData.Value;
         }
-
-
-
 
         /// <summary>填充播放列表墙（命名单封面卡片）。</summary>
         private void ApplyPlaylistWallCategory()
@@ -1174,12 +1134,10 @@ namespace CelesteMusicPlayer
             UpdatePlaylistWallEmptyHint();
         }
 
-
         private void UpdatePlaylistWallEmptyHint()
         {
 
         }
-
 
         private async System.Threading.Tasks.Task LoadPlaylistWallCoverAsync(PlaylistCardViewModel vm)
         {
@@ -1220,43 +1178,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         /// <summary>命中单详情双击/指定某首先：把命名单载入当前队列并定位播放该首。</summary>
         internal void PlayNamedPlaylistFromTrack(string name, string filePath)
         {
@@ -1280,29 +1201,6 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("PlayNamedPlaylistFromTrack", ex);
             }
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         private void ApplySongsSearchFilter()
         {
@@ -1334,7 +1232,6 @@ namespace CelesteMusicPlayer
             RefreshPlaylistSelectionChrome();
         }
 
-
         /// <summary>播放列表搜索：标题 / 艺术家 / 专辑 / 年份。</summary>
         private void ApplyUserPlaylistSearchFilter()
         {
@@ -1363,7 +1260,6 @@ namespace CelesteMusicPlayer
             RefreshPlaylistSelectionChrome();
         }
 
-
         internal static bool MatchesPlaylistSearch(PlaylistItem item, string query)
         {
             if (string.IsNullOrWhiteSpace(query))
@@ -1378,9 +1274,6 @@ namespace CelesteMusicPlayer
                 || ContainsIgnoreCase(item.YearText, q)
                 || (item.Year > 0 && ContainsIgnoreCase(item.Year.ToString(), q));
         }
-
-
-
 
         private void ApplyFolderSearch()
         {
@@ -1438,13 +1331,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
-
-
-
-
         private static List<(ListViewItem, PlaylistItem)> FindRealizedListViewContainers(ListView list)
         {
             var result = new List<(ListViewItem, PlaylistItem)>();
@@ -1483,31 +1369,11 @@ namespace CelesteMusicPlayer
             return result;
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         private static bool TrackMatchesArtistName(PlaylistItem track, string artistName, bool useAlbumArtist)
         {
             string key = useAlbumArtist ? track.AlbumArtist : track.Artist;
             return string.Equals(key, artistName, StringComparison.CurrentCultureIgnoreCase);
         }
-
-
-
-
-
 
         // 播放传输：音量步进与进度跳转（2026-10-31 从 MainWindow.Features.cs 搬来）：网页命令/托盘/热键在调。
 
@@ -1603,7 +1469,6 @@ namespace CelesteMusicPlayer
             }
         }
         // 列宽工具与悬停提示（2026-10-31 从 MainWindow.Misc2.cs 搬来）。
-
 
         private void HideHoverTip()
         {

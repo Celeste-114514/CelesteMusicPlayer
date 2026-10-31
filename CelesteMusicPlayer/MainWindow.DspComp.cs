@@ -53,8 +53,6 @@ namespace CelesteMusicPlayer
         // 内核公式复刻（CompressorProcessor::computeReductionDb）
         // ─────────────────────────────────────────────────────────────
 
-
-
         /// <summary>
         /// 宿主底色偏暗 = 深色主题。判断方式与 EQ 曲线的 IsEqCurveDarkTheme 一致：
         /// 直接看宿主 Border 的 Background 亮度，不依赖 Application.RequestedTheme

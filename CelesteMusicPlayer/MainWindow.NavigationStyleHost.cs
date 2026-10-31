@@ -43,8 +43,6 @@ public sealed partial class MainWindow
             return null;
         }
 
-
-
         /// <summary>把无边框窗口的 DWM 边框/标题栏描边色设为当前 UI 底色，
         /// 消除任务栏缩略图/窗口四周跟随系统强调色的"主题色框"。</summary>
         private void ApplyBorderColorFromUiTint()
@@ -68,7 +66,6 @@ public sealed partial class MainWindow
                 StartupLog.WriteException("ApplyBorderColorFromUiTint", ex);
             }
         }
-
 
         /// <summary>
         /// 设置变更后重画进度条：波形配色（渐变/纯色）与白度都是这里读的，

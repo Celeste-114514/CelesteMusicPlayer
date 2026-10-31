@@ -18,11 +18,5 @@ namespace CelesteMusicPlayer
     {
         private readonly List<string> _albumDetailDsdFiles = new();
 
-
-
-
-
-
-
     }
 }

@@ -16,13 +16,6 @@ namespace CelesteMusicPlayer
         private List<OpraSearchResult> _opraResults = new();
         private List<OpraProductEqSummary> _opraEqs = new();
 
-
-
-
-
-
-
-
     }
 
     internal static class OpraCorrectionExtensions

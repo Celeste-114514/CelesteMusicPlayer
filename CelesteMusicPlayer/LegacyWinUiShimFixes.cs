@@ -192,7 +192,6 @@ namespace Microsoft.UI.Xaml
     }
 }
 
-
 namespace Microsoft.UI.Xaml.Media
 {
     public class DesktopAcrylicBackdrop : Microsoft.UI.Xaml.DependencyObject { }

@@ -31,7 +31,6 @@ public sealed partial class MainWindow
                 ? _playlist[_currentIndex].FilePath
                 : null;
 
-
             switch (_currentCategory)
             {
                 case "Songs":

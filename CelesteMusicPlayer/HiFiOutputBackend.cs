@@ -467,7 +467,6 @@ namespace CelesteMusicPlayer
             return s != null && s.TryGetStereoSamples(leftOut, rightOut);
         }
 
-
         /// <summary>预加载下一首 WAV 到无缝源（共享/ASIO）。
         /// 与当前同格式未读及时可无缝续接；格式不同或未就绪则由上层走重建。返回是否采纳为无缝续接。</summary>
         public bool PrepareNextSeamless(string nextWavPath)

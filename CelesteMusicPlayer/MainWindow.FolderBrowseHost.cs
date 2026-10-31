@@ -21,7 +21,6 @@ public sealed partial class MainWindow
 
         // W13 第二十四刀：文件夹树 + 搜索跳转
 
-
         private void NavigateFolderSearchMatchToIndex(int index)
         {
             if (index < 0 || index >= _folderSearchMatches.Count)

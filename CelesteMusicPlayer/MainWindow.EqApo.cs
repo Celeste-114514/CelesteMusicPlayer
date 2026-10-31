@@ -51,8 +51,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
         /// <summary>导出 APO 配置核心（网页「音效处理」页直接调；保存选择器照原生弹）。</summary>
         internal async Task ExportAudioFxEqApoCoreAsync()
         {

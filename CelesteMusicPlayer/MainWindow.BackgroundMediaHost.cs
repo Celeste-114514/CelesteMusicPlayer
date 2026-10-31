@@ -231,7 +231,6 @@ public sealed partial class MainWindow
 
                 if (image == null || request != _customBackgroundRequest) return;
 
-
                 // 互斥：自定义背景显示期间，封面背景（含压暗层）清掉
                 ClearAlbumArtBackground();
 

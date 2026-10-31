@@ -18,7 +18,6 @@ namespace CelesteMusicPlayer;
 public sealed partial class MainWindow
 {
 
-
         // ---- 目录浏览器折叠 / 文件夹加入媒体库 ----
 
         private void CollapseFolderAt(int index)

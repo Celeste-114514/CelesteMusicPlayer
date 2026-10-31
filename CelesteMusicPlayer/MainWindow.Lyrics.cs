@@ -37,19 +37,10 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-
-
-
-
-
-
-
-
 
         /// <summary>
         /// 记录当前曲目的歌词。真正的消费者只有两个：桌面歌词窗口，以及网页歌词区通过
@@ -74,7 +65,6 @@ namespace CelesteMusicPlayer
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
         }
 
-
         private void ClearLyricsUi(string hint)
         {
             _lyricLines = new List<LyricLine>();
@@ -84,25 +74,7 @@ namespace CelesteMusicPlayer
 
         // ---- 歌词手动滚动 + 单击跳进度 ----
 
-
-
-
-
-
-
         // ---- 歌词行选中（经典式：选中 → 右侧时间 + 左侧播放按钮）----
-
-
-
-
-
-
-
-
-
-
-
-
 
     }
 }

@@ -378,7 +378,6 @@ namespace CelesteMusicPlayer
             return index >= 0 && index < active.Length && active[index];
         }
 
-
         private object[] WebDspDescribeModule(string module)
         {
             if (!WebDspModuleControls.TryGetValue(module, out string[]? names))

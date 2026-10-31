@@ -2,7 +2,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 
-
 namespace CelesteMusicPlayer
 {
     /// <summary>Native taskbar toolbar: four playback commands, owned HICONs,

@@ -37,7 +37,6 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
@@ -132,7 +131,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>
         /// 列宽适配的帧合并：窗口缩放时 SizeChanged / AppWindow.Changed 每个 tick 都灌进来，
         /// 每次都改 5 根列宽 = 每次都触发整个播放列表（表头 + 已实现行）重排，
@@ -159,22 +157,9 @@ namespace CelesteMusicPlayer
             FitColumnsToAvailableWidth();
         }
 
-
         // =====================================================================
         // 播放列表列：可拖分割线
         // =====================================================================
-
-
-
-
-
-
-
-
-
-
-
-
 
     }
 }

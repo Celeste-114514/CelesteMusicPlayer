@@ -46,8 +46,6 @@ namespace CelesteMusicPlayer
             try
             {
 
-
-
             }
             finally
             {
@@ -57,7 +55,6 @@ namespace CelesteMusicPlayer
             UpdateRoomIrGainText();
             UpdateRoomTrimLabel();
         }
-
 
         /// <summary>把模型里的房间校正参数落盘并实时下发（网页命令 / 页头电源开关 / 面板「应用」共用）。</summary>
         private void ApplyFirParameters()
@@ -75,10 +72,6 @@ namespace CelesteMusicPlayer
             ApplyRoomCorrection(state);
         }
 
-
-
-
-
         private void UpdateRoomIrGainText()
         {
 
@@ -89,7 +82,6 @@ namespace CelesteMusicPlayer
         {
 
         }
-
 
         private async Task PreloadRoomIrAsync(string path)
         {

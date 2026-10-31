@@ -46,9 +46,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
         /// <summary>把模型里的升频参数落盘并下发引擎。网页命令与页头电源开关走这一条（含全部三项）。</summary>
         private void ApplySrcSettings()
         {
@@ -119,7 +116,6 @@ namespace CelesteMusicPlayer
                     }
                 }
 
-
                 _audioEngine?.SetOutputBufferMs(OutputBufferOptions[idx].Ms);
             }
             catch (Exception caught)
@@ -127,7 +123,6 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
             }
         }
-
 
         #endregion
     }

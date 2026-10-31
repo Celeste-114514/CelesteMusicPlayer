@@ -353,7 +353,6 @@ namespace CelesteMusicPlayer
         private const int DWMWCP_ROUND = 2;
         private const int DWMWCP_DONOTROUND = 1;
 
-
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", CharSet = CharSet.Unicode)]
         private static extern nint SetWindowLongPtr642(nint hWnd, int nIndex, long dwNewLong);
 
@@ -675,7 +674,6 @@ namespace CelesteMusicPlayer
             _currentCategory = startupCategory;
             ApplyCategoryViewData();
             _navCurrent = CaptureLibraryNavState();
-
 
             for (int i = 0; i < WaveBarCount; i++)
             {

@@ -647,7 +647,6 @@ namespace CelesteMusicPlayer
             return results;
         }
 
-
         /// <summary>
         /// MusicBrainz 公开搜索（免 key）：返回专辑粒度，封面走 Cover Art Archive（coverartarchive.org）。
         /// endpoint musicbrainz.org/ws/2/release。仅作元数据/封面候选（不提供下载与歌词）。

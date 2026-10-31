@@ -21,18 +21,6 @@ namespace CelesteMusicPlayer
         // 页面索引。早期写成硬编码常量（Safety=7 / Fir=6 / Channel=5 / Eq=3），
         // 在导航中间插入新模块后必然错位；改为按 Page 引用从已构建的元数据表反查，
         // 增删页面/调整顺序都不需要再同步这里（导航未构建时返回 -1，调用处均能容忍）。
-        private int DspPageSafetyIndex => FindDspPageIndex(DspPageSafety);
-        // ReplayGain 页（2026-10-12 阶段 2：批量扫描并入本页，需要一个能跳转过去的索引）
-        private int DspPageRgIndex => FindDspPageIndex(DspPageRg);
-        private int DspPageFirIndex => FindDspPageIndex(DspPageFir);
-        private int DspPageChannelIndex => FindDspPageIndex(DspPageChannel);
-        private int DspPageEqIndex => FindDspPageIndex(DspPageEq);
-        private int DspPageCompressorIndex => FindDspPageIndex(DspPageCompressor);
-        private int DspPageSrcIndex => FindDspPageIndex(DspPageSrc);
-        private int DspPageMatrixIndex => FindDspPageIndex(DspPageMatrix);
-        private int DspPageFieldIndex => FindDspPageIndex(DspPageStereoField);
-        private int DspPageRackIndex => FindDspPageIndex(DspPageRack);
-        private int DspPageProfilesIndex => FindDspPageIndex(DspPageProfiles);
 
         // DspModuleActive() 返回数组的具名下标，顺序与 BuildDspNav 元数据表一致。
         // 「链路条 / 活跃 DSP 清单」曾按 names[i] ↔ active[i] 直接对下标取用，机架编排置顶后就整体错位
@@ -40,27 +28,7 @@ namespace CelesteMusicPlayer
         // ⚠ 2026-10-01：Crossfeed 从独立页并回「声道工具」页；同日耳机校正并入 EQ 页，
         // 导航 13 → 12 项，下面整体再前移一位。开关控件都还在，只是不再单独占一页。
 
-        /// <summary>在导航表里查某个页面当前的下标；未构建 / 页面为空时返回 -1。</summary>
-        private int FindDspPageIndex(StackPanel? page)
-        {
-            if (page == null)
-            {
-                return -1;
-            }
-
-            for (int i = 0; i < _dspNavEntries.Count; i++)
-            {
-                if (ReferenceEquals(_dspNavEntries[i].Page, page))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
         private int _dspPageIndex = -1;
-
 
         /// <summary>导航项运行时态：标题 / 所属组 / 右侧页面 / 徽章控件。</summary>
         private sealed class DspNavEntry
@@ -84,7 +52,6 @@ namespace CelesteMusicPlayer
             InitRoomCorrectionTrimUi();
             _dspRackReady = true;
 
-
             // 先备好方案页状态（徽章/圆点要用协调器里的生效方案名），再统一刷指示
             UpdateDspNavIndicators();
             if (_dspPageIndex < 0)
@@ -94,10 +61,7 @@ namespace CelesteMusicPlayer
 
         // ---------- 余量快捷预设 ----------
 
-
         // ---------- FIR 快捷 trim / 安全启用 ----------
-
-
 
         /// <summary>安全启用卷积核心（网页「音效处理」页直接调）。</summary>
         internal void FirSafeEnableCore()
@@ -119,19 +83,16 @@ namespace CelesteMusicPlayer
 
         // ---------- 房间校正（FIR）：IR 信息 / 微调余量 trim / 削波风险 ----------
 
-
         /// <summary>从模型初始化 trim 滑杆（只在加载面板时调用一次，避免打断拖动）。</summary>
         private void InitRoomCorrectionTrimUi()
         {
             // 面板初始化这一步就是模型的首次装载点（进入 FIR 页时 LoadRoomCorrectionIntoPanel 会再装一次，幂等）
             FirParameters.Load(RoomCorrectionStore.Load());
 
-
             UpdateRoomTrimLabel();
         }
 
         // ---------- 输出安全监控 ----------
-
 
         /// <summary>重置输出统计核心（网页「音效处理」页直接调）。</summary>
         internal void ResetOutputMonitorCore()

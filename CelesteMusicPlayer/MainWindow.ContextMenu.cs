@@ -37,13 +37,10 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-
-
 
     }
 }

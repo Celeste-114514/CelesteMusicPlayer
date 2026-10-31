@@ -19,10 +19,5 @@ namespace CelesteMusicPlayer
     {
         private readonly ReplayGainScanner _rgScanScanner = new();
 
-
-
-
-
-
     }
 }

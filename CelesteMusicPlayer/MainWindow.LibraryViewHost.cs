@@ -26,7 +26,6 @@ public sealed partial class MainWindow
     private static readonly Dictionary<string, BitmapImage?> WebArtistAvatarCache = new();
     private static readonly SemaphoreSlim WebArtistAvatarGate = new(1, 1);
 
-
         // W13 第二十九刀：专辑墙刷新 / 排序 / 详情入口
 
         /// <summary>
@@ -111,8 +110,6 @@ public sealed partial class MainWindow
 
             return ordered.ToList();
         }
-
-
 
         private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
         {

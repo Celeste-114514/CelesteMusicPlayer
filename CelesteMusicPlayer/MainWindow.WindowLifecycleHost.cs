@@ -101,7 +101,6 @@ public sealed partial class MainWindow
 
                     // 进度条画布尺寸变化时重绘(首次布局/窗口缩放)
 
-
                     // 设置窗口里改「波形配色 / 白度」时即时重画进度条，用户当场看到效果（不必切歌或重启）
                     AppSettingsStore.Changed -= OnSettingsChangedForProgressStyle;
                     AppSettingsStore.Changed += OnSettingsChangedForProgressStyle;

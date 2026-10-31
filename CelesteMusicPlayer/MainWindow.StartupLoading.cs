@@ -43,7 +43,6 @@ namespace CelesteMusicPlayer
             {
                 // 转圈的进度环跟着主题色走；极客皮肤用磷光色（和其他界面一个口径）
 
-
                 _loadingSafetyTimer = DispatcherQueue.CreateTimer();
                 _loadingSafetyTimer.Interval = LoadingSafetyTimeout;
                 _loadingSafetyTimer.Tick += (_, _) =>

@@ -37,43 +37,10 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         /// <summary>从曲目集合汇总专辑条目（封面优先音轨 1）</summary>
         private static List<AlbumEntry> BuildAlbumEntriesFromTracks(IEnumerable<PlaylistItem> sourceTracks)
@@ -126,7 +93,6 @@ namespace CelesteMusicPlayer
             return entries;
         }
 
-
         /// <summary>
         /// 播放单曲：先加入（或提前到）播放列表最前，再按播放列表播放。
         /// </summary>
@@ -175,7 +141,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         private int FindUserPlaylistIndex(string filePath)
             => FindUserPlaylistIndex(filePath, 0, matchStart: false);
 
@@ -202,29 +167,6 @@ namespace CelesteMusicPlayer
             return -1;
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         // =====================================================================
         // 排序
         // =====================================================================
@@ -241,8 +183,6 @@ namespace CelesteMusicPlayer
                     ? "从当前播放队列第一首开始播放（不改动队列）"
                     : "把当前界面显示的歌曲替换进播放队列并按显示顺序播放");
         }
-
-
 
         /// <summary>播放列表「更改排序」对话框（主界面与当前播放列表窗口共用）。</summary>
         internal async Task ChangeUserPlaylistSortAsync(XamlRoot xamlRoot)
@@ -323,9 +263,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
         private ObservableCollection<PlaylistItem> GetActiveSongCollection()
             => string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
                 ? _queue.Items
@@ -343,7 +280,6 @@ namespace CelesteMusicPlayer
                 ApplySongsSearchFilter();
             }
         }
-
 
         private void SortCollection(ObservableCollection<PlaylistItem> target, string? preservePlayingPath)
         {
@@ -391,7 +327,6 @@ namespace CelesteMusicPlayer
             SyncIndicesAfterSort(effective, preservePlayingPath);
         }
 
-
         private void SyncIndicesAfterSort(ObservableCollection<PlaylistItem> target, string? preservePlayingPath)
         {
             if (ReferenceEquals(target, _playlist))
@@ -418,7 +353,6 @@ namespace CelesteMusicPlayer
                 }
             }
         }
-
 
         /// <summary>排序专用比较器：单趟完成「主字段 → 标题」比较与升/降序，
         /// 替代 OrderBy/ThenBy/Reverse 的多趟分配（大列表卡顿优化）。</summary>
@@ -457,7 +391,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         private static void RenumberCollection(ObservableCollection<PlaylistItem> items)
         {
             for (int i = 0; i < items.Count; i++)
@@ -465,16 +398,6 @@ namespace CelesteMusicPlayer
                 items[i].Index = i + 1;
             }
         }
-
-
-
-
-
-
-
-
-
-
 
         /// <summary>将歌曲移到用户播放列表最前（已在最前则不变）。</summary>
         internal void PinSongToUserPlaylistTop(PlaylistItem song)
@@ -506,22 +429,16 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
         internal void ShowCurrentPlaylistWindow()
         {
             ShowWebPage("queue");
         }
-
 
         /// <summary>打开播放队列窗口（复用主播放列表，聚焦接下来的待播曲目）。</summary>
         internal void ShowPlayQueueWindow()
         {
             ShowWebPage("queue");
         }
-
-
-
 
         internal void NotifyCurrentPlaylistWindow()
             => NotifyWebHomeChanged();
@@ -591,7 +508,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         internal void PlayUserPlaylistFromStart()
         {
             if (_queue.Items.Count == 0)
@@ -604,27 +520,12 @@ namespace CelesteMusicPlayer
             NotifyCurrentPlaylistWindow();
         }
 
-
-
-
-
-
         private void UpdateUserPlaylistActionBarVisibility()
         {
             bool show = !_isMultiSelectMode
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
                 && PlaylistListBorder.Visibility == Visibility.Visible;
         }
-
-
-
-
-
-
-
-
-
-
 
         private void RemoveSongsFromUserPlaylist(IEnumerable<PlaylistItem> songs)
         {
@@ -656,8 +557,6 @@ namespace CelesteMusicPlayer
                 ApplyUserPlaylistSearchFilter();
             }
         }
-
-
 
         internal async Task SaveUserPlaylistAsync(XamlRoot xamlRoot)
         {
@@ -702,9 +601,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
         internal async Task OpenUserPlaylistAsync(XamlRoot xamlRoot, bool navigateToPlaylist)
         {
             try
@@ -730,8 +626,6 @@ namespace CelesteMusicPlayer
                 await ShowErrorAsync("打开播放列表失败", ex.Message, xamlRoot);
             }
         }
-
-
 
         internal async Task ClearUserPlaylistAsync(XamlRoot xamlRoot)
         {
@@ -767,8 +661,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
         private async Task<string?> AskPlaylistFileNameAsync(XamlRoot xamlRoot)
         {
             var box = new Microsoft.UI.Xaml.Controls.TextBox
@@ -791,7 +683,6 @@ namespace CelesteMusicPlayer
             ContentDialogResult result = await dialog.ShowAsync();
             return result == ContentDialogResult.Primary ? box.Text?.Trim() : null;
         }
-
 
         private async Task<string?> PickPlaylistPathFromFolderAsync(string folderPath, XamlRoot xamlRoot)
         {
@@ -840,7 +731,6 @@ namespace CelesteMusicPlayer
 
             return files[list.SelectedIndex];
         }
-
 
         private void ApplyLoadedUserPlaylist(UserPlaylistFileDto dto, bool navigateToPlaylist = true)
         {
@@ -897,9 +787,6 @@ namespace CelesteMusicPlayer
                 ApplyCategoryViewData();
             });
         }
-
-
-
 
         /// <summary>
         /// 按路径弹“添加到播放列表”选择器：选命名单或新建，把路径追加进去。
@@ -964,7 +851,6 @@ namespace CelesteMusicPlayer
             PlaylistLibraryService.Refresh();
             StartupLog.Write("已添加到播放列表: " + target + " (+" + distinct.Count + " 首)");
         }
-
 
         private void AddSongsToUserPlaylist(IEnumerable<PlaylistItem> songs)
         {
@@ -1048,7 +934,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>将歌曲文件移入回收站，并从各列表移除。</summary>
         private async Task DeleteSongFromDiskAsync(PlaylistItem item, XamlRoot? hostRoot = null)
         {
@@ -1115,7 +1000,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>从当前曲库、用户播放列表与统计记录中移除该歌曲。</summary>
         private void RemoveSongFromAllCollections(PlaylistItem item)
         {
@@ -1167,9 +1051,7 @@ namespace CelesteMusicPlayer
             _ = RefreshArtistViewAsync();
         }
 
-
         private static PlaylistItem ClonePlaylistItem(PlaylistItem song) => song.Clone();
-
 
         /// <summary>
         /// 歌曲列表表头五词条：与「播放所有专辑」同色半透明底，操场形圆角（高 32 / 半径 16）。
@@ -1199,23 +1081,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         /// <summary>
         /// 歌曲列表 / 多选：选中为圆角主题色矩形（画在 SongRowChrome 上）；
         /// 多选未选中为浅霜色底；再次点击取消选择时恢复常态。
@@ -1226,7 +1091,6 @@ namespace CelesteMusicPlayer
 
         private void RefreshArtistTrackSelectionChrome()
             => RefreshRealizedSongListSelectionChrome(ArtistTrackListView);
-
 
         // ==== 多选模式（2026-10-31 从 MainWindow.Misc.cs 改写搬来，证据见注释）====
         // ⚠ _isMultiSelectMode 在主窗口恒 false：三个写 true 的入口全部不可达 ——

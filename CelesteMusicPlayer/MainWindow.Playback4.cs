@@ -37,7 +37,6 @@ using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
@@ -108,7 +107,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
-
         /// <summary>停止引擎播放并复位相关 UI 状态（切到普通格式时调用）。</summary>
         private void StopEngineIfActive()
         {
@@ -122,7 +120,6 @@ namespace CelesteMusicPlayer
                 MediaSession.SetStatus(MediaPlaybackStatus.Stopped);
             }
         }
-
 
         private void PlayNext()
             => PlayNext(autoAdvance: false);
@@ -145,7 +142,6 @@ namespace CelesteMusicPlayer
             AdvanceInLibraryPlaylist(autoAdvance);
         }
 
-
         /// <summary>队列为空时，从媒体库当前列表推进到下一首（按播放顺序）。</summary>
         private void AdvanceInLibraryPlaylist(bool autoAdvance)
         {
@@ -161,7 +157,6 @@ namespace CelesteMusicPlayer
                 PlayLibraryItemAt(index, syncUserPlaylistIndex: false);
             }
         }
-
 
         private void PlayPrevious()
         {
@@ -179,11 +174,9 @@ namespace CelesteMusicPlayer
             PlayUserPlaylistAt(prevIndex.Value);
         }
 
-
         // 下一首 / 上一首的索引决策已抽到 PlaybackOrderResolver（阶段7 解耦）：
         //   ResolveNextIndex / NextIndexByOrder / ResolvePreviousIndex
         // 这三个方法原先在这里，现在由 _orderResolver 提供。
-
 
         // =====================================================================
         // 播放顺序按钮
@@ -205,15 +198,6 @@ namespace CelesteMusicPlayer
             SetPlaybackOrder(order[next]);
         }
 
-
-
-
-
-
-
-
-
-
         private void SetPlaybackOrder(PlaybackOrder order, bool persist = true)
         {
             _orderResolver.Order = order;
@@ -224,7 +208,6 @@ namespace CelesteMusicPlayer
                 AppSettingsStore.Update(s => s.PlaybackOrder = order.ToString());
             }
         }
-
 
         private void ApplyPlaybackOrderToPlayer()
         {
@@ -237,11 +220,9 @@ namespace CelesteMusicPlayer
             player.IsLoopingEnabled = _orderResolver.Order == PlaybackOrder.TrackLoop;
         }
 
-
         private void UpdatePlaybackOrderButtonUi()
         {
             bool trackOnce = _orderResolver.Order == PlaybackOrder.TrackOnce;
-
 
             (string glyph, string name) = _orderResolver.Order switch
             {
@@ -260,12 +241,9 @@ namespace CelesteMusicPlayer
             ToolTipService.SetToolTip(PlaybackOrderButton, name + "（左键切换，右键选择）");
         }
 
-
         // =====================================================================
         // 主区域：播放列表 / 右侧 可拖分割线
         // =====================================================================
-
-
 
         private double GetPlaylistColumnsViewportWidth()
         {
@@ -284,16 +262,9 @@ namespace CelesteMusicPlayer
             return PlaylistColumn.ActualWidth > 0 ? Math.Max(0, PlaylistColumn.ActualWidth - 24) : 0;
         }
 
-
         // =====================================================================
         // 单元格悬停 1 秒后显示该字段完整信息
         // =====================================================================
-
-
-
-
-
-
 
         private void HoverTipTimer_Tick(dynamic sender, dynamic e)
         {
@@ -313,7 +284,6 @@ namespace CelesteMusicPlayer
             ToolTipService.SetToolTip(_hoverElement, _activeHoverTip);
             _activeHoverTip.IsOpen = true;
         }
-
 
     }
 }

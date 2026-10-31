@@ -233,7 +233,6 @@ namespace CelesteMusicPlayer
             if (cjk.Length > 0) state.fontCjk = cjk;
             if (mono.Length > 0) state.fontMono = mono;
 
-
             WebAppearance.SetDraft(state);
             return Snapshot();
         }

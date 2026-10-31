@@ -129,7 +129,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
         /// <summary>
         /// 启动时把「手动加入音乐库」的散装文件补回列表。
         /// 文件夹型曲库只会扫文件夹里的东西，这些单文件不在其中，必须单独补。
@@ -224,9 +223,7 @@ namespace CelesteMusicPlayer
 
                 bool showAdd = hasPath && !inLibrary;
 
-
                 // 内容随状态切换：+「添加到音乐库」  /  ✓「已加入音乐库」
-
 
                 // 已加入就不可再点，避免重复入库
             }

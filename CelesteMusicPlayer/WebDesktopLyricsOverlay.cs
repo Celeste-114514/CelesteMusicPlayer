@@ -742,7 +742,6 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     [StructLayout(LayoutKind.Sequential)]
     private struct PointStruct { public int X, Y; }
 
-
     [StructLayout(LayoutKind.Sequential)]
     private struct RectStruct { public int Left, Top, Right, Bottom; }
 

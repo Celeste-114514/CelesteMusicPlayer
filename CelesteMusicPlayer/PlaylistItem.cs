@@ -41,7 +41,6 @@ namespace CelesteMusicPlayer
         /// <summary>碟片号（Tag.Disc）；0 表示未知</summary>
         public uint Disc { get; set; }
 
-
         /// <summary>年份数值；0 表示未知</summary>
         public uint Year { get; set; }
 

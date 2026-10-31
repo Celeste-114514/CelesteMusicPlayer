@@ -60,7 +60,6 @@ public sealed partial class MainWindow
             }
         }
 
-
         /// <summary>播放结束拦截：返回 true 表示已按睡眠定时器停止，调用方不应继续切歌。</summary>
         private bool ConsumeSleepStopIfDue()
         {
@@ -150,7 +149,6 @@ public sealed partial class MainWindow
             }
 
         }
-
 
         /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
         private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)
