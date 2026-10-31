@@ -141,3 +141,20 @@ LibraryNavStatesEqual + CommitLibraryNavigation（EqDsp.cs）。状态类/栈/�
   打法：整族（含 ApplySort/SetSongSortUiForCategory/CloseXxxDetailUi 等伴生）评估后决定
   「整族搬 NavFlow 文件」或「逐 case 等价重写」。**需要网页曲库顺序的实测验证配合。**
 - LoadAndAddFiles(6)、RefreshAlbumViewAsync/RefreshFolderViewAsync 等数据刷新族。
+
+### 第十三刀（2026-10-31）：导航域核心战役第一阶段——ApplyCategoryView 借用清零
+全分支甄别结论：290 行里九成是给旧占位控件摆面板（死）；活行为只有两处——
+case "Songs" 强制重置标题升序+ApplySort（_playlist 顺序=网页曲库顺序）、
+case "UserPlaylist" RenumberCollection 重写队列序号。
+整体搬家会倒贴账（-16 借用换 ~+19 新借用，19 个壳伴生被拖进活路径），故选**调用点改道**：
+新活方法 `ApplyCategoryViewData()`（NavHistory.cs，只含两个活分支），13 个活调用点全部改道
+（启动 xaml.cs、网页清空队列、WebDav 未配置回退、托盘收藏刷新等）。
+**454 → 428 错 / 168 → 167 成员，ApplyCategoryView 从借用榜除名（残余 0）**。
+四道验证全过；出货已同步；回退件 `pre-w13-navdata-20261031`。
+⚠ 待用户实测：网页曲库（歌曲页）顺序应与改前一致（标题升序）。
+明细见 `RESULT-2026-10-31-w13-navdata-cut.md`。
+
+### 导航域剩余（第二阶段）
+- **LoadAndAddFiles（6 处）**：文件加载入口，尾部与 ApplySort/RenumberCollection 咬合；活路径已不调 ApplyCategoryView，搬家阻力减小。
+- 列表视觉族逐个甄别：ScheduleFitColumns(6)/RefreshFolderBrowserSelectionChrome(6)/SetListSelectionMode(6)。
+- DSP 域（~150 处）成为账面最大块：ApplyFirParameters(8) 榜首。
