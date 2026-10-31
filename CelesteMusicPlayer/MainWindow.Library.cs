@@ -789,52 +789,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void LibraryPaneRoot_PointerPressed(dynamic sender, dynamic e)
-        {
-            PointerUpdateKind kind = e.GetCurrentPoint(LibraryPaneRoot).Properties.PointerUpdateKind;
-            if (kind == PointerUpdateKind.XButton1Pressed)
-            {
-                NavigateLibraryHistoryBack();
-                e.Handled = true;
-            }
-            else if (kind == PointerUpdateKind.XButton2Pressed)
-            {
-                NavigateLibraryHistoryForward();
-                e.Handled = true;
-            }
-        }
-
-
-        private void NavigateLibraryHistoryBack()
-        {
-            if (_navBackStack.Count == 0)
-            {
-                return;
-            }
-
-            LibraryNavState current = CaptureLibraryNavState();
-            LibraryNavState target = _navBackStack[^1];
-            _navBackStack.RemoveAt(_navBackStack.Count - 1);
-            _navForwardStack.Add(current);
-            RestoreLibraryNavState(target);
-        }
-
-
-        private void NavigateLibraryHistoryForward()
-        {
-            // 从未前进过 / 前进栈为空：保持当前界面
-            if (_navForwardStack.Count == 0)
-            {
-                return;
-            }
-
-            LibraryNavState current = CaptureLibraryNavState();
-            LibraryNavState target = _navForwardStack[^1];
-            _navForwardStack.RemoveAt(_navForwardStack.Count - 1);
-            _navBackStack.Add(current);
-            RestoreLibraryNavState(target);
-        }
-
+        // 原生的鼠标侧键前进/后退（LibraryPaneRoot_PointerPressed + 两个导航助手）已于 2026-10-31 删除：
+        // 新外壳在网页层接管侧键（shell.js 的 goBack/goForward），原生这层在隐藏窗口上永远收不到事件。
 
         private void RestoreLibraryNavState(LibraryNavState state)
         {

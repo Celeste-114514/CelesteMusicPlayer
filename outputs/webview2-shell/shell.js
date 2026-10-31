@@ -76,6 +76,9 @@
   let previewQueue = samples.map((_,index) => index);
   const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
   let currentPage = 'overview', history = [], panel = null, toastTimer, lastTick = performance.now(), seeking = false, volumeChanging = false;
+  // 浏览器式前进/后退栈（2026-10-31）：鼠标侧键 XButton1/2 走这一对。
+  // backStack 记录"我从哪来"，fwdStack 记录"我退回前在哪"；任何一次新导航都清空前进栈。
+  const backStack = [], fwdStack = [];
   let pendingTrack = null;
   // Give every play entry point the same immediate feedback; only the host confirms audio playback.
   const send = (command, payload = {}) => {
@@ -109,7 +112,7 @@
     const moveDirection = direction === 'back' ? 'back' : (pendingDirection === 'back' ? 'back' : 'forward');
     pendingDirection = 'forward';
     send('cancelOverview');
-    if (remember && page !== currentPage) history.push(currentPage);
+    if (remember && page !== currentPage) { history.push(currentPage); backStack.push(currentPage); fwdStack.length = 0; }
     currentPage = page;
     setPath([{label:pages[page][0]}]);
     $('overview-page').hidden = page !== 'overview';
@@ -136,6 +139,39 @@
     const shown = [...document.querySelectorAll('.page')].find(el => !el.hidden);
     if (shown) window.CelesteMotion?.page(shown, moveDirection);
   }
+
+  // ---- 鼠标侧键：XButton1 = 后退，XButton2 = 前进（2026-10-31 接上）----
+  // 后退优先走面包屑父级（和左上角返回键一致：详情页先退回列表），没有父级再弹页面栈。
+  function goBack() {
+    // 只有「详情页」才走面包屑父级（此时面包屑已到 3 级：主页/分类/条目），
+    // 和左上角返回键一致；普通分类页（2 级）走浏览器式页面栈，否则后退永远回主页。
+    if (pathActions.length >= 3) {
+      const parent = pathActions.at(-2);
+      if (parent?.action) { pendingDirection = 'back'; parent.action(); return true; }
+    }
+    if (!backStack.length) return false;
+    const prev = backStack.pop();
+    fwdStack.push(currentPage);
+    navigate(prev, false, 'back');
+    return true;
+  }
+
+  function goForward() {
+    if (!fwdStack.length) return false;
+    const next = fwdStack.pop();
+    backStack.push(currentPage);
+    navigate(next, false, 'forward');
+    return true;
+  }
+
+  // 侧键在 Chromium 里是 mousedown/mouseup 的 button 3/4；不拦截会被当成浏览器历史导航。
+  window.addEventListener('mousedown', event => {
+    if (event.button === 3 || event.button === 4) { event.preventDefault(); event.stopPropagation(); }
+  }, true);
+  window.addEventListener('mouseup', event => {
+    if (event.button === 3) { event.preventDefault(); event.stopPropagation(); goBack(); }
+    else if (event.button === 4) { event.preventDefault(); event.stopPropagation(); goForward(); }
+  }, true);
   // Fixed quarter-circle, clockwise from the top edge toward the left edge.
   // Radii are in the 600x290 SVG viewBox, so they scale together with the container size in navigation.css.
   // 150 and 238 are NOT arbitrary: the wheel draws three guide arcs at radius 105 (core), 195 (inner)
@@ -411,6 +447,6 @@
     setInterval(() => { const now=performance.now(); const delta=(now-lastTick)/1000; lastTick=now; if(!state.playing||document.hidden||seeking)return; state.position=Math.min(state.duration,state.position+delta); if(state.position>=state.duration){if(state.repeat)state.position=0;else if(state.shuffle){const choices=previewQueue.filter(index=>index!==state.index);chooseTrack(choices.length?choices[Math.floor(Math.random()*choices.length)]:state.index)}else stepTrack(1)} render(); },250);
     document.addEventListener('visibilitychange',()=>lastTick=performance.now());
   }
-  window.CelesteShell=Object.freeze({send,notify,navigate,setPath,getPage:()=>currentPage,getState:()=>({...state}),getLibrary:()=>live?libraryTracks.filter(inSource):samples,getAlbums:()=>libraryAlbums.filter(album=>album.trackIds.some(id=>libraryTracks.some(t=>t.id===id&&inSource(t)))),playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
+  window.CelesteShell=Object.freeze({send,notify,navigate,setPath,goBack,goForward,getPage:()=>currentPage,getNavStacks:()=>({back:[...backStack],forward:[...fwdStack],trail:pathActions.map(i=>i.label)}),getState:()=>({...state}),getLibrary:()=>live?libraryTracks.filter(inSource):samples,getAlbums:()=>libraryAlbums.filter(album=>album.trackIds.some(id=>libraryTracks.some(t=>t.id===id&&inSource(t)))),playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
   navigate('overview',false); setOrbit(true); render();
 })();

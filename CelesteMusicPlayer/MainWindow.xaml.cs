@@ -716,10 +716,6 @@ namespace CelesteMusicPlayer
             ApplyCategoryViewData();
             _navCurrent = CaptureLibraryNavState();
 
-            LibraryPaneRoot.AddHandler(
-                UIElement.PointerPressedEvent,
-                new PointerEventHandler(LibraryPaneRoot_PointerPressed),
-                handledEventsToo: true);
 
             for (int i = 0; i < WaveBarCount; i++)
             {
