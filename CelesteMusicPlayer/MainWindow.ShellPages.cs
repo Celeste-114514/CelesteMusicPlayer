@@ -302,20 +302,9 @@ namespace CelesteMusicPlayer
         // W13：原生设置面板随 XAML 界面下线（网页设置页取代）。
         private bool _settingsUiBuilt;
 
-        private void EnsureSettingsUiBuilt()
-        {
-            // W13：原生设置面板已下线，设置改走网页设置页；保留方法让旧调用点不用动。
-        }
-
         /// <summary>并入主 UI 的「标签」板块（2026-10-13 阶段 5a）。延迟创建：第一次点「标签」才造。</summary>
         // W13：原生标签面板随 XAML 界面下线（网页标签页取代）。
         private bool _tagUiBuilt;
-
-        private void EnsureTagEditUiBuilt()
-        {
-            // W13：原生标签面板（XAML 控件）随旧界面下线，标签编辑改走网页标签页。
-            // 这里保留方法是为了让旧调用点不用动，但不再构造任何 XAML 控件。
-        }
 
         /// <summary>
         /// 标签面板「排序编号」页 → 加入播放队列（按面板里排好的顺序）。
