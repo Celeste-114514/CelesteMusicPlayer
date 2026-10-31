@@ -38,9 +38,11 @@
 - 曲目动作 `WebTrackActionService`（trackAction + browse）、队列 `WebQueueService`（queue + more）、
   目录 `WebFolderBrowseService`、曲库 `WebLibraryService`、
   标签 `WebTagService`（tags 全部：list/read/write + 在线搜索 + 歌词 + 改名 + 封面，会话态在实例里所以是单例）、
-  设置 `WebSettingsService`、DSP 参数 `Dsp*Parameters`。宿主能力各走一个 `I*Host`，
-  **只放服务造不出来的**（真播放/删盘/外部程序/页面快照）。
+  设置 `WebSettingsService`、音频设置 `WebAudioSettingsService`、DSP 参数 `Dsp*Parameters`。
+  宿主能力各走一个 `I*Host`，**只放服务造不出来的**（真播放/删盘/外部程序/页面快照）。
   ⚠ **别往 `I*Host` 加 MainWindow 现成属性** —— 服务能顺手读宿主状态就会长回去。
+- ⚠ **碰用户设置的探针必须自证归位**：改完立刻写回原值，末尾比对前后快照，不一致就让它失败退出
+  （`W13AudioSettingsWireProbe.cjs` 的 `stateDrift` 就是为这加的，别删）。
 - `WebOperationGate` 是「网页发起的耗时操作」唯一互斥，**曲目动作与目录浏览共用同一实例**，否则两个选择器会叠在一起。
 - ⚠ **删 partial 类的私有字段/方法前必须全项目 grep** —— `AudioExtensions` 就在 `Misc.cs`/`WebDav.cs`/`WebTagTools.cs` 被用，删了 4 个 CS0103。
 - ⚠ 探针发 `playAll` / `togglePlay` 必须用 `CelesteShell.send`：不回包，`request` 会等 12 秒超时；
@@ -96,6 +98,9 @@
 ## 音频 / DSP
 - 链路：ffmpeg PCM 缓存→SeamlessWaveProvider(gapless)→独占 SRC→降混→变速（保调 WSOLA/变调 Hermite）→`celeste_dsp_core.dll` 机架。
   **全关 = bit-perfect**，内核只剩 native2，DSD DoP 不变速。音频设置面板四页签带 `_audioSettingsReady` 守卫。
+- ⚠ **本机装着 FiiO ASIO 驱动**：`audioSettings setMode('Asio')` 会真的把输出模式切过去
+  （设备同时变成 `FiiO ASIO Driver`），别拿它当「无 ASIO 驱动」的拒绝用例测。
+  切回：`node tools/_w13_audio_restore.cjs <exe> Shared ""`（跨命名空间会自动把设备重置成系统默认）。
 
 ## WinUI3 铁律（旧界面仍在用）
 - 新界面模式三连：设置白名单 + ComboBoxItem Tag + ApplyUiStyleMode 分支，缺一静默不生效。
