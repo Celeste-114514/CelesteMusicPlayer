@@ -77,11 +77,15 @@ namespace CelesteMusicPlayer
         ///
         /// TTA 头固定 22 字节，**所有多字节字段都是小端**（TTA 规范）：
         ///   [0..3] "TTA1" | [4..5] format | [6..7] 声道 | [8..9] 位深
-        ///   [10..13] 采样率 | [14..17] 数据字节数 | [18..21] CRC32
-        /// 时长 = 数据字节数 × 8 ÷ (采样率 × 声道 × 位深)。
+        ///   [10..13] 采样率 | [14..17] **总采样数** | [18..21] CRC32
+        /// 时长 = 总采样数 ÷ 采样率（与声道数、位深**无关**）。
         ///
-        /// ⚠ 这里以前写成大端（`head[6]<<8 | head[7]`），算出来的采样率是 5 亿多、
-        /// 声道 256，时长恒等于 0 秒 —— 2026-10-31 用 _tagfixtures 的 10 个 TTA 实测确认。
+        /// ⚠ 两个历史坑（都是 2026-10-31 用 ffmpeg 现造样本反推出来的）：
+        ///  ① 以前按大端读 → 采样率 5 亿多、声道 256，时长恒为 0；
+        ///  ② 改成小端后按「数据字节数 × 8 ÷ (采样率 × 声道 × 位深)」算 → 立体声/24bit
+        ///     会把结果缩小 2~3 倍（实测 1 秒的文件算出 0.5 秒）。字段 14 存的是**采样数**，
+        ///     不是压缩后的字节数 —— 验证：1s@44.1k 单声道=44100、1s@44.1k 立体声=44100、
+        ///     1s@48k 24bit=48000，三种都等于「采样率 × 秒数」。
         /// 另外 TTA 规范允许文件最前面贴一个 ID3v2 标签，所以要先跳过它再找 "TTA1"。
         /// 读不到一律返回 TimeSpan.Zero（上层显示"-"，不算失败）。
         /// </summary>
@@ -104,17 +108,15 @@ namespace CelesteMusicPlayer
                     return TimeSpan.Zero;
                 }
 
-                int channels = head[6] | (head[7] << 8);
-                int bits = head[8] | (head[9] << 8);
                 uint rate = (uint)(head[10] | (head[11] << 8) | (head[12] << 16) | (head[13] << 24));
-                uint dataLength = (uint)(head[14] | (head[15] << 8) | (head[16] << 16) | (head[17] << 24));
+                uint samples = (uint)(head[14] | (head[15] << 8) | (head[16] << 16) | (head[17] << 24));
 
-                if (rate == 0 || channels == 0 || bits == 0 || dataLength == 0)
+                if (rate == 0 || samples == 0)
                 {
                     return TimeSpan.Zero;
                 }
 
-                double seconds = dataLength * 8.0 / ((double)rate * channels * bits);
+                double seconds = samples / (double)rate;
                 return seconds > 0 && seconds < TimeSpan.MaxValue.TotalSeconds
                     ? TimeSpan.FromSeconds(seconds)
                     : TimeSpan.Zero;

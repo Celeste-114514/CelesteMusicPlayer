@@ -2,7 +2,9 @@
 //
 // 背景：TagLib 没有 TTA 容器解析器，CreatePlaylistItemFromPath 以前对 .tta 直接抛异常，
 // 曲库扫描把整首丢掉（100 个素材只进 90 个）。修完后这里应该看到 100/100，
-// 其中 10 个 .tta 的时长 = 0.25 秒（TTA 文件头算出，不解码）。
+// 其中 10 个 .tta 的时长取自 TTA 文件头（不解码）。
+// ⚠ 时长别靠这里自证：跑完用 tools/_w13_tta_check.py 拿 ffmpeg 解码出来的真实时长对照，
+//   否则只是「和同一个公式互相印证」。
 //
 // 只读：不播放、不入队、不改设置。素材目录由 LibraryWatchFolders 提前配好。
 // 运行：NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13TtaLibraryProbe.cjs <exe> <输出json>
