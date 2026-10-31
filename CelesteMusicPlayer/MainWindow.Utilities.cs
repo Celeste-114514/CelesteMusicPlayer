@@ -874,22 +874,6 @@ namespace CelesteMusicPlayer
             return Math.Max(0.18, shape * FormatHelper.SpectrumEnvelope(index));
         }
 
-        private static IEnumerable<ListViewItem> EnumerateRealizedListViewItems(ListView list)
-        {
-            Panel? panel = VisualTreeWalker.FindItemsPanel(list);
-            if (panel == null)
-            {
-                yield break;
-            }
-
-            foreach (UIElement child in panel.Children)
-            {
-                if (child is ListViewItem item)
-                {
-                    yield return item;
-                }
-            }
-        }
         // 行悬停画刷（2026-10-31 从 MainWindow.UiTheme.cs 搬来）：纯计算，依赖 IsOpaqueUiStyleActive（已在本文件）。
 
         /// <summary>行悬停底色：经典 / 极客界面用半透明灰（原浅白在浅色主题与近黑底上几乎看不见）。</summary>

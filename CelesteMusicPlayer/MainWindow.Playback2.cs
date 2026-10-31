@@ -515,7 +515,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            ExitMultiSelectMode();
             PlayUserPlaylistAt(0);
             NotifyCurrentPlaylistWindow();
         }
@@ -650,7 +649,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            ExitMultiSelectMode();
             _queue.Items.Clear();
             _queue.Index = -1;
             PlayQueueStore.Clear();
@@ -1052,71 +1050,6 @@ namespace CelesteMusicPlayer
         }
 
         private static PlaylistItem ClonePlaylistItem(PlaylistItem song) => song.Clone();
-
-        /// <summary>
-        /// 歌曲列表表头五词条：与「播放所有专辑」同色半透明底，操场形圆角（高 32 / 半径 16）。
-        /// </summary>
-        private void ApplyPlaylistHeaderChipStyle()
-        {
-            Brush fill = ResolveCapsuleFillBrush();
-            foreach (Border? chip in new[]
-                     {
-                         HeaderTitleChip,
-                         HeaderArtistChip,
-                         HeaderAlbumChip,
-                         HeaderYearChip,
-                         HeaderDurationChip
-                     })
-            {
-                if (chip == null)
-                {
-                    continue;
-                }
-
-                chip.Height = 32;
-                chip.MinHeight = 32;
-                chip.CornerRadius = new CornerRadius(16);
-                chip.Background = fill;
-                chip.BorderThickness = new Thickness(0);
-            }
-        }
-
-        /// <summary>
-        /// 歌曲列表 / 多选：选中为圆角主题色矩形（画在 SongRowChrome 上）；
-        /// 多选未选中为浅霜色底；再次点击取消选择时恢复常态。
-        /// 仅刷新已实现容器，避免对全库做 ContainerFromItem。
-        /// </summary>
-        private void RefreshPlaylistSelectionChrome()
-            => RefreshRealizedSongListSelectionChrome(PlaylistView);
-
-        private void RefreshArtistTrackSelectionChrome()
-            => RefreshRealizedSongListSelectionChrome(ArtistTrackListView);
-
-        // ==== 多选模式（2026-10-31 从 MainWindow.Misc.cs 改写搬来，证据见注释）====
-        // ⚠ _isMultiSelectMode 在主窗口恒 false：三个写 true 的入口全部不可达 ——
-        //   ① EnterFolderMultiSelectMode（Library.cs，壳）只被壳内 multiItem.Click 挂接；
-        //   ② EnterAlbumWallMultiSelectMode（Library2.cs，壳）同上；
-        //   ③ EnterMultiSelectMode 只被旧 MenuFlyoutItem「多选」菜单挂接（菜单挂在
-        //      从不显示的占位控件上）。所以下面两个方法每次执行都走早退/守卫分支，
-        //      原实现里的其余代码从未跑过 —— 已按"不可达即不搬"裁掉，行为零变化。
-
-        /// <summary>退出多选模式。调用点 18 处全在活文件，行为 = 隐藏多选工具条后返回。</summary>
-        private void ExitMultiSelectMode()
-        {
-            if (!_isMultiSelectMode)
-            {
-                if (LibraryPaneTitle != null
-                    && (_currentCategory == "Songs"
-                        || _currentCategory == "UserPlaylist"
-                        || _currentCategory == "Artists"
-                        || _currentCategory == "AlbumArtists"
-                        || _currentCategory == "Albums"))
-                {
-                }
-
-                return;
-            }
-        }
 
         // 多选范围选择挂接（2026-10-31 从 MainWindow.Misc.cs 搬来）：多选域随 Playback2。
 

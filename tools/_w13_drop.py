@@ -41,6 +41,17 @@ def drop_method(path, name):
     for i, l in enumerate(lines):
         if re.match(r"\s*(private|internal|public|protected)", l) and \
            re.search(r"\b" + re.escape(name) + r"\s*\(", l):
+            # 表达式体（`... => Xxx();`）没有花括号：只删这一行，
+            # 否则花括号配平会一路吞到下一个 `}`（曾经把后面整个方法+类删掉）。
+            if "=>" in l and l.rstrip().endswith(";"):
+                st = i
+                while st > 0 and (lines[st - 1].strip().startswith("//") or lines[st - 1].strip() == ""):
+                    st -= 1
+                del lines[st:i + 1]
+                write(path, "".join(lines), bom, crlf)
+                print("删表达式体方法 %-24s %s 行 %d" % (name, os.path.basename(path), st + 1))
+                return True
+
             depth, started = 0, False
             for k in range(i, len(lines)):
                 for ch in lines[k]:
@@ -53,6 +64,10 @@ def drop_method(path, name):
                     st = i
                     while st > 0 and (lines[st - 1].strip().startswith("//") or lines[st - 1].strip() == ""):
                         st -= 1
+                    # 自检：范围必须收在右括号上，否则说明配平跑飞了，拒绝删
+                    if lines[k].strip() not in ("}", "};"):
+                        print("!! 自检失败 %s：结束行不是右括号 -> %s" % (name, lines[k].strip()[:50]))
+                        return False
                     del lines[st:k + 1]
                     write(path, "".join(lines), bom, crlf)
                     print("删方法 %-30s %s 行 %d-%d (%d 行)" % (name, os.path.basename(path), st + 1, k + 1, k - st + 1))

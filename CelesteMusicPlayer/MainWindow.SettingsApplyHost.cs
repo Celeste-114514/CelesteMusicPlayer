@@ -461,9 +461,6 @@ public sealed partial class MainWindow
                     // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线（极客界面保持单色，终端风不上彩）
 
                     // 面板底色/选中样式全部按新主题重刷（顺序：先信息卡底色，再依赖它取色的胶囊/表头）
-                    ApplyPlaylistHeaderChipStyle();
-                    RefreshPlaylistSelectionChrome();
-                    RefreshArtistTrackSelectionChrome();
                     ApplyBorderColorFromUiTint();
 
                     // 主窗口系统按钮（最小化/最大化/关闭）跟着经典主题换色：浅色界面下配深色按钮，
@@ -480,9 +477,6 @@ public sealed partial class MainWindow
                     // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）
                     ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
                     ApplyCustomBackground(settings.CustomBackgroundPath);
-                    ApplyPlaylistHeaderChipStyle();
-                    RefreshPlaylistSelectionChrome();
-                    RefreshArtistTrackSelectionChrome();
                     ApplyBorderColorFromUiTint();
 
                     // 从经典切回来时，把系统按钮恢复成背景图式原本的浅灰配色

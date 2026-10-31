@@ -189,8 +189,6 @@ namespace CelesteMusicPlayer
             {
                 root.ActualThemeChanged += (_, _) =>
                 {
-                    RefreshPlaylistSelectionChrome();
-                    ApplyPlaylistHeaderChipStyle();
                 };
             }
 
@@ -1217,7 +1215,6 @@ namespace CelesteMusicPlayer
                     _playlistViewSource = _playlist;
                 }
 
-                RefreshPlaylistSelectionChrome();
                 return;
             }
 
@@ -1229,7 +1226,6 @@ namespace CelesteMusicPlayer
                 .ToList();
 
             _playlistViewSource = filtered;
-            RefreshPlaylistSelectionChrome();
         }
 
         /// <summary>播放列表搜索：标题 / 艺术家 / 专辑 / 年份。</summary>
@@ -1248,7 +1244,6 @@ namespace CelesteMusicPlayer
                     _playlistViewSource = _queue.Items;
                 }
 
-                RefreshPlaylistSelectionChrome();
                 return;
             }
 
@@ -1257,7 +1252,6 @@ namespace CelesteMusicPlayer
                 .ToList();
 
             _playlistViewSource = filtered;
-            RefreshPlaylistSelectionChrome();
         }
 
         internal static bool MatchesPlaylistSearch(PlaylistItem item, string query)

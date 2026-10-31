@@ -224,7 +224,6 @@ public sealed partial class MainWindow
 
             if (_currentCategory is "Genres" or "Years")
             {
-                RefreshPlaylistSelectionChrome();
             }
         }
 

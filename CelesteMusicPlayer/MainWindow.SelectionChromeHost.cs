@@ -147,25 +147,6 @@ public sealed partial class MainWindow
             return _cachedMultiSelectFrostBrush;
         }
 
-        /// <summary>在容器已加载后关闭系统选中勾（避免与词条文字重叠）。</summary>
-        private void DisableContainerSelectionCheckMark(Control container)
-        {
-            SoftenItemPresenterCorners(container);
-            if (!container.IsLoaded)
-            {
-                void OnLoaded(object sender, RoutedEventArgs e)
-                {
-                    container.Loaded -= OnLoaded;
-                    SoftenItemPresenterCorners(container);
-                }
-
-                container.Loaded += OnLoaded;
-            }
-            else
-            {
-                DispatcherQueue.TryEnqueue(() => SoftenItemPresenterCorners(container));
-            }
-        }
 
         // W13 第二十二刀：专辑墙卡片行样式
 

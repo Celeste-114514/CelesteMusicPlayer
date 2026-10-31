@@ -21,7 +21,6 @@ public sealed partial class MainWindow
 
         private void CloseArtistDetailUi()
         {
-            ExitMultiSelectMode();
             _openedArtist = null;
             _artistDetailUsesAlbumArtist = false;
             _artistTracks.Clear();
