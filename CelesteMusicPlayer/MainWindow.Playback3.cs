@@ -80,7 +80,7 @@ namespace CelesteMusicPlayer
                 // 仅共享模式在恢复时做软件增益淡入。
                 if (!IsHiFiModeSelected())
                 {
-                    double resumeTarget = VolumeSlider.Value / 100.0;
+                    double resumeTarget = _volumePercent / 100.0;
                     _ = FadeInEngineAfterResumeAsync(resumeTarget);
                 }
 
@@ -142,11 +142,14 @@ namespace CelesteMusicPlayer
         // 进度条 / 音量
         // =====================================================================
 
-        private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
+        /// <summary>
+        /// 应用音量百分比：设置引擎增益，并在用户主动调整时记下偏好、去抖写盘。
+        /// 旧界面那根 VolumeSlider 已删，本方法就是它的 ValueChanged 处理器，逻辑原样搬过来。
+        /// </summary>
+        private void ApplyVolumePercent(double value0To100)
         {
-
-            // 共享模式：MediaPlayer 数字音量（跟随用户）。
-            MediaPlayer? player = GetPlayer();
+            double percent = Math.Clamp(value0To100, 0, VolumePercentMax);
+            _volumePercent = percent;
 
             // 设备/引擎音量：共享=数字增益随滑块；独占/ASIO 默认软件音量条固定 100%（实际音量由 DAC 硬件旋钮/
             // 系统端点音量控制，bit-perfect 保真）；设置页开启「HiFi 软件音量」后，独占/ASIO 下滑条改走
@@ -154,16 +157,15 @@ namespace CelesteMusicPlayer
             bool softVol = IsHiFiSoftVolumeUiUnlocked();
             if (!IsHiFiModeSelected() || softVol)
             {
-                _audioEngine?.SetVolume(e.NewValue / 100.0);
+                _audioEngine?.SetVolume(percent / 100.0);
             }
 
             if (!_applyingSettingsVolume && (!IsHiFiModeSelected() || softVol) && _volumeStartupApplied)
             {
                 // 记录用户最后一次主动设定的音量（跨入口唯一真值源）
-                LastUserVolume = Math.Clamp(e.NewValue, 0, 100);
-                ScheduleVolumeSave(e.NewValue);
+                LastUserVolume = percent;
+                ScheduleVolumeSave(percent);
             }
-
         }
 
         /// <summary>音量写盘去抖:停止拖动 300ms 后才保存一次,避免每 tick 全量写盘。</summary>
@@ -363,7 +365,7 @@ namespace CelesteMusicPlayer
         // =====================================================================
 
         /// <summary>当前音量（0–100）。迷你播放器音量条读它。</summary>
-        internal double GetVolumePublic() => VolumeSlider?.Value ?? 100;
+        internal double GetVolumePublic() => Math.Clamp(_volumePercent, 0, VolumePercentMax);
 
         /// <summary>
         /// 设置音量（0–100）。刻意走主窗口同一个 VolumeSlider，而不是直接改 MediaPlayer.Volume，
@@ -372,7 +374,7 @@ namespace CelesteMusicPlayer
         internal void SetVolumePublic(double value0To100)
         {
 
-            VolumeSlider.Value = Math.Clamp(value0To100, 0, VolumeSlider.Maximum);
+            ApplyVolumePercent(value0To100);
         }
 
         /// <summary>当前播放队列快照。迷你播放器队列面板用。</summary>

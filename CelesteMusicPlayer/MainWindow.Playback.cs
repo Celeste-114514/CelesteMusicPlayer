@@ -154,9 +154,8 @@ namespace CelesteMusicPlayer
             _mediaPlayer.MediaFailed += Player_MediaFailed;
             _mediaPlayer.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
 
-            VolumeSlider.ValueChanged += VolumeSlider_ValueChanged;
             ApplyStartupPlaybackSettings();
-            _mediaPlayer.Volume = VolumeSlider.Value / 100.0;
+            _mediaPlayer.Volume = _volumePercent / 100.0;
             UpdateSignalChainDisplay();
             UpdateDesktopLyricsBadge();
             InitializeMusicPlayer2Features();
@@ -229,10 +228,8 @@ namespace CelesteMusicPlayer
                 // 看起来像"启动音量不对/要手动点一下才满"。
                 // 注意：只改显示，绝不动 _volumeToSave，否则退出时会把用户在共享模式下的真实偏好覆盖成 100。
                 bool hifiVolumeLocked = IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked();
-                VolumeSlider.Value = hifiVolumeLocked ? VolumeSlider.Maximum : Math.Clamp(settings.Volume, 0, 100);
-                // 回填完成：此后（用户真实拖动等）音量变化才允许写盘。
-                // 关键：XAML 里 VolumeSlider 的 Value 默认值在 InitializeComponent 时触发 ValueChanged，
-                // 若不加此闸门，那个默认值（原 80）会在启动回填前抢先写盘，覆盖用户上次保存的音量。
+                ApplyVolumePercent(hifiVolumeLocked ? VolumePercentMax : settings.Volume);
+                // 回填完成：此后（用户真实调整）音量变化才允许写盘。
                 _volumeStartupApplied = true;
             }
             finally
@@ -1376,7 +1373,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            VolumeSlider.Value = Math.Clamp(VolumeSlider.Value + delta, 0, 100);
+            ApplyVolumePercent(_volumePercent + delta);
         }
 
         internal void SeekBySeconds(double seconds)

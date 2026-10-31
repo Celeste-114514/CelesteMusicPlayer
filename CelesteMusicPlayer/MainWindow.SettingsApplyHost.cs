@@ -342,7 +342,7 @@ public sealed partial class MainWindow
                         // 否则切到 HiFi 后退出，会把用户在共享模式下的真实音量偏好覆盖成 100，
                         // 下次重启共享模式音量就"重置"了。
                         bool softVol = IsHiFiSoftVolumeUiUnlocked();
-                        VolumeSlider.Value = softVol ? Math.Clamp(settings.Volume, 0, 100) : VolumeSlider.Maximum;
+                        ApplyVolumePercent(softVol ? settings.Volume : VolumePercentMax);
                         MediaPlayer? hifiPlayer = GetPlayer();
 
                         if (softVol)
@@ -353,7 +353,7 @@ public sealed partial class MainWindow
                     }
                     else
                     {
-                        VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+                        ApplyVolumePercent(settings.Volume);
                         _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动同步，避免退出误写
                         MediaPlayer? player = GetPlayer();
 

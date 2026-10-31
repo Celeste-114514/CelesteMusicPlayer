@@ -18,8 +18,10 @@ namespace CelesteMusicPlayer
             if (duration <= 0) duration = item?.Duration.TotalSeconds ?? 0;
             if (!active && player?.Source == null)
             {
+                // 还没起播：位置用「准备好要跳到的秒数」（暂停态记的那份），
+                // 旧界面这里读的是进度条滑杆，而滑杆早已没有任何地方写值。
                 duration = item?.Duration.TotalSeconds ?? 0;
-                position = ProgressSlider?.Value ?? 0;
+                position = Math.Max(0, _pendingStartSeconds);
             }
             return new PlaybackSnapshot
             {

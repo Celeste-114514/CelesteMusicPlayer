@@ -226,7 +226,7 @@ public sealed partial class MainWindow
             try
             {
                 _volumeSaveTimer?.Stop();
-                double sliderVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                double sliderVolume = Math.Clamp(_volumePercent, 0, VolumePercentMax);
                 double liveVolume = Math.Clamp(LastUserVolume >= 0 ? LastUserVolume : sliderVolume, 0, 100);
                 AppSettingsStore.Update(s => s.Volume = liveVolume);
                 global::CelesteMusicPlayer.StartupLog.Write($"[音量] 退出写盘 = {liveVolume:0.##}（滑条={sliderVolume:0.##}，用户设定={LastUserVolume:0.##}）");

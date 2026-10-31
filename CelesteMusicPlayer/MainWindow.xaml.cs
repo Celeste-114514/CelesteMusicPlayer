@@ -433,6 +433,10 @@ namespace CelesteMusicPlayer
         private bool _applyingSettingsVolume;
         private DispatcherQueueTimer? _volumeSaveTimer;
         private double _volumeToSave;
+        /// <summary>当前音量百分比（0–100）。旧界面那根音量滑杆已删，这里就是唯一真值源：
+        /// 读写都走它，应用与写盘统一在 ApplyVolumePercent 里做。</summary>
+        private double _volumePercent = 100;
+        private const double VolumePercentMax = 100;
         /// <summary>音量启动回填是否完成。为 false 期间（InitializeComponent 解析 XAML 默认值
         /// 触发 ValueChanged 到真正回填保存音量之间），任何音量变化都不写盘，
         /// 防止 XAML 里的默认值覆盖用户上次保存的音量。</summary>
