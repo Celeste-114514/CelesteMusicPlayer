@@ -2050,7 +2050,6 @@ namespace CelesteMusicPlayer
                 var coverFrame = img?.FindName("RowCoverBorder") as Border;
                 if (coverImg != null && coverFrame != null)
                 {
-                    ApplyCoverFrame(coverFrame, coverImg);
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

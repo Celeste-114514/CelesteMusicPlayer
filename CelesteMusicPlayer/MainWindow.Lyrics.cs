@@ -389,7 +389,6 @@ namespace CelesteMusicPlayer
             {
                 _lyricScrollTimer = DispatcherQueue.CreateTimer();
                 _lyricScrollTimer.Interval = TimeSpan.FromMilliseconds(8);
-                _lyricScrollTimer.Tick += LyricScrollTimer_Tick;
             }
 
             _lyricScrollTimer.Start();

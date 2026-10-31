@@ -1448,7 +1448,6 @@ namespace CelesteMusicPlayer
 
                 if (bmp != null)
                 {
-                    ApplyCoverFrame(PlaylistDetailCover, PlaylistDetailCoverImage);
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

@@ -77,7 +77,6 @@ public sealed partial class MainWindow
                     if (_openedAlbum != null &&
                         string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
                     {
-                        ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
                     }
                 }
             }
@@ -130,7 +129,6 @@ public sealed partial class MainWindow
 
             UpdateLibrarySearchUi();
 
-            ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
 
             _albumTracks.Clear();
             List<PlaylistItem> tracks = _playlist

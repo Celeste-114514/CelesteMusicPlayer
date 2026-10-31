@@ -92,7 +92,6 @@ public sealed partial class MainWindow
             // 播放列表列显隐/密度：保存后即时应用
             try
             {
-                ApplyPlaylistColumnSettings(settings);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 

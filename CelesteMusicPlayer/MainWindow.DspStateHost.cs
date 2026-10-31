@@ -129,16 +129,6 @@ public sealed partial class MainWindow
                     : (_geekDspActive ? Color.FromArgb(255, 0x4A, 0x4A, 0x42) : Color.FromArgb(255, 0xB4, 0xB2, 0xA9)));
             }
 
-            if (OutMonitorActiveDspText != null)
-            {
-                UpdateDspOutputMonitor();
-            }
-
-            // 机架编排页的行状态与导航圆点同源，一起刷（页面不可见时刷新无副作用，控件判空即可）
-
-            UpdateDspHeroBadges();
-            // 页头电源开关与徽章/圆点同源同步（10 个可开关模块；同步过程有 _dspPowerSyncing 守卫）
-            UpdateDspChannelBars();
         }
 
         /// <summary>耳机校正（OPRA）曲线是否正作为当前 EQ 曲线。

@@ -89,7 +89,6 @@ public sealed partial class MainWindow
                     // 播放列表列显隐/密度
                     try
                     {
-                        ApplyPlaylistColumnSettings(AppSettingsStore.Load());
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 

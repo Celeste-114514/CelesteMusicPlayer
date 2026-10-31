@@ -459,13 +459,13 @@ namespace CelesteMusicPlayer
             };
 
 
-        internal void CyclePlaybackOrderPublic() => PlaybackOrderButton_Click(PlaybackOrderButton!, new RoutedEventArgs());
+        internal void CyclePlaybackOrderPublic() => PlaybackOrderButton_Click(this, new RoutedEventArgs());
 
         internal void PreviousPublic() => PlayPrevious();
 
         internal void NextPublic() => PlayNext();
 
-        internal void TogglePlayPausePublic() => PlayPauseButton_Click(PlayPauseButton!, new RoutedEventArgs());
+        internal void TogglePlayPausePublic() => PlayPauseButton_Click(this, new RoutedEventArgs());
 
         /// <summary>把当前播放曲目加入/移出"我喜欢的音乐"（托盘/菜单/任务栏缩略图复用）。
         /// 点击行为：未收藏 → 加入；已收藏 → 移除。托盘和任务栏共用同一份逻辑。</summary>
@@ -1033,42 +1033,6 @@ namespace CelesteMusicPlayer
         }
 
 
-                /// <summary>应用播放列表列显隐与密度。</summary>
-        private void ApplyPlaylistColumnSettings(AppSettingsState settings)
-        {
-            try
-            {
-                var cols = PlaylistColumnWidths.Instance;
-                cols.Title = settings.ShowPlaylistTitle ? 140 : 0;
-                cols.Artist = settings.ShowPlaylistArtist ? 110 : 0;
-                cols.Album = settings.ShowPlaylistAlbum ? 110 : 0;
-                cols.Year = settings.ShowPlaylistYear ? 52 : 0;
-                cols.Duration = settings.ShowPlaylistDuration ? 60 : 0;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                // 密度:切换 ListView 行高(资源键通过 RootShell.Resources 查找)
-                Style? style = null;
-                if (RootShell != null && RootShell.Resources != null)
-                {
-                    string key = settings.PlaylistDensity == "Compact" ? "CompactListItemStyle" : "ComfortableListItemStyle";
-                    if (RootShell.Resources.TryGetValue(key, out object? res) && res is Style s)
-                    {
-                        style = s;
-                    }
-                }
-
-                foreach (ListView list in new[] { PlaylistView, AlbumTrackListView, ArtistTrackListView, FolderBrowserView })
-                {
-                    list.ItemContainerStyle = style;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
         /// <summary>将当前播放队列保存为命名播放列表（Poweramp 式持久化，不影响当前队列）。</summary>
         internal void SaveCurrentQueueAsPlaylist(string name)
         {
@@ -1192,57 +1156,14 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 封面框"无框"效果：有封面图时隐藏边框线和底色（视觉无框），无封面时显示框 + 光盘占位图标。
-        /// 与专辑墙 x:Bind 的 CoverFrameThickness / CoverFrameBackground 保持一致。
-        ///
-        /// ⚠️ 占位图标必须一起藏起来：图标是「一个圆圈 + 中间一个音符」（E958），
-        /// 正方形封面能把它整个盖住，看不出问题；但**长方形封面**用 Uniform 完整显示时上下有留白，
-        /// 占位图标的圆圈轮廓就从留白处露出来，看起来像给封面"套了一圈"（用户报的播放页歌词布局
-        /// 左上角封面那个圈就是这个）。有封面时一律 Collapsed。
-        /// </summary>
-        private static void ApplyCoverFrame(Border frame, Image image)
-        {
-            if (frame == null)
-            {
-                return;
-            }
-
-            bool hasCover = image != null && image.Source != null;
-            frame.BorderThickness = hasCover ? new Thickness(0) : new Thickness(1);
-            if (hasCover)
-            {
-                frame.Background = new SolidColorBrush(Colors.Transparent);
-            }
-            else if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out var b) && b is Brush brush)
-            {
-                frame.Background = brush;
-            }
-
-            // 藏 / 显封面框里的占位图标（结构：Border → Grid → [FontIcon, Image]）
-            if (frame.Child is Panel panel)
-            {
-                foreach (var child in panel.Children)
-                {
-                    if (child is FontIcon placeholder)
-                    {
-                        placeholder.Visibility = hasCover ? Visibility.Collapsed : Visibility.Visible;
-                    }
-                }
-            }
-        }
-
-
         private void ClearNowPlayingPanel()
         {
             // 保留旧波形:停止/切歌时进度条静态显示上次波形,不闪占位
             _waveformPath = null;
             _nowPlayingPath = null;
             _currentPlayingItem = null;   // 停止/清空：权威记录一起清，别再按旧下标猜
-            ResetNowPlayingArtistAlbumLinks();
             _lastCoverImage = null;   // 迷你播放器整窗背景同步清（它读的是大图，不是播放栏缩略图）
             _lastCoverThumbImage = null;   // 迷你播放器 72×72 小封面同步清（Thumb 160 档，见 UpdateTransportCoverAsync）
-            ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             ApplyNowPlayingPaneTransparent();
             UpdateTransportNowPlaying(null, null);
             ClearLyricsUi("开始播放后显示歌词");
@@ -1265,13 +1186,11 @@ namespace CelesteMusicPlayer
         {
             if (item == null)
             {
-                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
                 return;
             }
 
             if (coverKnown && applyCover)
             {
-                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
             }
         }
 
@@ -1294,7 +1213,6 @@ namespace CelesteMusicPlayer
                 // ⚠️ 迷你播放器的小封面也读这里清出来的 _lastCoverThumbImage —— 不清的话
                 //    换到无封面的歌时迷你条会挂着上一首的封面（回归问题）。
                 _lastCoverThumbImage = null;
-                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
                 return;
             }
 
@@ -1313,7 +1231,6 @@ namespace CelesteMusicPlayer
             global::CelesteMusicPlayer.StartupLog.Write(
                 $"[播放栏封面] 缓存={(fromCache ? "命中" : "现解码")} 像素={thumb.PixelWidth}x{thumb.PixelHeight}");
 
-            ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
 
             // 迷你播放器 72×72 小封面共用这一张（Thumb 160 档）：它以前拿播放页大图
             // （Large 768）硬缩到 72，十倍缩小必糊 —— 用户 10-19 报「缩略图也糊」。
@@ -1419,7 +1336,6 @@ namespace CelesteMusicPlayer
             }
 
             _lastCoverImage = coverImage;   // 迷你播放器整窗背景同步（它读的是大图，不是播放栏缩略图）
-            ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             UpdateTransportNowPlaying(item, coverImage, applyCover: false);
             _ = UpdateTransportCoverAsync(item.FilePath, coverBytes);
             _lastCoverBytes = coverBytes;   // 供自定义背景移除后恢复封面背景
@@ -1443,28 +1359,6 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("BuildLyricsUi", caught);
             }
             _ = MaybeAutoDownloadExtrasAsync(item, lyrics, coverBytes);
-        }
-
-
-
-
-
-
-
-
-
-
-        /// <summary>重置艺术家/专辑超链接为空占位（未播放时禁用）。</summary>
-        private void ResetNowPlayingArtistAlbumLinks()
-        {
-            try
-            {
-                if (NowPlayingArtistText != null) NowPlayingArtistText.Text = "未知艺术家";
-                if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.IsEnabled = false;
-                if (NowPlayingAlbumText != null) NowPlayingAlbumText.Text = "未知专辑";
-                if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.IsEnabled = false;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
 
@@ -1773,26 +1667,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void LyricScrollTimer_Tick(dynamic sender, dynamic e)
-        {
-            double elapsed = Environment.TickCount64 - _lyricScrollStartMs;
-            double t = Math.Clamp(elapsed / LyricScrollDurationMs, 0, 1);
-            // ease-in-out cubic，比系统默认滚动更柔和
-            double eased = t < 0.5
-                ? 4 * t * t * t
-                : 1 - Math.Pow(-2 * t + 2, 3) / 2;
-
-            double y = _lyricScrollFrom + (_lyricScrollTo - _lyricScrollFrom) * eased;
-            LyricsScrollViewer.ChangeView(null, y, null, disableAnimation: true);
-
-            if (t >= 1)
-            {
-                _lyricScrollTimer?.Stop();
-                LyricsScrollViewer.ChangeView(null, _lyricScrollTo, null, disableAnimation: true);
-            }
-        }
-
-
         private void WaveformTimer_Tick(dynamic sender, dynamic e)
         {
             MediaPlayer? player = GetPlayer();
@@ -1802,7 +1676,7 @@ namespace CelesteMusicPlayer
                 || enginePlaying;
 
             double t = Environment.TickCount64 / 1000.0;
-            double volume = enginePlaying ? VolumeSlider.Value / 100.0 : (player?.Volume ?? 0.8);
+            double volume = enginePlaying ? GetVolumePublic() / 100.0 : (player?.Volume ?? 0.8);
 
             // 真频谱优先：拿得到实际播放信号的 FFT 结果就用真的（低频在左、高频在右，跟着音乐动）；
             // 拿不到（DSD 直出、刚开始播放样本不足、非引擎播放）才回退到装饰性呼吸动画。
@@ -1950,7 +1824,7 @@ namespace CelesteMusicPlayer
                 string isoPath = _queue.Items[isoIndex].FilePath;
 
                 var tracks = await SacdIsoExtractor.ExtractTracksAsync(isoPath, s =>
-                    DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; })).ConfigureAwait(false);
+                    DispatcherQueue.TryEnqueue(() => { })).ConfigureAwait(false);
 
                 if (tracks.Count == 0)
                 {
@@ -1989,7 +1863,6 @@ namespace CelesteMusicPlayer
 
                         _queue.Index = isoIndex;                       // 指向首轨
                         _currentIndex = FindLibraryIndex(dsItems[0].FilePath);
-                        PlaylistView?.ScrollIntoView(dsItems[0]);
                         StartPlayback(dsItems[0]);
                         PersistPlaybackSession();
                         NotifyCurrentPlaylistWindow();
@@ -2191,7 +2064,7 @@ namespace CelesteMusicPlayer
             // Engine events are wired once by PlaybackSession; do not handle each transition twice.
             // CUE 分轨与起播本身也在会话里：会话只回"成没成、是不是 DoP 直出、转了 PCM 没有、多长"。
             PlaybackStartResult result = await Session
-                .StartAsync(item, s => DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }))
+                .StartAsync(item, s => DispatcherQueue.TryEnqueue(() => { }))
                 .ConfigureAwait(true);
             if (result.Ok)
             {

@@ -34,7 +34,6 @@ public sealed partial class MainWindow
             _openedAlbum = null;
             _albumOpenedFromArtist = false;
             _albumTracks.Clear();
-            ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
         }
 
         private void UpdateAlbumSortButtonsUi()
