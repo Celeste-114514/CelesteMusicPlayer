@@ -169,3 +169,27 @@ ApplyCategoryViewData，壳内调用点自动跟随。**428 → 422 错 / 167 �
 导航域三大件（ApplyCategoryView/CommitLibraryNavigation/LoadAndAddFiles）全部下榜；
 导航域剩余只剩列表视觉族（ScheduleFitColumns/RefreshFolderBrowserSelectionChrome/SetListSelectionMode 各 6）。
 下一仗：DSP 域（~150 处，榜首 ApplyFirParameters 8）。
+
+### DSP 域 1/N（2026-10-31 晚，提交 `11750a6`，⚠ 刀号与并行会话的十三/十四刀撞号，以下按时间线称"DSP 批 1"）
+> 并行会话（Absolomb）在此期间完成了第十三/十四刀（ApplyCategoryView 改道 ApplyCategoryViewData、
+> LoadAndAddFiles 离壳，454→422）。本批在它们之上进行，文件无重叠。
+
+- **状态字段组**：`_audioFxPanelReady`/`_dspRackReady` → DspStateHost；`_roomIrUiReady/_roomIrLoaded/_roomIrLoadedRate` → WebDspTools；`_eqSimpleBass/Vocal/Air/Warm` → WebDsp。
+- **模块启用判定族**（从 git HEAD 原文整批）：`DspModuleActive`/`UpdateDspNavIndicators`/`_opraApplied` 属性/12 个 `DspActive*` 下标常量（DspNav）、`DspComp/Field/MatrixActive`（DspRack）→ DspStateHost（模型与状态容器本就在该文件）。
+**422 → 378 错 / 166 → 156 成员**。四道验证全过。回退件 `pre-w13-dspbatch1-20261031`。
+
+### ⚠ DSP 批 1 过程坑（两个新形态，均已修复）
+1. **分号结尾的字段声明被花括号配平误切**：`private bool _roomIrUiReady;` 后面跟着方法，配平一路吃到
+   方法闭合，把 `LoadRoomCorrectionIntoPanel`、`LoadDspRackUi` 等整段误切走（EqDsp -77/DspRack -64）。
+   修复：RoomIr 从 git 恢复；误切段从 DspStateHost 按归属搬回。**教训：分号结尾的声明绝不做配平。**
+2. **从 HEAD 提取插入时忘了删源文件原文**：DspNav 的判定族在 DspStateHost 与 DspNav 双份 → CS0111。
+   修复：从 DspNav 补删。**教训：HEAD 提取式搬移的"删源"步骤必须显式执行。**
+另：本机 python/dotnet 各出现一次 Segmentation fault（沙箱偶发），重跑即过。
+
+### DSP 域剩余（~120 处）
+EQ 撤销/快照族（PushEqUndoSnapshot/SetAudioFxEqFromSnapshot/Undo/Redo/ToggleAb/AutoGain ~20）、
+参数下发族（ApplySrc/Comp/Field/MatrixParameters + ApplyDspToEngine ~10）、
+ApplyFirParameters+RefreshFirReadouts（~10）、面板刷新族（SyncDspPowerSwitches/RefreshDspProfileUi/
+EnsureAudioFxUiBuilt/LoadAudioFxUiFromStore ~15）、Profile/机架管理（~15）、
+ApplySimpleTones+SyncAudioFxEqSimpleFromState（~4）、ApplyOpraCurve/NoteOpraApplied（~4）、
+ApplyDeviceDspProfileIfEnabled（2）。
