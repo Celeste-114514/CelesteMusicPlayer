@@ -57,7 +57,13 @@
   （控件→状态容器 `MainWindow.LegacyControls.cs`）。旧 XAML 只做 `Page/Compile Remove`（**不删文件**，迷你/零散留给用户重构）。
 - ✅ 编译已收尾（2026-10-30），但**「已去 WinUI」仍不能宣称**：界面残留文件还在，业务还有一部分住在 MainWindow。
 - ⚠ **判断编译是否真过必须 `-t:Rebuild`**（增量常报"0 错误"假象，已骗三次）。
-- ⚠ 路线：先搬业务方法出来，再整批排除界面文件（直接排除更糟：1450→1980）。工具在 `_w13_tools/`。
+- ⚠ 路线：先搬业务方法出来，再整批排除界面文件。**别再靠正则猜死代码** —— 用 `tools/_w13_shell_exclude_probe.py`
+  临时排除壳文件编译，让编译器报「还借了谁」（2026-10-31 实测 1024 错 / 259 个成员，明细 `collab/RESULT-2026-10-31-w13-shell-leafcut.md`）。
+  **17 个旧窗口已全部 Compile Remove，「独立窗口拴着壳」这条已过期**：编译内只剩 MainWindow（空 Grid）和 App。
+- ✅ 旧壳第一刀（`161f68c`）：`LegacyBusinessState`/`LevelMeter`/`DspStatus`/`Crossfade`/`FullScreen` 五个
+  只写占位控件的文件整批 Compile Remove（700 行）。下一刀按「能不能自动验」排：纯工具六件套
+  （FormatTime/ContainsIgnoreCase/CoverDecodeTargetPx/ExtractCoverBytes/PickerHostHandle/FindAncestorListView，86 处）
+  → ShowErrorAsync(20) → 布局旗标 58 处 → DSP 状态机 → LegacyControls 463 字段。
 - 剩余：标签在线搜索 + 歌词编排（`WebTagTools.cs`）、引擎本体（必须真出声）、
   `Features.cs`(178K)/`UiTheme.cs`(148K) 要先甄别哪些控件操作已死。
 - **DSP 方案 A 已收官**（`259aeaa`）：六模块 + 两个链路级模型全离开控件；契约 `IDspParameterModel`（`Owns/Describe/Set`），
