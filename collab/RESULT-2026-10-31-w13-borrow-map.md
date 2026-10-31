@@ -63,3 +63,15 @@
 5. 全清后：SHELL 清单 35 个文件整批 `<Compile Remove>`，旧壳正式退出编译
 
 每刀照旧四道验证：Rebuild 0 错误 → publish 验体积 → 接口回归 → 实播。
+
+---
+## 执行进度
+
+### 第八刀（提交 `c3d09e0`，2026-10-31）：第 1 步纯函数清完
+搬 Utilities（逐行原样）：`IsDsdFile`/`DsdExtOf`/`ResolveCapsuleFillBrush`（Misc）；
+`ResolveAccentColor(Static)`/`ResolveAccentForegroundBrush`/`ResolveUiBaseTintColor`/
+`IsClassicUiStyleActive`/`IsOpaqueUiStyleActive`/`Instance` 属性（UiTheme）。
+`Instance` 是全项目共用的核心静态属性，声明搬家零行为变化。
+**614 → 588 错 / 214 → 205 成员**。DLL 3,018,240。四道验证全过。
+回退件 `dist/web-ui-20261028-pre-w13-accent-20261031/`。
+跳过未动：`RetargetStoryboard`（操作旧界面元素树的名字解析，属视觉域）、`DrawWaveformStyle`（旧 Canvas 绘制）。
