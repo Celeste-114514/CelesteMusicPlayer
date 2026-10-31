@@ -43,15 +43,6 @@ namespace CelesteMusicPlayer
         /// </summary>
         private const double FieldAssumedInputCorrelation = 0.5;
 
-        private void DspFieldRingCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            RedrawDspFieldRing();
-        }
 
         internal void RedrawDspFieldCanvas()
         {
@@ -280,8 +271,6 @@ namespace CelesteMusicPlayer
 
         }
 
-        private static string FormatSignedDb(double db)
-            => (db >= 0 ? "+" : "") + db.ToString("0.0") + " dB";
 
         /// <summary>圆环几何：圆心 + 半径（画布较短边的 40% 上下，留出标签空间）。</summary>
         private (double cx, double cy, double r) GetDspFieldRingGeometry()

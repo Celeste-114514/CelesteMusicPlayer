@@ -121,21 +121,6 @@ namespace CelesteMusicPlayer
         // 事件：压缩器
         // ─────────────────────────────────────────────────────────────
 
-        private void DspComp_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (!_dspRackLoading)
-            {
-            }
-
-            if (_dspRackLoading)
-            {
-                return;
-            }
-
-            // 关掉时曲线退化为「输出 = 输入」的斜线，打开时恢复压缩曲线 —— 必须重画
-            RedrawDspCompTransferCurve();
-            PushDspRackToEngine();
-        }
 
         /// <summary>把模型里的压缩器参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyCompParameters()
@@ -145,31 +130,6 @@ namespace CelesteMusicPlayer
             PushDspRackToEngine();
         }
 
-        private void DspCompSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            // 启动阶段（InitializeComponent 解析 XAML）滑杆的 Value 初值会就地触发本事件，
-            // 此时同页后续控件的 x:Name 字段还没连上，直接刷读数会空引用、整个进程秒崩。
-            // InitDspNav 完成前（_dspRackReady=false）一律忽略，与 ApplyDspToEngine 的
-            // _audioFxPanelReady 守卫同一套路。LoadDspRackUi 期间由它自己显式刷读数，不缺这一次。
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            // 只把被拖动的这一条导入模型（LoadDspRackUi 期间由它自己装载，别回写）。
-            if (!_dspRackLoading)
-            {
-            }
-            RefreshDspCompReadouts();
-
-            // 传递曲线是参数的函数，任何一条滑杆动了都得重画（曲线的形状会跟着变）
-            RedrawDspCompTransferCurve();
-
-            if (!_dspRackLoading)
-            {
-                PushDspRackToEngine();
-            }
-        }
 
 
         // 压缩器每拍刷新（仅本页可见时轮询）：压缩量读数 + 8 秒折线 + 入口电平。
@@ -208,21 +168,6 @@ namespace CelesteMusicPlayer
         // 事件：立体声场
         // ─────────────────────────────────────────────────────────────
 
-        private void DspField_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (!_dspRackLoading)
-            {
-            }
-
-            if (_dspRackLoading)
-            {
-                return;
-            }
-
-            // 关掉时圆环变灰、读数显示「旁路」，必须重画
-            RedrawDspFieldRing();
-            PushDspRackToEngine();
-        }
 
         /// <summary>把模型里的声场参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyFieldParameters()
@@ -232,50 +177,12 @@ namespace CelesteMusicPlayer
             PushDspRackToEngine();
         }
 
-        private void DspFieldSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            // 说明同 DspCompSlider_ValueChanged：解析期初值就地触发，后续控件字段未连接前必须忽略。
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            if (!_dspRackLoading)
-            {
-            }
-            RefreshDspFieldReadouts();
-
-            // 圆环上的手柄位置是这三个参数的函数，动一条就得重画
-            RedrawDspFieldRing();
-
-            // 圆环拖动期间不落盘：一次拖动会触发几百次本事件，每次 SetRack 都要
-            // 写一次 dsp-rack.json 并下发内核。松手（PointerReleased）时统一补一次。
-            if (!_dspRackLoading && !_dspFieldSuppressPush)
-            {
-                PushDspRackToEngine();
-            }
-        }
 
 
         // ─────────────────────────────────────────────────────────────
         // 事件：声道矩阵
         // ─────────────────────────────────────────────────────────────
 
-        private void DspMatrix_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (!_dspRackLoading)
-            {
-            }
-
-            if (_dspRackLoading)
-            {
-                return;
-            }
-
-            // 关掉时流图退化为「旁路的样子」（左→左、右→右 直通），要同步画出来
-            RedrawDspMatrixFlow();
-            PushDspRackToEngine();
-        }
 
         /// <summary>把模型里的矩阵参数下发（网页命令与页头电源开关共用）。</summary>
         private void ApplyMatrixParameters()
@@ -285,27 +192,6 @@ namespace CelesteMusicPlayer
             PushDspRackToEngine();
         }
 
-        private void DspMatrixSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            // 说明同 DspCompSlider_ValueChanged：解析期初值就地触发，后续控件字段未连接前必须忽略。
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            if (!_dspRackLoading)
-            {
-            }
-            RefreshDspMatrixReadouts();
-
-            // 矩阵流图跟着四个系数走（画图内部有 null 守卫，面板未构建时安全返回）
-            RedrawDspMatrixFlow();
-
-            if (!_dspRackLoading)
-            {
-                PushDspRackToEngine();
-            }
-        }
 
 
         // ─────────────────────────────────────────────────────────────
@@ -320,24 +206,6 @@ namespace CelesteMusicPlayer
             Bypassed = 2
         }
 
-        /// <summary>行状态点颜色：on=面板强调色（极客磷光/经典 accent）；已旁路=琥珀（语义色，
-        /// 不主题化，与模块页 Hero 徽章口径一致）；off=灰（极客下换暗灰，原 #B4B2A9 在深底太扎眼）。</summary>
-        private Brush DspRackStateBrush(DspRackState state)
-        {
-            if (state == DspRackState.On)
-            {
-                return DspAccentBrush();
-            }
-
-            if (state == DspRackState.Bypassed)
-            {
-                return new SolidColorBrush(Color.FromArgb(255, 0xC0, 0x7A, 0x1A));
-            }
-
-            return new SolidColorBrush(_geekDspActive
-                ? Color.FromArgb(255, 0x4A, 0x4A, 0x42)
-                : Color.FromArgb(255, 0xB4, 0xB2, 0xA9));
-        }
 
         private List<DspRackRow> _dspRackRows = new();
 
@@ -348,67 +216,13 @@ namespace CelesteMusicPlayer
         // 事件：机架编排
         // ─────────────────────────────────────────────────────────────
 
-        /// <summary>机架顺序现在住在 <see cref="DspRackParameters"/>（原生面板与网页命令共用一份），
-        /// 这里只负责把盘上值交给它装载 —— 每次操作立即下发，始终与盘上值一致。</summary>
-        private void RefreshDspRackList(int[] order)
-        {
-            RackParameters.Load(order);
-        }
 
 
-        /// <summary>声道平衡（机架最后一项）是否产生实际处理：任一非默认值即算。</summary>
-        private bool ChannelBalanceActive()
-        {
-            ChannelBalanceState channel = ExtraParameters.Channel;
-            if (!channel.Enabled)
-            {
-                return false;
-            }
 
-            return Math.Abs(channel.Balance) > 0.005
-                || Math.Abs(channel.LeftGainDb) > 0.05
-                || Math.Abs(channel.RightGainDb) > 0.05
-                || Math.Abs(channel.LeftDelayMs) > 0.05
-                || Math.Abs(channel.RightDelayMs) > 0.05
-                || channel.SwapChannels
-                || channel.InvertLeft
-                || channel.InvertRight
-                || !string.Equals(channel.MonoMode, "off", StringComparison.Ordinal);
-        }
 
-        private void DspRackList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-        }
 
-        private void DspRackUp_Click(object sender, RoutedEventArgs e)
-        {
-            MoveDspRackEntry(-1);
-        }
 
-        private void DspRackDown_Click(object sender, RoutedEventArgs e)
-        {
-            MoveDspRackEntry(1);
-        }
 
-        /// <summary>把选中模块上下移动一格（delta=-1 上移 / +1 下移），立即下发内核。
-        /// 机架里只有 8 个可排序模块，没有固定行。</summary>
-        private void MoveDspRackEntry(int delta)
-        {
-
-            // 行下标即机架下标：0..7 一一对应 8 个内核模块
-            int i = DspRackList.SelectedIndex;
-            if (!RackParameters.Move(i, delta))
-            {
-                return;
-            }
-
-            CommitDspRackOrder();
-        }
-
-        private void DspRackReset_Click(object sender, RoutedEventArgs e)
-        {
-            ResetDspRackOrderCore();
-        }
 
         /// <summary>恢复默认机架顺序核心（网页「音效处理」页直接调）。</summary>
         internal void ResetDspRackOrderCore()
@@ -437,8 +251,6 @@ namespace CelesteMusicPlayer
 
 
 
-        /// <summary>机架页始终视为"在看"，不点亮"生效"（顺序不是效果开关）。</summary>
-        private bool DspRackOrderIsDefault() => RackParameters.IsDefault;
     }
 
     /// <summary>

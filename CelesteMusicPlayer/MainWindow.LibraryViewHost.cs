@@ -112,54 +112,7 @@ public sealed partial class MainWindow
             return ordered.ToList();
         }
 
-        private void OpenAlbumDetail(AlbumEntry album, bool fromArtist)
-            => CommitLibraryNavigation(() => OpenAlbumDetailCore(album, fromArtist));
 
-        private void OpenAlbumDetailCore(AlbumEntry album, bool fromArtist)
-        {
-            _openedAlbum = album;
-            _albumOpenedFromArtist = fromArtist;
-
-            if (fromArtist)
-            {
-            }
-            else
-            {
-            }
-
-            UpdateLibrarySearchUi();
-
-
-            _albumTracks.Clear();
-            List<PlaylistItem> tracks = _playlist
-                .Where(t => string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase))
-                .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-                .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-
-            foreach (PlaylistItem track in tracks)
-            {
-                _albumTracks.Add(track);
-            }
-
-            // DSD 专辑提示：专辑内全部曲目为 DSF/DFF 时显示
-            if (AlbumDetailDsdHint != null)
-            {
-                bool allDsd = tracks.Count > 0 && tracks.All(t => IsDsdFile(t.FilePath));
-            }
-
-            // DSD 预加载区域（专辑内一首 DSD 都没有则整块隐藏）
-            UpdateAlbumDetailPreloadUi(tracks);
-
-            // 行3：编码器 | 位深/采样率 | 总时长（在后台线程算质量行，避免 CD 大专辑打开卡顿）
-            if (AlbumDetailTechText != null)
-            {
-                _ = FillAlbumTechTextAsync(album, tracks);
-            }
-
-            // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
-        }
 
         private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
         {

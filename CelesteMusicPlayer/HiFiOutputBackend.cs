@@ -467,18 +467,6 @@ namespace CelesteMusicPlayer
             return s != null && s.TryGetStereoSamples(leftOut, rightOut);
         }
 
-        private static bool HasNonZeroGain(double[] gains)
-        {
-            for (int i = 0; i < gains.Length; i++)
-            {
-                if (Math.Abs(gains[i]) > 0.01)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
 
         /// <summary>预加载下一首 WAV 到无缝源（共享/ASIO）。
         /// 与当前同格式未读及时可无缝续接；格式不同或未就绪则由上层走重建。返回是否采纳为无缝续接。</summary>

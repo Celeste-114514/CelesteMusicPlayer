@@ -31,9 +31,7 @@ namespace CelesteMusicPlayer
             (ResamplingSourceProvider.QualityTransparent, 0.94),
         };
 
-        private void SrcChainCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => RedrawSrcChain();
 
-        private void SrcFilterCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => RedrawSrcFilterCurve();
 
         internal void RedrawSrcCanvas()
         {

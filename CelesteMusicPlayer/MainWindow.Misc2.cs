@@ -169,82 +169,12 @@ namespace CelesteMusicPlayer
 
 
 
-        private void ColumnSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            _isDraggingColumnSplitter = false;
-            _columnSplitPair = null;
-            if (sender is UIElement el)
-            {
-                try
-                {
-                    el.ReleasePointerCapture(e.Pointer);
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            }
-
-            e.Handled = true;
-        }
 
 
-        private void ColumnSplitter_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
-        {
-            _isDraggingColumnSplitter = false;
-            _columnSplitPair = null;
-        }
 
 
-        private static void GetColumnWidths(string pair, out double left, out double right)
-        {
-            var w = PlaylistColumnWidths.Instance;
-            switch (pair)
-            {
-                case "Title|Artist":
-                    left = w.Title;
-                    right = w.Artist;
-                    break;
-                case "Artist|Album":
-                    left = w.Artist;
-                    right = w.Album;
-                    break;
-                case "Album|Year":
-                    left = w.Album;
-                    right = w.Year;
-                    break;
-                case "Year|Duration":
-                    left = w.Year;
-                    right = w.Duration;
-                    break;
-                default:
-                    left = w.Year;
-                    right = w.Duration;
-                    break;
-            }
-        }
 
 
-        private void SetColumnWidths(string pair, double left, double right)
-        {
-            var w = PlaylistColumnWidths.Instance;
-            switch (pair)
-            {
-                case "Title|Artist":
-                    w.Title = left;
-                    w.Artist = right;
-                    break;
-                case "Artist|Album":
-                    w.Artist = left;
-                    w.Album = right;
-                    break;
-                case "Album|Year":
-                    w.Album = left;
-                    w.Year = right;
-                    break;
-                case "Year|Duration":
-                    w.Year = left;
-                    w.Duration = right;
-                    break;
-            }
-        }
 
 
     }

@@ -60,8 +60,6 @@ public sealed partial class MainWindow
             }
         }
 
-        private ObservableCollection<AlbumEntry> GetAlbumCollectionForGrid(GridView grid)
-            => ReferenceEquals(grid, AlbumGridView) ? _albums : _artistAlbums;
 
         /// <summary>播放结束拦截：返回 true 表示已按睡眠定时器停止，调用方不应继续切歌。</summary>
         private bool ConsumeSleepStopIfDue()
@@ -153,97 +151,6 @@ public sealed partial class MainWindow
 
         }
 
-        /// <summary>波形(Poweramp)：波形条已播主题色/未播灰色，当前位置竖线。</summary>
-        private void DrawWaveformStyle(Canvas canvas, double w, double h, double ratio, Color accent)
-        {
-            if (_waveformData == null || _waveformData.Length == 0)
-            {
-                // 波形未就绪:只画一条中性细线(加载完成后再显示真实波形,不闪占位)
-                var idleLine = new Shapes.Rectangle
-                {
-                    Width = w,
-                    Height = 2,
-                    RadiusX = 1,
-                    RadiusY = 1,
-                    Fill = new SolidColorBrush(Color.FromArgb(48, 128, 128, 128))
-                };
-                Canvas.SetTop(idleLine, (h - 2) / 2);
-                canvas.Children.Add(idleLine);
-                return;
-            }
-
-            int n = _waveformData.Length;
-            double barW = w / n;
-            var unplayedBrush = new SolidColorBrush(Color.FromArgb(70, 150, 150, 150));
-            double playedEdge = w * ratio;
-            Color light = Lighten(accent, 0.55);
-
-            // 已播部分配色：Solid = 整段统一色（白色度可调），Gradient = 左端主题色 → 右端浅色（原行为）。
-            AppSettingsState waveSettings = AppSettingsStore.Load();
-            bool solidMode = waveSettings.WaveColorMode == "Solid";
-            // 纯色模式所有柱子同色，只建一个画刷复用（避免几百根柱子各建一个画刷）
-            Brush? solidBrush = solidMode
-                ? new SolidColorBrush(Lighten(accent, waveSettings.WaveSolidWhiteness))
-                : null;
-
-            for (int i = 0; i < n; i++)
-            {
-                double bh = Math.Max(2, _waveformData[i] * h * 0.95);
-                var rect = new Shapes.Rectangle
-                {
-                    // 柱间留白（2026-10-14 用户要求"每条之间稍微宽一点点"）：原来是 1px 缝。
-                    // ⚠ 别改太大：进度条总宽固定后 barW 本来就不大，缝一宽柱子就被压成细线
-                    // （试过 2px，柱子全变成 1px 细丝）。
-                    // 2026-10-16 用户反馈"每根竖线太细"：桶数从 180 降到 120（barW 由约 4 涨到 6），
-                    // 缝同步从 1.5 收到 1.2，柱子净宽约 4.8px。下限提到 1.5 防止窄窗口下退化成细丝。
-                    Width = Math.Max(1.5, barW - 1.2),
-                    Height = bh,
-                    RadiusX = 1,
-                    RadiusY = 1
-                };
-                Canvas.SetLeft(rect, i * barW);
-                Canvas.SetTop(rect, (h - bh) / 2);
-
-                double centerX = (i + 0.5) * barW;
-                if (centerX <= playedEdge)
-                {
-                    if (solidBrush != null)
-                    {
-                        // 纯色：整段一个颜色，不随播放位置变化
-                        rect.Fill = solidBrush;
-                    }
-                    else
-                    {
-                        // 已播部分:主题色(两端浅色渐变)
-                        double t = centerX / Math.Max(1, playedEdge);
-                        rect.Fill = new SolidColorBrush(Color.FromArgb(
-                            255,
-                            (byte)(accent.R + (light.R - accent.R) * t),
-                            (byte)(accent.G + (light.G - accent.G) * t),
-                            (byte)(accent.B + (light.B - accent.B) * t)));
-                    }
-                }
-                else
-                {
-                    rect.Fill = unplayedBrush;
-                }
-
-                canvas.Children.Add(rect);
-            }
-
-            // 当前位置细线(echo next 风格:波形上一条细竖线)
-            var line = new Shapes.Rectangle
-            {
-                Width = 2,
-                Height = h * 0.96,
-                RadiusX = 1,
-                RadiusY = 1,
-                Fill = new SolidColorBrush(Colors.White)
-            };
-            Canvas.SetLeft(line, Math.Clamp(playedEdge - 1, 0, Math.Max(0, w - 2)));
-            Canvas.SetTop(line, (h - h * 0.96) / 2);
-            canvas.Children.Add(line);
-        }
 
         /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
         private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)

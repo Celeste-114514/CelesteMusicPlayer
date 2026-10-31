@@ -107,25 +107,7 @@ namespace CelesteMusicPlayer
         // 事件入口
         // ─────────────────────────────────────────────────────────────
 
-        private void DspCompCurveCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (!_dspRackReady)
-            {
-                return;
-            }
 
-            RedrawDspCompTransferCurve();
-        }
-
-        private void DspCompGrCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            RedrawDspCompGrHistory();
-        }
 
 
         // ─────────────────────────────────────────────────────────────

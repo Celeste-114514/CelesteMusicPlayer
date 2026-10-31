@@ -105,45 +105,6 @@ public sealed partial class MainWindow
             _multiSelectFolderList = null;
         }
 
-        /// <summary>根据 TextBlock.Tag 取出对应字段的完整文案</summary>
-        private static string? ResolveCellDetailText(FrameworkElement element)
-        {
-            PlaylistItem? item = VisualTreeWalker.FindPlaylistItem(element);
-            if (item == null || element.Tag is not string field)
-            {
-                return null;
-            }
-
-            string label;
-            string value;
-            switch (field)
-            {
-                case "Title":
-                    label = "标题";
-                    value = item.Title;
-                    break;
-                case "Artist":
-                    label = "艺术家";
-                    value = item.Artist;
-                    break;
-                case "Album":
-                    label = "专辑";
-                    value = item.Album;
-                    break;
-                case "Year":
-                    label = "年份";
-                    value = item.YearText;
-                    break;
-                case "Duration":
-                    label = "时长";
-                    value = item.DurationText;
-                    break;
-                default:
-                    return null;
-            }
-
-            return $"{label}：{value}\n文件：{Path.GetFileName(item.FilePath)}";
-        }
 
         // W13 第二十三刀：当前多选目标列表
 

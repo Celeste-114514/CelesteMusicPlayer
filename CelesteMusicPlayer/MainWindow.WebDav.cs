@@ -155,60 +155,6 @@ namespace CelesteMusicPlayer
             };
         }
 
-        /// <summary>展开 / 折叠一个网络文件夹（异步：要发一次 PROPFIND）。</summary>
-        private async Task ToggleWebDavFolderExpandAsync(FolderBrowserItem item)
-        {
-            int index = _folderBrowserItems.IndexOf(item);
-            if (index < 0)
-            {
-                return;
-            }
-
-            if (item.IsExpanded)
-            {
-                CollapseFolderAt(index);
-                item.IsExpanded = false;
-                return;
-            }
-
-            WebDavLocation? loc = GetWebDavLocation();
-            if (loc == null)
-            {
-                return;
-            }
-
-            string path = item.RemotePath;
-            int depth = item.Depth;
-
-            try
-            {
-                IReadOnlyList<WebDavEntry> children = await Task.Run(async () =>
-                {
-                    using WebDavClient client = loc.CreateClient();
-                    return await client.ListAsync(path);
-                });
-
-                // await 期间列表可能已被别的操作改动过（切分类 / 折叠），重新定位再插。
-                int at = _folderBrowserItems.IndexOf(item);
-                if (at < 0)
-                {
-                    return;
-                }
-
-                for (int i = 0; i < children.Count; i++)
-                {
-                    _folderBrowserItems.Insert(at + 1 + i, ToFolderBrowserItem(children[i], depth + 1, path));
-                }
-
-                item.ChildrenLoaded = true;
-                item.IsExpanded = true;
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.WebDav.cs", caught);
-                ShowWebDavStatus("展开失败：" + DescribeWebDavFailure(caught));
-            }
-        }
 
         // =====================================================================
         // 右侧详情：当前文件夹里的歌曲
@@ -219,59 +165,7 @@ namespace CelesteMusicPlayer
         // 播放：先下载到缓存，再走现有播放链路
         // =====================================================================
 
-        /// <summary>双击 / 菜单「播放」一首网络曲目：下载 → 缓存 → 播放。</summary>
-        private async Task PlayWebDavItemAsync(PlaylistItem item)
-        {
-            WebDavLocation? loc = GetWebDavLocation();
-            if (loc == null || string.IsNullOrEmpty(item.RemotePath))
-            {
-                return;
-            }
 
-            string name = Path.GetFileName(item.RemotePath);
-            ShowWebDavStatus("正在下载 " + name + " …");
-
-            try
-            {
-                var entry = new WebDavEntry
-                {
-                    Name = name,
-                    RelativePath = item.RemotePath,
-                    IsFolder = false,
-                    Size = 0
-                };
-
-                // ⚠️ 进度回调跑在下载线程上，直接改 TextBlock 会被 WinUI 拒绝（跨线程访问），
-                // 必须排回 UI 线程。
-                var progress = new Progress<double>(p =>
-                {
-                    string line = "正在下载 " + name + " … " + (int)Math.Round(p * 100) + "%";
-                    DispatcherQueue?.TryEnqueue(() => ShowWebDavStatus(line));
-                });
-
-                string localPath = await Task.Run(() => WebDavCache.GetOrDownloadAsync(loc, entry, progress));
-
-                // 本地缓存只当播放源用：WebDAV 下载缓存不进本地媒体库（用户明确要求），
-                // 标签/封面/音效全走原播放链路，但 _playlist / 曲库会话都不会收录它。
-                PlaylistItem track = CreatePlaylistItemFromPath(localPath);
-                track.RemotePath = entry.RelativePath;
-
-                PlayPlaylistItem(track);
-
-                ShowWebDavStatus("已开始播放：" + name);
-                WebDavCache.EnforceLimit(loc);
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.WebDav.cs", caught);
-                ShowWebDavStatus("下载失败：" + DescribeWebDavFailure(caught));
-            }
-        }
-
-        /// <summary>把状态写到详情区台头（下载进度、报错都用它，不再另开弹窗）。</summary>
-        private void ShowWebDavStatus(string text)
-        {
-        }
 
     }
 }

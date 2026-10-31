@@ -27,15 +27,6 @@ namespace CelesteMusicPlayer
         /// <summary>两条对角弧在中点的分离距离（px）。不分开的话会重成一条线。</summary>
         private const double MatrixArcSpread = 26.0;
 
-        private void DspMatrixFlowCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (!_dspRackReady)
-            {
-                return;
-            }
-
-            RedrawDspMatrixFlow();
-        }
 
         /// <summary>矩阵页画布重画（切肤 / 切页时用）。</summary>
         internal void RedrawDspMatrixCanvas()

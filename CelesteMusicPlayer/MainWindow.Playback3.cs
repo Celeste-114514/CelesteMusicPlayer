@@ -264,56 +264,18 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PreviousButton_Click(object sender, RoutedEventArgs e)
-            => PlayPrevious();
 
-        private void NextButton_Click(object sender, RoutedEventArgs e)
-            => PlayNext();
 
         // =====================================================================
         // 进度条 / 音量
         // =====================================================================
 
-        private void ProgressSlider_PointerPressed(dynamic sender, dynamic e)
-        {
-            _isUserSeeking = true;
-            _seekGestureConsumed = false;
-        }
 
 
-        private void ProgressSlider_PointerReleased(dynamic sender, dynamic e)
-        {
-            EndSeekGesture();
-        }
 
 
-        private void ProgressSlider_PointerCaptureLost(dynamic sender, dynamic e)
-        {
-            EndSeekGesture();
-        }
 
 
-        /// <summary>
-        /// 一次拖动只跳转一次：松手时 PointerReleased / PointerCaptureLost 会先后触发，
-        /// 两次都 seek 会卡顿并重复预加载下一首，这里用 _seekGestureConsumed 去重。
-        /// </summary>
-        private void EndSeekGesture()
-        {
-            if (!_isUserSeeking || _seekGestureConsumed)
-            {
-                _isUserSeeking = false;
-                return;
-            }
-
-            _seekGestureConsumed = true;
-            try
-            {
-            }
-            finally
-            {
-                _isUserSeeking = false;
-            }
-        }
 
 
         private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
@@ -366,8 +328,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void DesktopLyricsButton_Click(object sender, RoutedEventArgs e)
-            => SetDesktopLyricsEnabled(!_desktopLyricsEnabled);
 
         // 迷你播放器相关方法（MiniPlayerButton_Click / SetMiniPlayerEnabled /
         // EnsureMiniPlayerWindow / OnMiniPlayerClosedByUser / UpdateMiniPlayerBadge）
@@ -792,17 +752,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>
-        /// Margin 变化是否超过"布局还在动"的阈值（2px）。
-        /// 2026-10-16 探针实测：启动补校存在 ±1px 自激极限环（补量帧与 0.5px 写入阈值
-        /// 错位，P 在三个相邻整像素间翻、B 在相差 0.5px 的两个值间翻），
-        /// 精确比较会让"稳定"永远达不到、定时器永远不停。2px 以下视为已停。
-        /// </summary>
-        private static bool MarginDrift(Microsoft.UI.Xaml.Thickness a, Microsoft.UI.Xaml.Thickness b)
-            => Math.Abs(a.Left - b.Left) >= 2
-            || Math.Abs(a.Top - b.Top) >= 2
-            || Math.Abs(a.Right - b.Right) >= 2
-            || Math.Abs(a.Bottom - b.Bottom) >= 2;
 
         /// <summary>按钮组相对播放栏中轴的偏移量（px）：0 = 正好落在窗口左右中轴上。</summary>
         private const double TransportButtonsShiftX = 0;
@@ -839,9 +788,6 @@ namespace CelesteMusicPlayer
         private int _startupCenteringStable;
         private int _startupCenteringTicks;
 
-        private void TransportInfoPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
-        {
-        }
 
 
         private static Color Lighten(Color c, double t)
@@ -850,150 +796,10 @@ namespace CelesteMusicPlayer
         private static Color Darken(Color c, double t)
             => Color.FromArgb(255, (byte)(c.R * (1 - t)), (byte)(c.G * (1 - t)), (byte)(c.B * (1 - t)));
 
-        /// <summary>渐变光晕：渐变填充 + 圆角轨道 + 光晕滑块。</summary>
-        private void DrawGradientStyle(Canvas canvas, double w, double h, double ratio, Color accent, bool hasSong)
-        {
-            Color light = Lighten(accent, 0.55);
-            Color dark = Darken(accent, 0.35);
-
-            var track = new Shapes.Rectangle
-            {
-                Width = w,
-                Height = 4,
-                RadiusX = 2,
-                RadiusY = 2,
-                Fill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B))
-            };
-            Canvas.SetTop(track, (h - 4) / 2);
-            canvas.Children.Add(track);
-
-            if (ratio > 0.01)
-            {
-                var fill = new Shapes.Rectangle { Width = Math.Max(2, w * ratio), Height = 4, RadiusX = 2, RadiusY = 2 };
-                var grad = new LinearGradientBrush
-                {
-                    StartPoint = new Windows.Foundation.Point(0, 0.5),
-                    EndPoint = new Windows.Foundation.Point(1, 0.5)
-                };
-                grad.GradientStops.Add(new GradientStop { Color = accent, Offset = 0 });
-                grad.GradientStops.Add(new GradientStop { Color = light, Offset = 1 });
-                fill.Fill = grad;
-                Canvas.SetTop(fill, (h - 4) / 2);
-                canvas.Children.Add(fill);
-            }
-
-            if (hasSong)
-            {
-                double cx = Math.Clamp(w * ratio, 8, Math.Max(8, w - 8));
-                var glow = new Shapes.Ellipse
-                {
-                    Width = 16,
-                    Height = 16,
-                    Fill = new SolidColorBrush(Color.FromArgb(64, accent.R, accent.G, accent.B))
-                };
-                Canvas.SetLeft(glow, cx - 8);
-                Canvas.SetTop(glow, (h - 16) / 2);
-                canvas.Children.Add(glow);
-
-                var dot = new Shapes.Ellipse
-                {
-                    Width = 10,
-                    Height = 10,
-                    Stroke = new SolidColorBrush(dark),
-                    StrokeThickness = 2,
-                    Fill = new SolidColorBrush(accent)
-                };
-                Canvas.SetLeft(dot, cx - 5);
-                Canvas.SetTop(dot, (h - 10) / 2);
-                canvas.Children.Add(dot);
-            }
-        }
 
 
-        /// <summary>Spotify 圆环：细轨道 + 白色圆环滑块。</summary>
-        private void DrawSpotifyStyle(Canvas canvas, double w, double h, double ratio, Color accent, bool hasSong)
-        {
-            var track = new Shapes.Rectangle
-            {
-                Width = w,
-                Height = 3,
-                RadiusX = 1.5,
-                RadiusY = 1.5,
-                Fill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B))
-            };
-            Canvas.SetTop(track, (h - 3) / 2);
-            canvas.Children.Add(track);
-
-            if (ratio > 0.01)
-            {
-                var fill = new Shapes.Rectangle
-                {
-                    Width = Math.Max(2, w * ratio),
-                    Height = 3,
-                    RadiusX = 1.5,
-                    RadiusY = 1.5,
-                    Fill = new SolidColorBrush(accent)
-                };
-                Canvas.SetTop(fill, (h - 3) / 2);
-                canvas.Children.Add(fill);
-            }
-
-            if (hasSong)
-            {
-                double cx = Math.Clamp(w * ratio, 6, Math.Max(6, w - 6));
-                var ring = new Shapes.Ellipse
-                {
-                    Width = 12,
-                    Height = 12,
-                    Stroke = new SolidColorBrush(Colors.White),
-                    StrokeThickness = 2,
-                    Fill = new SolidColorBrush(Color.FromArgb(180, accent.R, accent.G, accent.B))
-                };
-                Canvas.SetLeft(ring, cx - 6);
-                Canvas.SetTop(ring, (h - 12) / 2);
-                canvas.Children.Add(ring);
-            }
-        }
 
 
-        /// <summary>Apple 细线：2px 细线 + 圆点滑块。</summary>
-        private void DrawAppleLineStyle(Canvas canvas, double w, double h, double ratio, Color accent, bool hasSong)
-        {
-            var track = new Shapes.Rectangle
-            {
-                Width = w,
-                Height = 2,
-                Fill = new SolidColorBrush(Color.FromArgb(40, accent.R, accent.G, accent.B))
-            };
-            Canvas.SetTop(track, (h - 2) / 2);
-            canvas.Children.Add(track);
-
-            if (ratio > 0.01)
-            {
-                var fill = new Shapes.Rectangle
-                {
-                    Width = Math.Max(2, w * ratio),
-                    Height = 2,
-                    Fill = new SolidColorBrush(accent)
-                };
-                Canvas.SetTop(fill, (h - 2) / 2);
-                canvas.Children.Add(fill);
-            }
-
-            if (hasSong)
-            {
-                double cx = Math.Clamp(w * ratio, 4, Math.Max(4, w - 4));
-                var dot = new Shapes.Ellipse
-                {
-                    Width = 8,
-                    Height = 8,
-                    Fill = new SolidColorBrush(accent)
-                };
-                Canvas.SetLeft(dot, cx - 4);
-                Canvas.SetTop(dot, (h - 8) / 2);
-                canvas.Children.Add(dot);
-            }
-        }
 
 
         /// <summary>播放列表内容变化时,若未播放则尝试预览波形(列表恢复完成后自动触发)。</summary>
@@ -1151,9 +957,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void VolumeStyleCanvas_SizeChanged(dynamic sender, dynamic e)
-        {
-        }
 
 
         private void ClearNowPlayingPanel()
@@ -1519,56 +1322,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>当前行的逐字高亮刷新（无逐字数据时无操作）。</summary>
-        private void UpdateCurrentLineCharHighlight(TimeSpan position)
-        {
-            if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
-            {
-                UpdateCharHighlight(_lyricTextBlocks[_currentLyricIndex], OffsetLyricPosition(position));
-            }
-        }
 
 
-        /// <summary>逐字着色：已唱字符白色，未唱灰色。仅对带 CharTimes 的行生效。</summary>
-        private void UpdateCharHighlight(TextBlock row, TimeSpan position)
-        {
-            if (row.Tag is not LyricLine line
-                || line.CharTimes == null
-                || line.CharTimes.Count != line.Text.Length
-                || row.Inlines.Count == 0)
-            {
-                return;
-            }
-
-            int n = 0;
-            for (int i = 0; i < line.CharTimes.Count; i++)
-            {
-                if (line.CharTimes[i] <= position)
-                {
-                    n = i + 1;
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            // 极客模式：已唱=磷光满色、未唱=暗磷光（35%）；经典模式保持白 / 灰154
-            Color? geekChar = GeekLyricAccentColor();
-            var played = geekChar is Color geekPlayed
-                ? new SolidColorBrush(geekPlayed)
-                : new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
-            var unplayed = geekChar is Color geekUnplayed
-                ? PhosphorShade(geekUnplayed, 0x59)
-                : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
-            for (int i = 0; i < row.Inlines.Count; i++)
-            {
-                if (row.Inlines[i] is Microsoft.UI.Xaml.Documents.Run run)
-                {
-                    run.Foreground = i < n ? played : unplayed;
-                }
-            }
-        }
 
 
         /// <summary>

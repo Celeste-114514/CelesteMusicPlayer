@@ -52,7 +52,6 @@ namespace CelesteMusicPlayer
             SetPlaybackOrder(order);
         }
 
-        private void WebShellButton_Click(object sender, RoutedEventArgs args) => OpenWebShell();
 
         internal void WebPlayTrack(PlaylistItem item)
         {

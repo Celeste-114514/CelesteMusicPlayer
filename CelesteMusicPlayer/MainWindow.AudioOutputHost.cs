@@ -151,24 +151,6 @@ public sealed partial class MainWindow
 
         // ---- 组合框填充 + 输出模式切换（网页 ChangeOutputMode 直通路径）----
 
-        private async System.Threading.Tasks.Task FillAudioSettingsCombosAsync()
-        {
-            // 全量填充（模式 + 设备），期间置位防止 SelectionChanged 回写中间态
-            _audioCombosLoading = true;
-            try
-            {
-                var s = AppSettingsStore.Load();
-                string mode = string.IsNullOrWhiteSpace(s.OutputMode) ? "Shared" : s.OutputMode;
-
-                UpdateModeCardHighlight(mode);
-
-                await FillAudioSettingsDevicesAsync();
-            }
-            finally
-            {
-                _audioCombosLoading = false;
-            }
-        }
 
         private async System.Threading.Tasks.Task FillAudioSettingsDevicesAsync()
         {
@@ -264,13 +246,6 @@ public sealed partial class MainWindow
             card.Background = active ? activeBg : null;
         }
 
-        /// <summary>内核标识 → 面板显示名。
-        /// 2026-10-16：ECHO 内核选项已删（程序只用原生内核），echo 值只会出现在归一化前的存量设置里。</summary>
-        private static string EngineDisplayName(string engine) => engine switch
-        {
-            "echo" => "原生内核", // 存量 echo 设置已被 Load 归一化成 native2，这里只是防御性兜底
-            _ => "原生内核",
-        };
 
         /// <summary>内核卡片高亮：只剩原生内核一项（2026-10-16 ECHO 选项已删），恒高亮表示当前生效。</summary>
         private void UpdateEngineCardHighlight(string engine)
@@ -352,102 +327,10 @@ public sealed partial class MainWindow
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
-        /// <summary>链路「源」胶囊第一行：源文件真实格式（探测结构化值；DSD/探测失败如实说明，不编数）。
-        /// 绝不让显示说谎——2026-09-21 用户实测 24bit 显示成 16bit 后，本行只认 <see cref="ChainFormatState.SourceFile"/>。</summary>
-        private static string BuildSourceFileLine(ChainFormatState? chain, bool hifi)
-        {
-            if (chain?.SourceFile is AudioFormat sf)
-            {
-                return "源文件：" + sf.Describe();
-            }
-
-            if (!string.IsNullOrWhiteSpace(chain?.SourceFileDescription))
-            {
-                return "源文件：" + chain!.SourceFileDescription;
-            }
-
-            if (chain?.Outcome == TranscodeOutcome.FailedFallback)
-            {
-                return "源文件：探测失败（已按兜底规格转码）";
-            }
-
-            return hifi ? "源文件：（解析中…）" : "源文件：MediaPlayer（系统解码）";
-        }
-
-        /// <summary>链路「源」胶囊第二行：实际送链路的转码 WAV（WAV 头真实值 + 转码结果注：
-        /// 同格式 / 容器扩容数值无损 / 已重采样 / 已降级 / 探测失败兜底）。</summary>
-        private static string BuildTranscodeWavLine(ChainFormatState? chain, bool hifi)
-        {
-            if (chain?.TranscodeWav is AudioFormat wav)
-            {
-                return "转码 WAV：" + wav.Describe() + chain.OutcomeNote();
-            }
-
-            return hifi ? "转码 WAV：（解析中…）" : "转码 WAV：不经转码（系统解码）";
-        }
-
-        /// <summary>链路「输出」胶囊第一行：设备端实际输出格式（结构化协商值；取不到时如实说未知，不假设直通）。</summary>
-        private static string BuildDeviceLine(ChainFormatState? chain, bool hifi)
-        {
-            if (chain?.DeviceOutput is AudioFormat dev)
-            {
-                return "设备端：" + dev.Describe()
-                    + (string.IsNullOrWhiteSpace(chain.DeviceEndpointName) ? string.Empty : "（" + chain.DeviceEndpointName + "）");
-            }
-
-            if (!hifi)
-            {
-                return "设备端：系统混音器（Shared）";
-            }
-
-            // 播放过但协商值缺失（如 ASIO 无 OutputWaveFormat）：不能假设直通
-            return chain?.HasSession == true ? "设备端：未知（协商值缺失，待确认）" : "设备端：（解析中…）";
-        }
-
-        /// <summary>链路「输出」胶囊第二行：结论。先讲转码层事实（重采样/降级），再讲设备端路径，
-        /// 两者独立——"设备端源直通"与"转码已重采样"可以同时成立且都必须说。</summary>
-        private static string BuildVerdictLine(ChainFormatState? chain, bool hifi)
-        {
-            if (!hifi)
-            {
-                return "结论：共享模式——系统混音器必然重采样，非 bit-perfect";
-            }
-
-            if (chain == null || !chain.HasSession)
-            {
-                return "结论：待播放确认";
-            }
-
-            var parts = new System.Collections.Generic.List<string>();
-            string note = chain.OutcomeNote(); // （已重采样，迁就设备）/（已降级：规格被做低）/（源探测失败…）
-            if (note.Length > 0)
-            {
-                // 阶段二：重采样时把缘由一起说清（"设备不支持 96k，已重采样到 48k"），不只写"迁就设备"
-                string detail = chain.Outcome == TranscodeOutcome.ResampledToDevice
-                    && !string.IsNullOrWhiteSpace(chain.TranscodeReason)
-                    ? "转码" + note + "（" + chain.TranscodeReason + "）"
-                    : "转码" + note;
-                parts.Add(detail);
-            }
-
-            parts.Add(chain.VerdictNote());
-            return "结论：" + string.Join(" · ", parts);
-        }
-
-        private void ApplyLinkVisual(bool pure, string activeText)
-        {
-            try
-            {
-
-                var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
-                var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
-                var greenBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 46, 160, 67));
-                var amberBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 214, 148, 45));
 
 
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
+
+
 
         // ---- 输出设备热插拔（USB DAC / 蓝牙耳机插拔自动切换）----
 

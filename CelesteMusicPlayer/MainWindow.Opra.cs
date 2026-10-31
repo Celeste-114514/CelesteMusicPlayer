@@ -20,32 +20,7 @@ namespace CelesteMusicPlayer
         private List<OpraProductEqSummary> _opraEqs = new();
         private OpraProductEqSummary? _opraSelectedEq;
 
-        /// <summary>第一次在 EQ 页展开耳机校正时加载 OPRA 数据库（联网失败自动用本地缓存）。</summary>
-        private void EnsureOpraLoaded()
-        {
-            if (_opraDbLoadStarted)
-            {
-                return;
-            }
 
-            _opraDbLoadStarted = true;
-            _ = LoadOpraDatabaseAsync();
-        }
-
-        private async Task LoadOpraDatabaseAsync()
-        {
-            try
-            {
-
-                OpraStatus status = await _opra.EnsureLoadedAsync(refresh: false);
-
-                // 数据库就绪才铺品牌墙（厂商与型号数都来自这个库）
-                BuildOpraVendorWall();
-            }
-            catch (Exception ex)
-            {
-            }
-        }
 
 
 

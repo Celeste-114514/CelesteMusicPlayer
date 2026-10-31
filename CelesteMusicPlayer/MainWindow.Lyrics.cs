@@ -47,14 +47,6 @@ namespace CelesteMusicPlayer
 
 
 
-        private void DesktopLyricsButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
-        {
-            if (_desktopLyricsWindow?.IsLocked == true)
-            {
-                _desktopLyricsWindow.SetLocked(false);
-                e.Handled = true;
-            }
-        }
 
 
 
@@ -231,30 +223,10 @@ namespace CelesteMusicPlayer
 
         // ---- 歌词手动滚动 + 单击跳进度 ----
 
-        /// <summary>视口滚动/拖动：进入"用户手动滚动"状态，暂停自动吸附，若干秒无操作后恢复。</summary>
-        private void LyricsScrollViewer_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-        {
-            // ViewChanged 也会被程序控制触发；仅在用户滚轮/拖动后短暂标记，靠 resume 计时器兜底。
-            MarkUserScrollingLyrics();
-        }
 
 
-        private void LyricsScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
-        {
-            MarkUserScrollingLyrics();
-        }
 
 
-        private void LyricsScrollViewer_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            MarkUserScrollingLyrics();
-            // 点在歌词行之外（上下留白、行间空隙）→ 取消选中。
-            // 点在某行上时不动它：否则按钮会在 Click 之前被收起来，跳转就点不到了。
-            if (e.OriginalSource is DependencyObject src && FindLyricRowIndex(src) < 0)
-            {
-                ClearLyricRowSelection();
-            }
-        }
 
 
         // ---- 歌词行选中（经典式：选中 → 右侧时间 + 左侧播放按钮）----
@@ -294,26 +266,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>从命中元素往上找它属于第几行歌词；不在任何一行里返回 -1。</summary>
-        private int FindLyricRowIndex(DependencyObject element)
-        {
-            DependencyObject? cur = element;
-            while (cur != null)
-            {
-                if (cur is Grid g)
-                {
-                    int idx = _lyricRows.IndexOf(g);
-                    if (idx >= 0)
-                    {
-                        return idx;
-                    }
-                }
-
-                cur = VisualTreeHelper.GetParent(cur);
-            }
-
-            return -1;
-        }
 
 
         /// <summary>点行内播放按钮：跳到这句并继续播放（与"点进度条/单击行"不同，后者是跳过去暂停）。</summary>

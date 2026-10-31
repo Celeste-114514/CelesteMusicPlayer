@@ -208,45 +208,10 @@ namespace CelesteMusicPlayer
 
 
 
-        private void ShowPlaybackOrderMenu(FrameworkElement target, Windows.Foundation.Point position)
-        {
-            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Top };
-
-            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.Sequential, "\uE8FD", "顺序播放");
-            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.Random, "\uE8B1", "随机播放");
-            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.ListLoop, "\uE8EE", "列表循环");
-            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.TrackLoop, "\uE8ED", "单曲循环");
-            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.TrackOnce, "\uE72A", "单曲播放");
-
-            flyout.ShowAt(target, new FlyoutShowOptions
-            {
-                Position = position,
-                Placement = FlyoutPlacementMode.Top
-            });
-        }
 
 
-        private void AddPlaybackOrderMenuItem(MenuFlyout flyout, PlaybackOrder order, string glyph, string label)
-        {
-            var item = new ToggleMenuFlyoutItem
-            {
-                Text = label,
-                Icon = new FontIcon { Glyph = glyph, FontSize = 16 },
-                IsChecked = _orderResolver.Order == order,
-                Tag = order
-            };
-            item.Click += PlaybackOrderMenuItem_Click;
-            flyout.Items.Add(item);
-        }
 
 
-        private void PlaybackOrderMenuItem_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is MenuFlyoutItem { Tag: PlaybackOrder order })
-            {
-                SetPlaybackOrder(order);
-            }
-        }
 
 
         private void SetPlaybackOrder(PlaybackOrder order, bool persist = true)
@@ -300,17 +265,6 @@ namespace CelesteMusicPlayer
         // 主区域：播放列表 / 右侧 可拖分割线
         // =====================================================================
 
-        /// <summary>播放列表区域尺寸变化：保证各列完整可见且不过度拉宽。
-        /// 走帧合并（ScheduleFitColumns）：缩放时每个 tick 都全量改列宽就是「改变大小卡」的根源。</summary>
-        private void PlaylistListBorder_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            if (e.NewSize.Width <= 0 || e.NewSize.Height <= 0)
-            {
-                return;
-            }
-
-            ScheduleFitColumns();
-        }
 
 
         private double GetPlaylistColumnsViewportWidth()
@@ -335,40 +289,10 @@ namespace CelesteMusicPlayer
         // 单元格悬停 1 秒后显示该字段完整信息
         // =====================================================================
 
-        private void PlaylistCell_PointerEntered(object sender, PointerRoutedEventArgs e)
-        {
-            if (sender is not FrameworkElement element)
-            {
-                return;
-            }
-
-            HideHoverTip();
-            _hoverElement = element;
-            _hoverTipText = ResolveCellDetailText(element);
-
-            if (string.IsNullOrWhiteSpace(_hoverTipText) || _hoverTipTimer == null)
-            {
-                return;
-            }
-
-            _hoverTipTimer.Stop();
-            _hoverTipTimer.Start();
-        }
 
 
-        private void PlaylistCell_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            // 保留事件：移动时不重置 1 秒计时，避免轻微抖动导致提示永远不出
-        }
 
 
-        private void PlaylistCell_PointerExited(object sender, PointerRoutedEventArgs e)
-        {
-            _hoverTipTimer?.Stop();
-            HideHoverTip();
-            _hoverElement = null;
-            _hoverTipText = null;
-        }
 
 
         private void HoverTipTimer_Tick(dynamic sender, dynamic e)

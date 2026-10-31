@@ -14,10 +14,6 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private void AudioFxEqImportApo_Click(object sender, RoutedEventArgs e)
-        {
-            _ = ImportAudioFxEqApoCoreAsync();
-        }
 
         /// <summary>导入 APO 配置核心（网页「音效处理」页直接调；文件选择器照原生弹）。</summary>
         internal async Task ImportAudioFxEqApoCoreAsync()
@@ -56,10 +52,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AudioFxEqExportApo_Click(object sender, RoutedEventArgs e)
-        {
-            _ = ExportAudioFxEqApoCoreAsync();
-        }
 
         /// <summary>导出 APO 配置核心（网页「音效处理」页直接调；保存选择器照原生弹）。</summary>
         internal async Task ExportAudioFxEqApoCoreAsync()

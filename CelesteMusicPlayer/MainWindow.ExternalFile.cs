@@ -129,39 +129,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>
-        /// 状态栏「文件夹加入音乐库」：把当前播放这首歌所在的整个文件夹收进音乐库。
-        /// 音乐库只按文件夹收录（2026-10-14 口径），单曲散装入库这条路已取消。
-        /// </summary>
-        private async void AddToLibraryButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string? path = _externalPlayPath ?? _nowPlayingPath;
-                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-                {
-                    return;
-                }
-
-                string? folder = Path.GetDirectoryName(path);
-                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
-                {
-                    return;
-                }
-
-                await AddFolderToLibraryAsync(folder);
-
-                // 确认态：按钮切到「已加入音乐库」（文件夹整批入列后这首歌必然在库里，
-                // _justAddedToLibraryPath 只是双保险，防止枚举阶段把它漏掉的极端情况）
-                _justAddedToLibraryPath = path;
-                UpdateAddToLibraryButtonVisibility();
-
-            }
-            catch (Exception ex)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ExternalFile.cs", ex);
-            }
-        }
 
         /// <summary>
         /// 启动时把「手动加入音乐库」的散装文件补回列表。

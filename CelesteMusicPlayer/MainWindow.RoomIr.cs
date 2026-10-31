@@ -75,49 +75,9 @@ namespace CelesteMusicPlayer
             ApplyRoomCorrection(state);
         }
 
-        private async void RoomIrBrowseButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                FileOpenPicker picker = new()
-                {
-                    SuggestedStartLocation = PickerLocationId.MusicLibrary
-                };
-                picker.FileTypeFilter.Add(".wav");
-                nint hwnd = NativeHandle;
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-
-                Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
-                if (file == null)
-                {
-                    return;
-                }
-
-                // 只读入模型 + 投影，落盘仍要按「应用」（与旧面板一致）
-                await PreloadRoomIrAsync(file.Path);
-            }
-            catch (Exception ex)
-            {
-                RoomIrStatus("选择文件失败：" + ex.Message);
-                StartupLog.WriteException("RoomIr.Browse", ex);
-            }
-        }
-
-        private void RoomIrClearButton_Click(object sender, RoutedEventArgs e)
-        {
-            FirParameters.ClearIr();
-            _roomIrLoaded = null;
-            _roomIrLoadedRate = 0;
-            ProjectFirParameters();
-            RoomIrStatus("已清除。");
-        }
 
 
-        private void RoomIrGainSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            // 增益只进模型与读数，落盘要按「应用」（与旧面板一致）
-            UpdateRoomIrGainText();
-        }
+
 
         private void UpdateRoomIrGainText()
         {
@@ -130,21 +90,6 @@ namespace CelesteMusicPlayer
 
         }
 
-        private void RoomIrApplyButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                ApplyFirParameters();
-                RoomIrStatus(FirParameters.Current.Enabled
-                    ? "✓ 已应用并启用卷积。换歌后仍会保留该设置。"
-                    : "已保存，卷积已关闭。");
-            }
-            catch (Exception ex)
-            {
-                RoomIrStatus("应用失败：" + ex.Message);
-                StartupLog.WriteException("RoomIr.Apply", ex);
-            }
-        }
 
         private async Task PreloadRoomIrAsync(string path)
         {

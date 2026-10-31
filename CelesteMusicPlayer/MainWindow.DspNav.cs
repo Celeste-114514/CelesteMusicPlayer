@@ -100,24 +100,7 @@ namespace CelesteMusicPlayer
 
         // ---------- FIR 快捷 trim / 安全启用 ----------
 
-        private void DspFirTrimQuick_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button b || b.Tag is not string tag || !double.TryParse(tag, out double db))
-            {
-                return;
-            }
 
-            if (SetModelControl("RoomTrimSlider", NumberMessage(db)))
-            {
-                ApplyFirParameters();
-            }
-        }
-
-        /// <summary>先把 trim 降到 -6 dB 再启用卷积，避免一开就爆音（对齐 ECHO enableFirSafely）。</summary>
-        private void DspFirSafeEnable_Click(object sender, RoutedEventArgs e)
-        {
-            FirSafeEnableCore();
-        }
 
         /// <summary>安全启用卷积核心（网页「音效处理」页直接调）。</summary>
         internal void FirSafeEnableCore()
@@ -139,17 +122,6 @@ namespace CelesteMusicPlayer
 
         // ---------- 房间校正（FIR）：IR 信息 / 微调余量 trim / 削波风险 ----------
 
-        private void RoomTrimSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (_audioFxLoading || !_audioFxPanelReady)
-            {
-                return;
-            }
-
-            // trim 是「实时生效」的那一个：拖动即进模型并落盘下发（与旧行为一致）
-            UpdateRoomTrimLabel();
-            ApplyFirParameters();
-        }
 
         /// <summary>从模型初始化 trim 滑杆（只在加载面板时调用一次，避免打断拖动）。</summary>
         private void InitRoomCorrectionTrimUi()
@@ -163,10 +135,6 @@ namespace CelesteMusicPlayer
 
         // ---------- 输出安全监控 ----------
 
-        private void OutMonitorReset_Click(object sender, RoutedEventArgs e)
-        {
-            ResetOutputMonitorCore();
-        }
 
         /// <summary>重置输出统计核心（网页「音效处理」页直接调）。</summary>
         internal void ResetOutputMonitorCore()

@@ -43,228 +43,34 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        private void AddArtistWorksToPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_openedArtist != null)
-            {
-                AddSongsToUserPlaylist(GetTracksForArtist(_openedArtist.Name, useCurrentSongSort: true));
-            }
-        }
-
-
-        private void PlayArtistSongsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_artistTracks.Count == 0)
-            {
-                return;
-            }
-
-            _queue.Items.Clear();
-            AddSongsToUserPlaylist(_artistTracks.ToList());
-            PlayUserPlaylistAt(0);
-        }
-
-
-        private void AddArtistSongsToPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_artistTracks.Count == 0)
-            {
-                return;
-            }
-
-            AddSongsToUserPlaylist(_artistTracks.ToList());
-        }
-
-
-        private void PlayAllArtistAlbumsButton_Click(object sender, RoutedEventArgs e)
-        {
-            List<PlaylistItem> tracks = CollectArtistAlbumTracksInOrder();
-            if (tracks.Count == 0)
-            {
-                return;
-            }
-
-            _queue.Items.Clear();
-            AddSongsToUserPlaylist(tracks);
-            PlayUserPlaylistAt(0);
-        }
-
-
-        /// <summary>歌曲面板「播放所有歌曲」：只播放当前界面**实际显示**的歌曲
-        /// （音乐库当前排序／搜索结果／评分／流派／年份等视角各播各的），不再固定播放整个音乐库。
-        /// 播放队列视角下不重建队列，直接从第一首开始播放。</summary>
-        private void PlayAllLibrarySongsButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
-            {
-                // 队列本身就是播放源：保持队列内容与顺序不变，从头播放
-                PlayUserPlaylistFromStart();
-                return;
-            }
-
-            List<PlaylistItem> songs = GetDisplayedSongList();
-            if (songs.Count == 0)
-            {
-                return;
-            }
-
-            _queue.Items.Clear();
-            AddSongsToUserPlaylist(songs);
-            PlayUserPlaylistAt(0);
-        }
-
-
-        /// <summary>取中间列表当前实际显示的歌曲快照（按显示顺序）。ItemsSource 为空对象时退回当前分类集合。</summary>
-        private List<PlaylistItem> GetDisplayedSongList()
-        {
-            if (PlaylistView?.ItemsSource is System.Collections.IEnumerable source)
-            {
-                var displayed = new List<PlaylistItem>();
-                foreach (object? item in source)
-                {
-                    if (item is PlaylistItem song)
-                    {
-                        displayed.Add(song);
-                    }
-                }
-
-                return displayed;
-            }
-
-            return GetActiveSongCollection().ToList();
-        }
-
-
-        private void AddAllArtistAlbumsToPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            List<PlaylistItem> tracks = CollectArtistAlbumTracksInOrder();
-            if (tracks.Count == 0)
-            {
-                return;
-            }
-
-            AddSongsToUserPlaylist(tracks);
-        }
-
-
-        /// <summary>
-        /// 按当前界面中的专辑顺序，各专辑内按音轨号收集曲目（去重）。
-        /// 例：Album1(曲1,曲2) → Album2(曲a,曲b) ⇒ 曲1,曲2,曲a,曲b。
-        /// </summary>
-        private List<PlaylistItem> CollectArtistAlbumTracksInOrder()
-        {
-            return CollectTracksFromAlbumsInDisplayOrder(_artistAlbums);
-        }
-
-
-        /// <summary>按传入专辑集合顺序，各专辑内按音轨号收集曲目。</summary>
-        private List<PlaylistItem> CollectTracksFromAlbumsInDisplayOrder(IEnumerable<AlbumEntry> albums)
-        {
-            var tracks = new List<PlaylistItem>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (AlbumEntry album in albums)
-            {
-                foreach (PlaylistItem track in GetTracksForAlbum(album))
-                {
-                    if (seen.Add(track.FilePath))
-                    {
-                        tracks.Add(track);
-                    }
-                }
-            }
-
-            return tracks;
-        }
-
-
-        private void RebuildArtistTracks()
-        {
-            _artistTracks.Clear();
-            if (_openedArtist == null)
-            {
-                return;
-            }
-
-            string artistName = _openedArtist.Name;
-            List<PlaylistItem> tracks = _playlist
-                .Where(t => TrackMatchesArtistName(t, artistName, _artistDetailUsesAlbumArtist))
-                .ToList();
-
-            foreach (PlaylistItem track in ApplyArtistSongSort(tracks))
-            {
-                _artistTracks.Add(track);
-            }
-        }
-
-
-        private List<PlaylistItem> ApplyArtistSongSort(List<PlaylistItem> tracks)
-        {
-            Dictionary<string, uint> albumYears = tracks
-                .GroupBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Where(t => t.Year > 0).Select(t => t.Year).DefaultIfEmpty(0u).Max(),
-                    StringComparer.CurrentCultureIgnoreCase);
-
-            return _artistSongSortMode switch
-            {
-                ArtistSongSortMode.AlbumTitleThenTrack => tracks
-                    .OrderBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
-                    .ThenBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-                    .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-                    .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .ToList(),
-                ArtistSongSortMode.AlbumYearThenTrack => tracks
-                    .OrderBy(t =>
-                    {
-                        albumYears.TryGetValue(t.Album, out uint y);
-                        return y == 0 ? uint.MaxValue : y;
-                    })
-                    .ThenBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
-                    .ThenBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-                    .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-                    .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .ToList(),
-                _ => tracks
-                    .OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .ToList()
-            };
-        }
 
 
 
 
 
 
-        private void ArtistTrackListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_suppressSelectionUiUpdates)
-            {
-                return;
-            }
-
-            RefreshArtistTrackSelectionChrome();
-            UpdateSelectAllMultiSelectButtonState();
-        }
 
 
-        private void ArtistTrackListView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
-            {
-                ApplySongListItemSelectionChrome(ArtistTrackListView, container, song);
-                if (args.InRecycleQueue)
-                {
-                    return;
-                }
 
-                // 行模板刚实现时（Phase 0）触发小封面异步加载（2026-10-12：详情页歌曲列表也要显示封面）
-                if (args.Phase == 0)
-                {
-                    LoadRowCoverAsync(ArtistTrackListView, container, song);
-                }
-            }
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -397,178 +203,24 @@ namespace CelesteMusicPlayer
         }
 
 
-        private List<PlaylistItem> GetTracksForAlbum(AlbumEntry album)
-        {
-            // 只按专辑名匹配（不按 artist 过滤）：群星合辑（多 artist、统一 album_artist）下，
-            // 若再按 artist 过滤会把其他艺术家的曲目漏掉，导致「播放该专辑」比右侧列表少歌、顺序错乱。
-            // 排序与专辑详情页右侧列表（OpenAlbumDetailCore）保持一致：碟号 → 音轨号 → 标题。
-            return _playlist
-                .Where(t => string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase))
-                .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-                .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-        }
-
-
-        /// <summary>
-        /// 播放专辑：可替换用户播放列表，并从音轨 1（若无则第一首）开始播放。
-        /// </summary>
-        private void PlayAlbum(AlbumEntry album, bool replacePlaylist)
-        {
-            List<PlaylistItem> tracks = GetTracksForAlbum(album);
-            if (tracks.Count == 0)
-            {
-                return;
-            }
-
-            PlaylistItem first =
-                tracks.FirstOrDefault(t => (t.Disc == 0 || t.Disc == 1) && t.Track == 1) ?? tracks[0];
-
-            if (replacePlaylist)
-            {
-                _queue.Items.Clear();
-                AddSongsToUserPlaylist(tracks);
-                int index = FindUserPlaylistIndex(first.FilePath);
-                if (index >= 0)
-                {
-                    PlayUserPlaylistAt(index);
-                }
-
-                return;
-            }
-
-            PlayPlaylistItem(first);
-        }
-
-
-        private void AlbumDetailPlayButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_openedAlbum != null)
-            {
-                PlayAlbum(_openedAlbum, replacePlaylist: true);
-            }
-        }
-
-
-        private void AlbumDetailAddToPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_openedAlbum != null)
-            {
-                AddSongsToUserPlaylist(GetTracksForAlbum(_openedAlbum));
-            }
-        }
-
-
-        /// <summary>汇总专辑内歌曲质量行（编码器+位深/采样率，取出现最多的组合），如 "FLAC · 16bit/44kHz"。
-        /// 只采样前若干首聚合，避免 CD 大专辑逐首解析(含 ffmpeg)导致打开卡顿。</summary>
-        private static string BuildAlbumQualityLine(IEnumerable<PlaylistItem> tracks)
-        {
-            string? quality = tracks
-                .Take(15)
-                .Select(t => AudioInfoFormatter.FormatQualityLine(t.FilePath))
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .GroupBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .OrderByDescending(g => g.Count())
-                .Select(g => g.Key)
-                .FirstOrDefault();
-            return string.IsNullOrWhiteSpace(quality) ? string.Empty : quality;
-        }
-
-
-        /// <summary>后台聚合专辑质量行并回填行3 TextBlock（避免 CD 大专辑逐首解析卡 UI）。</summary>
-        private async System.Threading.Tasks.Task FillAlbumTechTextAsync(AlbumEntry album, IReadOnlyList<PlaylistItem> tracks)
-        {
-            try
-            {
-                string quality = await System.Threading.Tasks.Task.Run(() => BuildAlbumQualityLine(tracks));
-                string duration = album.TotalDurationText;
-                var segs = new System.Collections.Generic.List<string>();
-                if (!string.IsNullOrWhiteSpace(quality))
-                {
-                    segs.Add(quality.Replace(" · ", " | "));
-                }
-
-                if (!string.IsNullOrWhiteSpace(duration))
-                {
-                    segs.Add(duration);
-                }
-
-                string text = string.Join(" | ", segs);
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                });
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
-        /// <summary>构建按碟片分组的视图（Apple Music 风格 CD 标题行）。</summary>
-        private System.Collections.IEnumerable BuildAlbumGroupedView(IReadOnlyList<PlaylistItem> tracks)
-        {
-            bool hasDisc = tracks.Any(t => t.Disc > 0);
-            var groups = new List<AlbumDiscGroup>();
-
-            if (!hasDisc)
-            {
-                // 无碟号：不作分组，纯列表
-                var g = new AlbumDiscGroup { Key = string.Empty };
-                foreach (PlaylistItem t in tracks)
-                {
-                    g.Add(t);
-                }
-
-                groups.Add(g);
-            }
-            else
-            {
-                foreach (var grp in tracks
-                    .GroupBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-                    .OrderBy(g => g.Key))
-                {
-                    var g = new AlbumDiscGroup
-                    {
-                        Key = grp.Key == uint.MaxValue ? "CD?" : "CD" + grp.Key
-                    };
-                    foreach (PlaylistItem t in grp.OrderBy(x => x.Track == 0 ? uint.MaxValue : x.Track))
-                    {
-                        g.Add(t);
-                    }
-
-                    groups.Add(g);
-                }
-            }
-
-            var cvs = new Microsoft.UI.Xaml.Data.CollectionViewSource
-            {
-                IsSourceGrouped = true
-            };
-            cvs.Source = groups;
-            return cvs.View;
-        }
 
 
 
 
-        private void AlbumTrackListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_suppressSelectionUiUpdates)
-            {
-                return;
-            }
-
-            RefreshAlbumTrackSelectionChrome();
-            UpdateSelectAllMultiSelectButtonState();
-        }
 
 
-        private void AlbumTrackListView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
-            {
-                ApplySongListItemSelectionChrome(AlbumTrackListView, container, song);
-            }
-        }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -591,8 +243,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async void ChangeSortButton_Click(object sender, RoutedEventArgs e)
-            => await ChangeUserPlaylistSortAsync(Content.XamlRoot);
 
         /// <summary>播放列表「更改排序」对话框（主界面与当前播放列表窗口共用）。</summary>
         internal async Task ChangeUserPlaylistSortAsync(XamlRoot xamlRoot)
@@ -674,17 +324,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static string GetSortFieldDisplayName(SortField field) => field switch
-        {
-            SortField.Artist => "艺术家",
-            SortField.Album => "专辑",
-            SortField.Year => "年份",
-            SortField.Duration => "时长",
-            SortField.Genre => "流派",
-            SortField.Track => "音轨号",
-            SortField.FilePath => "文件路径",
-            _ => "标题"
-        };
 
 
         private ObservableCollection<PlaylistItem> GetActiveSongCollection()
@@ -818,7 +457,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void RenumberIndices() => RenumberCollection(_playlist);
 
         private static void RenumberCollection(ObservableCollection<PlaylistItem> items)
         {
@@ -830,168 +468,12 @@ namespace CelesteMusicPlayer
 
 
 
-        /// <summary>拖拽重排后更新歌曲序号（针对当前显示的集合），并强制刷新使序号立即生效。</summary>
-        private void PlaylistView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
-        {
-            try
-            {
-                if (ReferenceEquals(sender.ItemsSource, _queue.Items))
-                {
-                    RenumberCollection(_queue.Items);
-                }
-                else if (ReferenceEquals(sender.ItemsSource, _playlist))
-                {
-                    RenumberCollection(_playlist);
-                }
-                else if (sender.ItemsSource is System.Collections.ObjectModel.ObservableCollection<PlaylistItem> col)
-                {
-                    RenumberCollection(col);
-                }
-
-                // x:Bind Index 为 OneTime：重设 ItemsSource 强制整体刷新，使拖拽后的序号立即更新
-                if (sender is ListView lv)
-                {
-                    object? src = lv.ItemsSource;
-                    lv.ItemsSource = null;
-                    lv.ItemsSource = src;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
 
 
 
 
 
 
-        /// <summary>构建歌曲右键菜单（所有歌曲列表视图共用）。inUserPlaylist 为 true 时含用户播放列表专属项。</summary>
-        private MenuFlyout BuildPlaylistItemContextMenu(PlaylistItem song, bool inUserPlaylist, Action? multiSelectAction = null)
-        {
-            _contextMenuSong = song;
-            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
-
-            var playItem = new MenuFlyoutItem { Text = "播放" };
-            playItem.Icon = new FontIcon { Glyph = "\uE768" };
-            playItem.Click += (_, _) =>
-            {
-                if (_contextMenuSong == null)
-                {
-                    return;
-                }
-
-                ExitMultiSelectMode();
-                // 播放列表内：仅播放，不提前到最前；其它界面仍走加入并播放
-                if (inUserPlaylist)
-                {
-                    int index = FindUserPlaylistIndex(_contextMenuSong.FilePath);
-                    if (index >= 0)
-                    {
-                        PlayUserPlaylistAt(index);
-                    }
-                }
-                else
-                {
-                    PlayPlaylistItem(_contextMenuSong);
-                }
-            };
-
-            var multiItem = new MenuFlyoutItem { Text = "多选" };
-            multiItem.Icon = new FontIcon { Glyph = "\uE700" };
-            multiItem.Click += (_, _) =>
-            {
-                if (multiSelectAction != null)
-                {
-                    multiSelectAction();
-                }
-                else
-                {
-                    EnterMultiSelectMode(_contextMenuSong);
-                }
-            };
-
-            flyout.Items.Add(playItem);
-
-            if (inUserPlaylist)
-            {
-                var pinItem = new MenuFlyoutItem { Text = "置顶" };
-                // Upload：上箭头 + 顶栏横线，近似「横线下朝上箭头」
-                pinItem.Icon = new FontIcon { Glyph = "\uE898" };
-                pinItem.Click += (_, _) =>
-                {
-                    if (_contextMenuSong != null)
-                    {
-                        PinSongToUserPlaylistTop(_contextMenuSong);
-                    }
-                };
-                flyout.Items.Add(pinItem);
-            }
-
-            flyout.Items.Add(multiItem);
-
-            if (inUserPlaylist)
-            {
-                var removeItem = new MenuFlyoutItem { Text = "从播放队列中删除" };
-                removeItem.Icon = new FontIcon { Glyph = "\uE74D" };
-                removeItem.Click += (_, _) =>
-                {
-                    if (_contextMenuSong != null)
-                    {
-                        RemoveSongsFromUserPlaylist(new[] { _contextMenuSong });
-                    }
-                };
-                flyout.Items.Add(removeItem);
-            }
-            else
-            {
-                var addItem = new MenuFlyoutItem { Text = "添加至播放队列" };
-                addItem.Icon = new FontIcon { Glyph = "\uE710" };
-                addItem.Click += (_, _) =>
-                {
-                    if (_contextMenuSong != null)
-                    {
-                        AddSongsToUserPlaylist(new[] { _contextMenuSong });
-                    }
-                };
-                flyout.Items.Add(addItem);
-
-                var wallItem = new MenuFlyoutItem { Text = "添加到播放列表", Icon = new FontIcon { Glyph = "\uE8B7" } };
-                wallItem.Click += (_, _) =>
-                {
-                    if (_contextMenuSong != null)
-                    {
-                        _ = ShowNamedPlaylistPickerAsync(new[] { _contextMenuSong });
-                    }
-                };
-                flyout.Items.Add(wallItem);
-            }
-
-            // 原生播放列表右键菜单已停用（右键入口在 CurrentPlaylistWindow，该文件 Compile Remove），
-            // 2026-10-31 不再追加这组功能项；新外壳的行右键走网页自己的菜单。
-
-            var deleteDiskItem = new MenuFlyoutItem { Text = "从磁盘删除（回收站）" };
-            deleteDiskItem.Icon = new FontIcon { Glyph = "\uE74D" };
-            bool disableDelete = AppSettingsStore.Load().DisableDeleteFromDisk;
-            if (disableDelete)
-            {
-                deleteDiskItem.Text = "从磁盘删除（已在设置中禁用）";
-                deleteDiskItem.IsEnabled = false;
-            }
-            else
-            {
-                deleteDiskItem.Click += async (_, _) =>
-                {
-                    if (_contextMenuSong != null)
-                    {
-                        await DeleteSongFromDiskAsync(_contextMenuSong);
-                    }
-                };
-            }
-
-            flyout.Items.Add(deleteDiskItem);
-
-            flyout.Items.Add(CreateOpenFileLocationMenuItem());
-            return flyout;
-        }
 
 
         /// <summary>将歌曲移到用户播放列表最前（已在最前则不变）。</summary>
@@ -1025,17 +507,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ShowCurrentPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            // 不再弹独立窗口，直接在主界面切换到「播放队列」面板（与侧边栏导航一致）
-            ExitMultiSelectMode();
-            CommitLibraryNavigation(() =>
-            {
-                _currentCategory = "UserPlaylist";
-                ApplyCategoryViewData();
-            });
-            ApplySwitchPlaylistPausePreference();
-        }
 
         internal void ShowCurrentPlaylistWindow()
         {
@@ -1212,45 +683,8 @@ namespace CelesteMusicPlayer
 
 
 
-        private void MultiSelectAddToPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            var selected = GetSelectedMultiSelectSongs();
-            if (selected.Count == 0)
-            {
-                return;
-            }
-
-            _ = ShowNamedPlaylistPickerAsync(selected); // 多选专辑 → 添加到播放列表（列表墙/命名单）
-            ExitMultiSelectMode();
-        }
 
 
-        /// <summary>获取当前多选模式下选中的歌曲（专辑墙 / 文件夹 / 歌曲列表统一出口）。</summary>
-        private List<PlaylistItem> GetSelectedMultiSelectSongs()
-        {
-            if (_multiSelectAlbumGrid != null)
-            {
-                GridView grid = _multiSelectAlbumGrid;
-                var selectedAlbums = grid.SelectedItems.OfType<AlbumEntry>().ToList();
-                List<AlbumEntry> ordered = GetAlbumCollectionForGrid(grid)
-                    .Where(a => selectedAlbums.Contains(a))
-                    .ToList();
-                return CollectTracksFromAlbumsInDisplayOrder(ordered);
-            }
-
-            if (_multiSelectFolderList != null)
-            {
-                var selectedItems = FolderBrowserView.SelectedItems.OfType<FolderBrowserItem>().ToList();
-                List<FolderBrowserItem> ordered = _folderBrowserItems
-                    .Where(i => selectedItems.Contains(i))
-                    .ToList();
-                return CollectTracksFromSelectedFolderItems(ordered);
-            }
-
-            ListView target = _multiSelectTargetList ?? PlaylistView;
-
-            return target.SelectedItems.OfType<PlaylistItem>().ToList();
-        }
 
 
         private void RemoveSongsFromUserPlaylist(IEnumerable<PlaylistItem> songs)
@@ -1285,8 +719,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async void SavePlaylistButton_Click(object sender, RoutedEventArgs e)
-            => await SaveUserPlaylistAsync(Content.XamlRoot);
 
         internal async Task SaveUserPlaylistAsync(XamlRoot xamlRoot)
         {
@@ -1332,11 +764,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async void OpenPlaylistButton_Click(object sender, RoutedEventArgs e)
-        {
-            // “添加到播放列表”：把当前队列歌曲追加到所选/新建命名单（列表墙）
-            await ShowNamedPlaylistPickerAsync(_queue.Items.ToList());
-        }
 
 
         internal async Task OpenUserPlaylistAsync(XamlRoot xamlRoot, bool navigateToPlaylist)
@@ -1366,8 +793,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async void ClearPlaylistButton_Click(object sender, RoutedEventArgs e)
-            => await ClearUserPlaylistAsync(Content.XamlRoot);
 
         internal async Task ClearUserPlaylistAsync(XamlRoot xamlRoot)
         {
@@ -1404,8 +829,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlayUserPlaylistButton_Click(object sender, RoutedEventArgs e)
-            => PlayUserPlaylistFromStart();
 
         private async Task<string?> AskPlaylistFileNameAsync(XamlRoot xamlRoot)
         {
@@ -1537,24 +960,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 将歌曲插入播放列表最前（保持传入顺序）。
-        /// 若已存在则先移除再提前，避免重复。大批量时整表重建，避免反复 Insert(0) 导致卡死/崩溃。
-        /// </summary>
-        /// <summary>弹“添加到播放列表”选择器（Poweramp 逻辑）：选命名单或新建，把歌曲追加进去。</summary>
-        private async System.Threading.Tasks.Task ShowNamedPlaylistPickerAsync(IReadOnlyList<PlaylistItem> songs)
-        {
-            if (songs == null || songs.Count == 0) return;
-
-            var paths = songs
-                .Select(s => s.FilePath)
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            if (paths.Count == 0) return;
-
-            await AddPathsToNamedPlaylistAsync(paths);
-        }
 
 
         /// <summary>
@@ -1925,135 +1330,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistView_SelectionChromeChanged(dynamic sender, dynamic e)
-        {
-            if (_suppressSelectionUiUpdates)
-            {
-                return;
-            }
-
-            RefreshPlaylistSelectionChrome();
-            UpdateSelectAllMultiSelectButtonState();
-
-            // 未播放时:预览选中歌曲的波形(波形进度条模式)
-            if (string.IsNullOrEmpty(_nowPlayingPath)
-                && _waveformProgress
-                && e.AddedItems.Count > 0
-                && (e.AddedItems[0] as PlaylistItem) != null
-                && !string.Equals(_waveformPath, ((PlaylistItem)e.AddedItems[0]).FilePath, StringComparison.OrdinalIgnoreCase))
-            {
-                LoadWaveformForCurrentAsync(((PlaylistItem)e.AddedItems[0]).FilePath);
-            }
-        }
 
 
-        private void PlaylistView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
-            {
-                ApplySongListItemSelectionChrome(PlaylistView, container, song);
-                if (args.InRecycleQueue)
-                {
-                    return;
-                }
-
-                // 行模板尚未实现时（Phase 0）触发小封面异步加载
-                if (args.Phase == 0)
-                {
-                    LoadRowCoverAsync(PlaylistView, container, song);
-                }
-            }
-        }
 
 
-        /// <summary>异步读取歌曲小封面并填到行模板内的 RowCoverImage；去重 + 封面解码缓存 + 并发限流 + 行已回收则跳过。</summary>
-        private async void LoadRowCoverAsync(ListView owner, ListViewItem container, PlaylistItem song)
-        {
-            if (string.IsNullOrWhiteSpace(song.FilePath))
-            {
-                return;
-            }
-
-            if (!_rowCoverLoading.Add(song.FilePath))
-            {
-                return;
-            }
-
-            try
-            {
-                // 命中已解码缓存：直接填行（不再 IO/解码，滚动丝滑）
-                if (_coverImageCache.TryGetValue(song.FilePath, out var cached))
-                {
-                    DispatcherQueue.TryEnqueue(() => AttachCover(owner, container, song, cached));
-                    return;
-                }
-
-                Microsoft.UI.Xaml.Media.Imaging.BitmapImage? bmp = null;
-                await _coverLoadGate.WaitAsync();
-                try
-                {
-                    // 2026-10-16 参考 ECHO 的封面分档：列表小图先走 CoverArtService
-                    // （96 档 + 磁盘缓存，命中时零 TagLib/零解码），未命中才回落老路径。
-                    bmp = await CoverArtService.GetAsync(song.FilePath, CoverVariant.Thumb);
-                    if (bmp == null)
-                    {
-                        byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(song.FilePath));
-                        if (bytes is { Length: > 0 })
-                        {
-                            bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
-                            using (var ms = new System.IO.MemoryStream(bytes))
-                            {
-                                ms.Position = 0;
-                                await bmp.SetSourceAsync(ms.AsRandomAccessStream());
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    _coverLoadGate.Release();
-                }
-
-                if (bmp == null)
-                {
-                    return;
-                }
-
-                // 缓存解码结果供重复使用；超过上限则清空整表以限制内存增长
-                // （BitmapImage 持有解码像素，逐曲播放会无限累积——这是“播放越多内存越大”的主因）
-                _coverImageCache.TryAdd(song.FilePath, bmp);
-                if (_coverImageCache.Count > RowCoverCacheMax) _coverImageCache.Clear();
-                DispatcherQueue.TryEnqueue(() => AttachCover(owner, container, song, bmp));
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-            finally
-            {
-                _rowCoverLoading.Remove(song.FilePath);
-            }
-        }
 
 
-        /// <summary>仅当该行仍由同一容器承载时，把封面填到其 RowCoverImage（避免行复用错位）。</summary>
-        private static void AttachCover(ListView owner, ListViewItem container, PlaylistItem song, Microsoft.UI.Xaml.Media.Imaging.BitmapImage bmp)
-        {
-            try
-            {
-                if (owner.ContainerFromItem(song) != container)
-                {
-                    return;
-                }
-
-                var img = container.ContentTemplateRoot as FrameworkElement;
-                var coverImg = img?.FindName("RowCoverImage") as Microsoft.UI.Xaml.Controls.Image;
-
-                // 有封面隐藏边框线/底色，无封面显示框 + 光盘占位（与专辑墙/详情页一致）
-                var coverFrame = img?.FindName("RowCoverBorder") as Border;
-                if (coverImg != null && coverFrame != null)
-                {
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
 
 
         private void RefreshMultiSelectItemBackgrounds() => RefreshAllSongListSelectionChrome();
@@ -2082,22 +1364,6 @@ namespace CelesteMusicPlayer
         private void RefreshArtistTrackSelectionChrome()
             => RefreshRealizedSongListSelectionChrome(ArtistTrackListView);
 
-        /// <summary>
-        /// 列表宽度变化时，重刷已实现行的宽度，使行内容始终铺满（选中矩形铺满整行、字段对齐）。
-        /// 只更新宽度——不走全量 RefreshRealizedSongListSelectionChrome：那个每行要重算
-        /// 画刷、遍历全部后代设前景，窗口缩放每个 tick 都跑一遍就是「调整大小卡」的根源
-        /// （2026-10-13 用户实测）。选中态变化才需要全量刷。
-        /// </summary>
-        private void SongListView_SizeChanged(dynamic sender, dynamic e)
-        {
-            if (sender is ListView list && list.ActualWidth > 0)
-            {
-                foreach (ListViewItem container in EnumerateRealizedListViewItems(list))
-                {
-                    Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
-                }
-            }
-        }
 
         // ==== 多选模式（2026-10-31 从 MainWindow.Misc.cs 改写搬来，证据见注释）====
         // ⚠ _isMultiSelectMode 在主窗口恒 false：三个写 true 的入口全部不可达 ——

@@ -44,66 +44,7 @@ public sealed partial class MainWindow
             return null;
         }
 
-        /// <summary>
-        /// 遍历按钮内容里的元素。刻意先走 Panel.Children：这些 TextBlock/FontIcon 是 XAML 里直接写在
-        /// Button.Content 下的，页面还没布局时 VisualTreeHelper 取不到，Panel.Children 一定取得到。
-        /// </summary>
-        private static IEnumerable<DependencyObject> WalkNavContent(DependencyObject root)
-        {
-            var pending = new Stack<DependencyObject>();
-            pending.Push(root);
-            while (pending.Count > 0)
-            {
-                DependencyObject node = pending.Pop();
-                yield return node;
 
-                if (node is Panel panel)
-                {
-                    foreach (UIElement child in panel.Children)
-                    {
-                        pending.Push(child);
-                    }
-                }
-                else
-                {
-                    int count = VisualTreeHelper.GetChildrenCount(node);
-                    for (int i = 0; i < count; i++)
-                    {
-                        pending.Push(VisualTreeHelper.GetChild(node, i));
-                    }
-                }
-            }
-        }
-
-        /// <summary>单个双精度属性的淡入动画（代码构造的 Storyboard，目标用对象引用而不是名字）。</summary>
-        private static void BeginNavAnimation(
-            DependencyObject target,
-            int milliseconds,
-            double to,
-            string property = "Opacity",
-            double? from = 0)
-        {
-            var animation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
-            {
-                To = to,
-                Duration = new Duration(TimeSpan.FromMilliseconds(milliseconds)),
-                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
-                {
-                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
-                }
-            };
-
-            if (from.HasValue)
-            {
-                animation.From = from.Value;
-            }
-
-            var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(animation, target);
-            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(animation, property);
-            storyboard.Children.Add(animation);
-            storyboard.Begin();
-        }
 
         /// <summary>把无边框窗口的 DWM 边框/标题栏描边色设为当前 UI 底色，
         /// 消除任务栏缩略图/窗口四周跟随系统强调色的"主题色框"。</summary>

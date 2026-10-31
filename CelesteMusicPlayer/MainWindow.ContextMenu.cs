@@ -43,45 +43,7 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        private void SortFieldMenu_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
-            {
-                return;
-            }
-
-            _sortField = tag switch
-            {
-                "Artist" => SortField.Artist,
-                "Album" => SortField.Album,
-                "Year" => SortField.Year,
-                "Duration" => SortField.Duration,
-                "Genre" => SortField.Genre,
-                "Track" => SortField.Track,
-                "FilePath" => SortField.FilePath,
-                _ => SortField.Title
-            };
 
 
-            string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
-                ? _playlist[_currentIndex].FilePath
-                : null;
-            ApplySort(playingPath);
-        }
-
-
-        private MenuFlyoutItem CreateOpenFileLocationMenuItem()
-        {
-            var item = new MenuFlyoutItem { Text = "打开文件位置" };
-            item.Icon = new FontIcon { Glyph = "\uE8DA" };
-            item.Click += (_, _) =>
-            {
-                if (_contextMenuSong != null)
-                {
-                    OpenFileLocationInExplorer(_contextMenuSong.FilePath);
-                }
-            };
-            return item;
-        }
     }
 }

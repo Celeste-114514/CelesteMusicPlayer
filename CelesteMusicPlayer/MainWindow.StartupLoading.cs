@@ -139,28 +139,5 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>遮罩配色：极客皮肤用磷光色，其余用当前主题强调色（和三套皮肤口径一致）。</summary>
-        private static Windows.UI.Color StartupLoadingAccentColor()
-        {
-            try
-            {
-                if (string.Equals(AppSettingsStore.Load().UiStyleMode?.Trim(), "Geek",
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return MainWindow.GeekPhosphorColor();
-                }
-            }
-            catch { /* 读设置失败就用默认色，不影响动画 */ }
-
-            // 走统一的强调色入口（令牌测试皮肤=主题文件 Accent.Solid），别直接读 CurrentAccent
-            try
-            {
-                return MainWindow.ResolveAccentColorStatic();
-            }
-            catch
-            {
-                return Windows.UI.Color.FromArgb(255, 0, 120, 212);
-            }
-        }
     }
 }

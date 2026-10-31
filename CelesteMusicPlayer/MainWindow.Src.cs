@@ -46,74 +46,8 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void SrcRateCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                int hz = SrcParameters.TargetHz;
-                UpdateSrcStateText(hz);
 
-                AppSettingsState s = AppSettingsStore.Load();
-                if (s.SrcTargetHz != hz)
-                {
-                    s.SrcTargetHz = hz;
-                    AppSettingsStore.Save(s);
-                }
 
-                // 播放中调用只保存（SRC 改变输出格式，必须下次开播生效）；引擎侧同样只透传保存
-                _audioEngine?.SetResampleTargetRate(hz);
-                RefreshSrcSessionState();
-                // 链路图与示意曲线都跟着目标采样率变
-                RedrawSrcCanvas();
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
-            }
-        }
-
-        private void SrcQualityCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                string key = SrcParameters.Quality;
-
-                AppSettingsState s = AppSettingsStore.Load();
-                if (s.SrcQuality != key)
-                {
-                    s.SrcQuality = key;
-                    AppSettingsStore.Save(s);
-                }
-
-                _audioEngine?.SetSrcQuality(key);
-                RedrawSrcCanvas();
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
-            }
-        }
-
-        private void SrcDitherCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            try
-            {
-                string key = SrcParameters.Dither;
-
-                AppSettingsState s = AppSettingsStore.Load();
-                if (s.SrcDither != key)
-                {
-                    s.SrcDither = key;
-                    AppSettingsStore.Save(s);
-                }
-
-                _audioEngine?.SetSrcDither(key);
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
-            }
-        }
 
         /// <summary>把模型里的升频参数落盘并下发引擎。网页命令与页头电源开关走这一条（含全部三项）。</summary>
         private void ApplySrcSettings()

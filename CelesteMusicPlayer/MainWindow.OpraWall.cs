@@ -181,10 +181,6 @@ namespace CelesteMusicPlayer
 
 
 
-        private void OpraPreviewCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            RedrawOpraPreview();
-        }
 
         internal void RedrawOpraCanvas()
         {
@@ -382,19 +378,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static double SumOpraGainAt(EqCurveState curve, double freq)
-        {
-            double g = curve.PreampDb;
-            foreach (EqBand b in curve.Bands)
-            {
-                if (b.Enabled)
-                {
-                    g += ApproxBandGain(freq, b);
-                }
-            }
-
-            return g;
-        }
 
         private static UIElement MakeOpraLabel(string text, double x, double y, double width, TextAlignment align, Color color)
         {

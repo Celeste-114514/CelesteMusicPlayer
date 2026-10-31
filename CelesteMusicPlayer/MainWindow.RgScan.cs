@@ -22,37 +22,7 @@ namespace CelesteMusicPlayer
         private bool _rgScanRunning;
 
 
-        private void RgScanCancelButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                _rgScanCts?.Cancel();
-            }
-            catch
-            {
-                // 已取消，忽略
-            }
-        }
 
-        /// <summary>按范围给出待扫描曲目（原 OpenReplayGainScan 里的 provider，搬过来复用）。</summary>
-        private List<RgScanInput> BuildRgScanInputs(ReplayGainScanScope scope)
-        {
-            if (scope == ReplayGainScanScope.Library)
-            {
-                return LibraryDb.GetAllTracksForScan();
-            }
-
-            if (scope == ReplayGainScanScope.Playlist)
-            {
-                return _playlist
-                    .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
-                    .ToList();
-            }
-
-            return GetSelectedMultiSelectSongs()
-                .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
-                .ToList();
-        }
 
 
 

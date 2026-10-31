@@ -46,10 +46,6 @@ namespace CelesteMusicPlayer
         // 事件入口
         // ─────────────────────────────────────────────────────────────
 
-        private void DspXfeedCurveCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            RedrawDspXfeedCurve();
-        }
 
 
 

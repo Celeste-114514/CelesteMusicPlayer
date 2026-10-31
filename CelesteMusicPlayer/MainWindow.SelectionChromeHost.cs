@@ -286,29 +286,8 @@ public sealed partial class MainWindow
 
         // W13 第二十五刀：专辑墙/艺术家专辑 行样式事件入口
 
-        private void AlbumGridView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
-            {
-                ApplyAlbumGridItemSelectionChrome(AlbumGridView, container, album);
-            }
-        }
 
-        private void ArtistAlbumGridView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
-            {
-                ApplyAlbumGridItemSelectionChrome(ArtistAlbumGridView, container, album);
-            }
-        }
 
         // W13 第二十五刀：文件夹浏览 行样式事件入口
 
-        private void FolderBrowserView_ContainerContentChanging(dynamic sender, dynamic args)
-        {
-            if (args.Item is FolderBrowserItem item && args.ItemContainer is ListViewItem container)
-            {
-                ApplyFolderBrowserItemSelectionChrome(container, item);
-            }
-        }
     }

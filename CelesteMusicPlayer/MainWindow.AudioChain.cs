@@ -35,12 +35,7 @@ namespace CelesteMusicPlayer
 
 
 
-        private void AudioChainScrim_Tapped(object sender, TappedRoutedEventArgs e) => HideAudioChainPanel();
 
-        private void OpenAudioChainPanel()
-        {
-            ShowWebPage("dsp");
-        }
 
 
         private void HideAudioChainPanel()
