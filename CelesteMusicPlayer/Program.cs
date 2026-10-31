@@ -19,7 +19,6 @@ namespace CelesteMusicPlayer
         private const uint MbIconWarning = 0x00000030;
 
         private const string DotNetDownloadUrl = "https://dotnet.microsoft.com/download/dotnet/10.0";
-        private const string WinAppSdkDownloadUrl = "https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads";
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
         private static extern int MessageBoxW(nint hWnd, string text, string caption, uint type);
@@ -84,22 +83,11 @@ namespace CelesteMusicPlayer
 
             StartupLog.Write("Main begin, BaseDirectory=" + baseDir);
 
-            // 框架依赖 + 非打包(Unpackaged) 发布时，Windows App SDK 运行时由目标机安装提供，
-            // 不能把 BASE_DIRECTORY 指向 exe 目录（那里没有运行时）；自包含发布、或打包(MSIX)发布时
-            // 运行时随包/在包内可寻址，沿用旧行为指过去。
-            bool runtimeBundled = File.Exists(Path.Combine(baseDir, "Microsoft.WindowsAppRuntime.dll"));
-            bool packaged = IsPackaged();
-            if (runtimeBundled || packaged)
-            {
-                Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", baseDir);
-            }
+            // W13 收尾：项目已不再引用 Windows App SDK / WinUI，运行时只剩 .NET 本身。
+            // 自包含发布时 hostfxr.dll 就在 exe 目录；框架依赖时由系统提供。
+            bool runtimeBundled = File.Exists(Path.Combine(baseDir, "hostfxr.dll"));
 
-            // 框架依赖模式下运行时的可用性由系统引导层保证：
-            // - 缺 .NET 10 桌面运行时 → apphost 启动前弹系统错误框（含官方下载链接）；
-            // - 缺 Windows App SDK 运行时 → Bootstrap 自动初始化在 Main 之前失败并弹引导框。
-            // 能走到这里即代表运行时已就绪，无需（也无法）再自行枚举系统包——
-            // 非打包应用枚举 MSIX 包无权限（UnauthorizedAccessException），且 1.8 运行时不写注册表，
-            // 此前曾因此把“已安装”误判为“未安装”导致启动即弹窗退出。
+            // 能走到这里即代表 .NET 运行时已就绪（缺运行时 apphost 会在 Main 之前就弹系统错误框）。
             try
             {
                 ComWrappersSupport.InitializeComWrappers();
@@ -141,20 +129,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>是否以打包(MSIX)方式运行。非打包(Unpackaged)下访问 Package.Current 会抛异常，属预期。</summary>
-        private static bool IsPackaged()
-        {
-            try
-            {
-                return Windows.ApplicationModel.Package.Current != null;
-            }
-            catch
-            {
-                // 非打包模式必然抛异常（E_NOTIMPL），静默即可，不写日志。
-                return false;
-            }
-        }
-
         private static bool IsRuntimeMissingException(Exception ex)
         {
             if (ex is COMException com && (uint)com.HResult == 0x8000FFFF)
@@ -172,8 +146,7 @@ namespace CelesteMusicPlayer
         {
             string content =
                 "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n" +
-                "• .NET 10 桌面运行时：<A HREF=\"" + DotNetDownloadUrl + "\">点此下载</A>\n" +
-                "• Windows App SDK 运行时（1.8）：<A HREF=\"" + WinAppSdkDownloadUrl + "\">点此下载</A>\n\n" +
+                "• .NET 10 桌面运行时：<A HREF=\"" + DotNetDownloadUrl + "\">点此下载</A>\n\n" +
                 (string.IsNullOrWhiteSpace(detail) ? string.Empty : detail + "\n\n") +
                 "点击上面的链接即可在浏览器打开下载页，安装后重新启动本程序。";
 
@@ -185,7 +158,6 @@ namespace CelesteMusicPlayer
             // 兜底：环境中没有 comctl32 v6（TaskDialog 不可用）时，退回普通消息框（链接为纯文本）。
             string plain = "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n"
                 + "• .NET 10 桌面运行时\n  下载：" + DotNetDownloadUrl + "\n\n"
-                + "• Windows App SDK 运行时（1.8）\n  下载：" + WinAppSdkDownloadUrl + "\n\n"
                 + (string.IsNullOrWhiteSpace(detail) ? string.Empty : detail + "\n\n")
                 + "请安装以上运行环境后重新启动本程序。";
             try

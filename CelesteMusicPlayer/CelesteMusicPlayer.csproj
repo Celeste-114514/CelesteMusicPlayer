@@ -1,8 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- 本地签名密码从 csproj 外置到 CelesteMusicPlayer.signing.props（已被 .gitignore 忽略，不入库）。
-       仓库克隆后若需本地 Debug MSIX 自签名，请自行创建该文件填入密码；缺失则 Debug 打包不签名（不影响 Release 自包含）。 -->
-  <Import Project="CelesteMusicPlayer.signing.props" Condition="Exists('CelesteMusicPlayer.signing.props')" />
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
@@ -21,7 +17,6 @@
     <UseWinUI>false</UseWinUI>
 
     <WinUISDKReferences>false</WinUISDKReferences>
-    <EnableMsixTooling>false</EnableMsixTooling>
     <Nullable>enable</Nullable>
     <!-- DspCoreInterop 用 fixed 指针直通 celeste_dsp_core.process（交错 float32 原地处理，
          避免每块 P/Invoke 数组拷贝；float* 签名见 DspCoreInterop.cs） -->
@@ -29,27 +24,21 @@
     <!-- 始终使用 Program.cs 入口（启动前固定工作目录到 exe 目录） -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!--
-      Debug：保持 MSIX，供 VS「Package」配置 F5（生成 AppxManifest）。
-      Release / CelesteSelfContainedDistribute：非打包 + 内嵌 Windows App SDK，
-      可直接双击 bin\Release 下的 exe，也可整夹发给别人。
-      Release 在 VS 里调试请选「CelesteMusicPlayer (Unpackaged)」。
+      W13 收尾后项目只剩「非打包」一种形态：所有配置都产出可直接双击的 exe。
+      Debug 在 VS 里直接 F5 即可（不再有 Package/MSIX 配置）。
     -->
   </PropertyGroup>
 
   <ItemGroup><FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" /></ItemGroup>
   <!--
     发布形态由 CelesteSelfContainedDistribute 决定（默认不设置 = 框架依赖，体积小）：
-      - 框架依赖（默认）：不打包 .NET 10 / Windows App SDK 运行时，产物约少 30–50MB，
-        目标机需先装 .NET 10 桌面运行时 + Windows App SDK 运行时（缺失时启动会弹窗提示，见 Program.cs）。
+      - 框架依赖（默认）：不打包 .NET 10 运行时，产物约少 30–50MB，
+        目标机需先装 .NET 10 桌面运行时（缺失时启动会弹窗提示，见 Program.cs）。
       - 自包含：dotnet publish -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true，
         运行时随包走，可整夹发给没装运行时的机器（体积大）。
   -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' or '$(CelesteSelfContainedDistribute)' == 'true'">
-    <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>$(CelesteSelfContainedDistribute)</WindowsAppSDKSelfContained>
     <SelfContained>$(CelesteSelfContainedDistribute)</SelfContained>
-    <!-- 非打包自包含下关闭 DeploymentManager 自动初始化，避免 0xC000027B 闪退 -->
-    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
   </PropertyGroup>
 
     <ItemGroup>
@@ -76,17 +65,6 @@
     <Content Include="Assets\sacd\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\AppIconSource.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\SplashScreen.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\SplashScreen.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\LockScreenLogo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Square150x150Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Square150x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Square44x44Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Square44x44Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\StoreLogo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Wide310x150Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\Wide310x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -109,14 +87,6 @@
     <ProjectReference Include="..\CelesteUpdater\CelesteUpdater.csproj" />
   </ItemGroup>
 
-  <!--
-    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
-    Tools extension to be activated for this project even if the Windows App SDK Nuget
-    package has not yet been restored.
-  -->
-  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
-    <ProjectCapability Include="Msix" />
-  </ItemGroup>
   <!--
     W13：旧原生界面（XAML 窗口与面板）不再参与编译。
     注意 —— 不删文件，只从编译项里排除：迷你播放器 / 零散播放窗口用户明确说过要自己重构，
@@ -228,26 +198,6 @@
     <Page Remove="Themes\CelesteTokens.xaml" />
     <None Include="Themes\CelesteTokens.xaml" />
   </ItemGroup>
-
-  <!--
-    Debug 打包（MSIX）需要有效代码签名证书，否则 VS「Package」F5 部署会因包未签名而失败
-    （0x87E80034 / 0x800B0100 / 0x800B0109），表现为主界面无响应、无报错。
-    这里用项目内自签名证书（CN=admin）对 x64 Debug 包自动签名。
-  -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(Platform)' == 'x64' and '$(EnableMsixTooling)' == 'true'">
-    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
-    <PackageCertificateKeyFile>CelesteMusicPlayer_TemporaryKey.pfx</PackageCertificateKeyFile>
-    <PackageCertificatePassword>$(PackageCertificatePassword)</PackageCertificatePassword>
-  </PropertyGroup>
-
-  <!--
-    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
-    Explorer "Package and Publish" context menu entry to be enabled for this project even if
-    the Windows App SDK Nuget package has not yet been restored.
-  -->
-  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
-    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
-  </PropertyGroup>
 
   <!-- Publish Properties -->
   <!--
