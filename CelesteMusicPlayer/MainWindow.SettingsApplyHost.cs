@@ -185,7 +185,6 @@ public sealed partial class MainWindow
 
             try
             {
-                ApplyAccentSelectionResources(PlaylistView);
                 ApplyAccentSelectionResources(AlbumGridView);
                 ApplyAccentSelectionResources(AlbumTrackListView);
                 ApplyAccentSelectionResources(ArtistTrackListView);

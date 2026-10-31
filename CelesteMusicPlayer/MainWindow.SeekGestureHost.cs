@@ -46,7 +46,6 @@ public sealed partial class MainWindow
                     double target = NowPlayingProgressSlider.Value;
                     if (Math.Abs(ProgressSlider.Value - target) >= 0.01)
                     {
-                        ProgressSlider.Value = target;
                     }
                 }
 

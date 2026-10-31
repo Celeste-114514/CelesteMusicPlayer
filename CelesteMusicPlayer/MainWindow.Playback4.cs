@@ -84,7 +84,6 @@ namespace CelesteMusicPlayer
                 double duration = (_audioEngine?.Duration.TotalSeconds ?? 0) * scale;
                 if (duration > 1 && Math.Abs(ProgressSlider.Maximum - duration) > 1)
                 {
-                    ProgressSlider.Maximum = duration;
                 }
 
                 // 界面/歌词/SMTC/迷你播放器全部消费"源时间"：引擎位置 × 倍率
@@ -96,7 +95,6 @@ namespace CelesteMusicPlayer
                     _isUpdatingProgressUi = true;
                     try
                     {
-                        ProgressSlider.Value = seconds;
                     }
                     finally
                     {
@@ -108,7 +106,6 @@ namespace CelesteMusicPlayer
                 if (CurrentTimeText != null
                     && !string.Equals(CurrentTimeText.Text, timeText, StringComparison.Ordinal))
                 {
-                    CurrentTimeText.Text = timeText;
                 }
 
                 TimeSpan sourcePos = TimeSpan.FromSeconds(seconds);

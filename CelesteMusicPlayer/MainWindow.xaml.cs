@@ -671,7 +671,6 @@ namespace CelesteMusicPlayer
             // 导致：主题色按钮显示成透明底 + 白字（用户实测"很神秘"、专辑详情页
             // "添加至播放队列"透明）。按钮的 Height/Padding/CornerRadius 在 XAML 里都有，
             // 删掉调用即恢复 E4 样式与 XAML 属性，无需替代逻辑。
-            ApplyAccentSelectionResources(PlaylistView);
             PlaylistView.SelectionChanged += PlaylistView_SelectionChromeChanged;
             PlaylistView.ContainerContentChanging += PlaylistView_ContainerContentChanging;
             PlaylistView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度

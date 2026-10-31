@@ -205,13 +205,11 @@ namespace CelesteMusicPlayer
                 {
                     ApplyNowPlayingCardChrome();
                     ApplyArtistSongsFrostChrome();
-                    ApplyAccentSelectionResources(PlaylistView);
                     RefreshPlaylistSelectionChrome();
                     ApplyPlaylistHeaderChipStyle();
                 };
             }
 
-            MainContentGrid.SizeChanged += (_, _) => ScheduleFitColumns();
             AppWindow.Changed += (_, args) =>
             {
                 if (args.DidSizeChange || args.DidPresenterChange)
@@ -620,21 +618,18 @@ namespace CelesteMusicPlayer
                 double duration = item.Duration.TotalSeconds;
                 if (duration > 1)
                 {
-                    ProgressSlider.Maximum = duration;
                 }
 
                 double start = Math.Clamp(_pendingStartSeconds, 0, duration > 1 ? duration : 0);
                 _isUpdatingProgressUi = true;
                 try
                 {
-                    ProgressSlider.Value = start;
                 }
                 finally
                 {
                     _isUpdatingProgressUi = false;
                 }
 
-                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(start));
 
                 // 波形：就绪态也解码一份，别等到点播放才出现
                 _waveformPath = null;
