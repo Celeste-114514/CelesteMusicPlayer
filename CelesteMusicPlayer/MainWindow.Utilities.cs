@@ -1,9 +1,13 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Color = Windows.UI.Color;
+using Windows.Storage.Streams;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace CelesteMusicPlayer
 {
@@ -703,5 +707,45 @@ namespace CelesteMusicPlayer
             => PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
 
 
+        // 封面字节→位图（2026-10-31 从 MainWindow.Misc.cs 搬来）：纯静态解码，与 ExtractCoverBytes 同属封面域。
+
+        /// <summary>
+        /// 字节 → BitmapImage（须在 UI 线程）。
+        /// maxPixel &gt; 0 且源图更大时，按显示尺寸解码（解码期高质量重采样），
+        /// 避免 1400px 大图直接被 UI 层双线性缩到 320px 显示导致的发糊/锯齿。
+        /// </summary>
+        private static async Task<BitmapImage?> CreateBitmapFromBytesAsync(byte[] bytes, int maxPixel = 0)
+        {
+            try
+            {
+                var image = new BitmapImage();
+                if (maxPixel > 0 && CoverSourceReader.TryMeasureImageSize(bytes, out int w, out int h))
+                {
+                    // 只缩不放：源图更大才按显示尺寸解码；源图更小保持原样（解码期放大没有意义）
+                    if (Math.Max(w, h) > maxPixel)
+                    {
+                        // 只设长边对应的那一维，另一维由解码器按比例推（同时设两维会拉变形）
+                        if (w >= h)
+                        {
+                            image.DecodePixelWidth = maxPixel;
+                        }
+                        else
+                        {
+                            image.DecodePixelHeight = maxPixel;
+                        }
+                    }
+                }
+                using InMemoryRandomAccessStream stream = new();
+                await stream.WriteAsync(bytes.AsBuffer());
+                stream.Seek(0);
+                await image.SetSourceAsync(stream);
+                return image;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("封面解码失败: " + ex.Message);
+                return null;
+            }
+        }
     }
 }

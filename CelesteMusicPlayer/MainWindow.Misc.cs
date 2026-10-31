@@ -1838,46 +1838,6 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>
-        /// 字节 → BitmapImage（须在 UI 线程）。
-        /// maxPixel &gt; 0 且源图更大时，按显示尺寸解码（解码期高质量重采样），
-        /// 避免 1400px 大图直接被 UI 层双线性缩到 320px 显示导致的发糊/锯齿。
-        /// </summary>
-        private static async Task<BitmapImage?> CreateBitmapFromBytesAsync(byte[] bytes, int maxPixel = 0)
-        {
-            try
-            {
-                var image = new BitmapImage();
-                if (maxPixel > 0 && CoverSourceReader.TryMeasureImageSize(bytes, out int w, out int h))
-                {
-                    // 只缩不放：源图更大才按显示尺寸解码；源图更小保持原样（解码期放大没有意义）
-                    if (Math.Max(w, h) > maxPixel)
-                    {
-                        // 只设长边对应的那一维，另一维由解码器按比例推（同时设两维会拉变形）
-                        if (w >= h)
-                        {
-                            image.DecodePixelWidth = maxPixel;
-                        }
-                        else
-                        {
-                            image.DecodePixelHeight = maxPixel;
-                        }
-                    }
-                }
-                using InMemoryRandomAccessStream stream = new();
-                await stream.WriteAsync(bytes.AsBuffer());
-                stream.Seek(0);
-                await image.SetSourceAsync(stream);
-                return image;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("封面解码失败: " + ex.Message);
-                return null;
-            }
-        }
-
-
-        /// <summary>
         /// 当前播放条目的 CUE 分轨区间（文件时间）。非分轨返回 (0, 0)。
         /// 用于变速重载等"按路径重起"的路径：必须带上区间，否则会把整轨从头播。
         /// </summary>
@@ -2094,98 +2054,8 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void UpdateSelectAllMultiSelectButtonState()
-        {
-            if (SelectAllMultiSelectIcon == null || !_isMultiSelectMode)
-            {
-                return;
-            }
-
-            bool allSelected;
-            if (_multiSelectAlbumGrid != null)
-            {
-                ObservableCollection<AlbumEntry> all = GetAlbumCollectionForGrid(_multiSelectAlbumGrid);
-                allSelected = all.Count > 0
-                    && _multiSelectAlbumGrid.SelectedItems.Count >= all.Count;
-            }
-            else if (_multiSelectFolderList != null)
-            {
-                allSelected = _folderBrowserItems.Count > 0
-                    && FolderBrowserView.SelectedItems.Count >= _folderBrowserItems.Count;
-            }
-            else if (_multiSelectTargetList != null)
-            {
-                IReadOnlyList<PlaylistItem> all = GetMultiSelectSongSource(_multiSelectTargetList);
-                allSelected = all.Count > 0
-                    && _multiSelectTargetList.SelectedItems.Count >= all.Count;
-            }
-            else
-            {
-                allSelected = false;
-            }
-
-            // E73A CheckboxCompositeChecked / E739 CheckboxComposite
-            SelectAllMultiSelectIcon.Glyph = allSelected ? "\uE73A" : "\uE739";
-        }
-
-
         private void ExitMultiSelectButton_Click(object sender, RoutedEventArgs e)
             => ExitMultiSelectMode();
-
-        private void ExitMultiSelectMode()
-        {
-            if (!_isMultiSelectMode)
-            {
-                MultiSelectActionBar.Visibility = Visibility.Collapsed;
-                MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                if (LibraryPaneTitle != null
-                    && (_currentCategory == "Songs"
-                        || _currentCategory == "UserPlaylist"
-                        || _currentCategory == "Artists"
-                        || _currentCategory == "AlbumArtists"
-                        || _currentCategory == "Albums"))
-                {
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                }
-
-                return;
-            }
-
-            ExitSongMultiSelectUiOnly();
-            ExitAlbumMultiSelectUiOnly();
-            ExitFolderMultiSelectUiOnly();
-
-            _isMultiSelectMode = false;
-            ApplyCapsuleSortButtonStyle(accent: true);
-            MultiSelectActionBar.Visibility = Visibility.Collapsed;
-            MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-            LibraryPaneTitle.Visibility = Visibility.Collapsed;
-            if (_currentCategory == "Songs" || _currentCategory == "UserPlaylist")
-            {
-                SongSortPanel.Visibility = Visibility.Visible;
-                SetSongSortUiForCategory(isUserPlaylist: string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal));
-            }
-            else if (_currentCategory == "Albums")
-            {
-                AlbumSortPanel.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                SongSortPanel.Visibility = Visibility.Collapsed;
-                AlbumSortPanel.Visibility = Visibility.Collapsed;
-            }
-
-            UpdateUserPlaylistActionBarVisibility();
-            DispatcherQueue.TryEnqueue(RefreshAllSongListSelectionChrome);
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                RefreshAlbumWallSelectionChrome(ArtistAlbumGridView, _artistAlbums);
-                RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
-                RefreshFolderBrowserSelectionChrome();
-            });
-            UpdateLibrarySearchUi();
-        }
-
 
         /// <summary>列表当前是否处于「可多选」的选择模式（Multiple / Extended 均算）。
         /// 旧代码里散落的「== ListViewSelectionMode.Multiple」判断统一走这里，避免漏改。</summary>

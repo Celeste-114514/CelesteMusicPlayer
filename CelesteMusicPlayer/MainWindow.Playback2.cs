@@ -2471,5 +2471,40 @@ namespace CelesteMusicPlayer
                 }
             }
         }
+
+        // ==== 多选模式（2026-10-31 从 MainWindow.Misc.cs 改写搬来，证据见注释）====
+        // ⚠ _isMultiSelectMode 在主窗口恒 false：三个写 true 的入口全部不可达 ——
+        //   ① EnterFolderMultiSelectMode（Library.cs，壳）只被壳内 multiItem.Click 挂接；
+        //   ② EnterAlbumWallMultiSelectMode（Library2.cs，壳）同上；
+        //   ③ EnterMultiSelectMode 只被旧 MenuFlyoutItem「多选」菜单挂接（菜单挂在
+        //      从不显示的占位控件上）。所以下面两个方法每次执行都走早退/守卫分支，
+        //      原实现里的其余代码从未跑过 —— 已按"不可达即不搬"裁掉，行为零变化。
+
+        /// <summary>退出多选模式。调用点 18 处全在活文件，行为 = 隐藏多选工具条后返回。</summary>
+        private void ExitMultiSelectMode()
+        {
+            if (!_isMultiSelectMode)
+            {
+                MultiSelectActionBar.Visibility = Visibility.Collapsed;
+                MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                if (LibraryPaneTitle != null
+                    && (_currentCategory == "Songs"
+                        || _currentCategory == "UserPlaylist"
+                        || _currentCategory == "Artists"
+                        || _currentCategory == "AlbumArtists"
+                        || _currentCategory == "Albums"))
+                {
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
+                }
+
+                return;
+            }
+        }
+
+        /// <summary>刷新「全选」图标。恒早退：_isMultiSelectMode 恒 false（见上）。</summary>
+        private void UpdateSelectAllMultiSelectButtonState()
+        {
+        }
+
     }
 }

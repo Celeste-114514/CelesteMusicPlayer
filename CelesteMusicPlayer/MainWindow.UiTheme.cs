@@ -1884,46 +1884,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static void ApplyForegroundToDescendants(DependencyObject root, Brush foreground)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                if (child is TextBlock tb)
-                {
-                    tb.Foreground = foreground;
-                }
-                else if (child is Control control)
-                {
-                    control.Foreground = foreground;
-                }
-
-                ApplyForegroundToDescendants(child, foreground);
-            }
-        }
-
-
-        private static void ClearForegroundOnDescendants(DependencyObject root)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                if (child is TextBlock tb)
-                {
-                    tb.ClearValue(TextBlock.ForegroundProperty);
-                }
-                else if (child is Control control)
-                {
-                    control.ClearValue(Control.ForegroundProperty);
-                }
-
-                ClearForegroundOnDescendants(child);
-            }
-        }
-
-
         private Brush ResolveAccentForegroundBrush()
             => ColorHelper.ResolveContrastingForeground(ResolveAccentBrush());
 
@@ -3021,44 +2981,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-        }
-
-
-        /// <summary>将行的逐字 Run 统一重置为指定颜色（用于非当前行）。</summary>
-        private void ResetRowRunColors(TextBlock row, byte r, byte g, byte b)
-        {
-            if (row.Inlines.Count == 0)
-            {
-                return;
-            }
-
-            var brush = new SolidColorBrush(Color.FromArgb(255, r, g, b));
-            foreach (Microsoft.UI.Xaml.Documents.Inline inline in row.Inlines)
-            {
-                if (inline is Microsoft.UI.Xaml.Documents.Run run)
-                {
-                    run.Foreground = brush;
-                }
-            }
-        }
-
-
-        /// <summary>重载：按整色（可带 alpha）重置逐字 Run 颜色。极客磷光分层（暗磷光行）用。</summary>
-        private void ResetRowRunColors(TextBlock row, Color color)
-        {
-            if (row.Inlines.Count == 0)
-            {
-                return;
-            }
-
-            var brush = new SolidColorBrush(color);
-            foreach (Microsoft.UI.Xaml.Documents.Inline inline in row.Inlines)
-            {
-                if (inline is Microsoft.UI.Xaml.Documents.Run run)
-                {
-                    run.Foreground = brush;
-                }
-            }
         }
 
 
