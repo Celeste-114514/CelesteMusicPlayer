@@ -30,7 +30,9 @@
 - ⚠ 判「布局数学」死活：读的尺寸来自 LegacyControls 占位控件则必然早退；删成员前问「有没有顺手更新别人在用的状态」。
 - 搬家工具 `tools/_w13_move_method.py`（签名+花括号配平整块搬，已三修：8 空格闭合误剥、文件级命名空间假 `}`、LF-only 文件）。⚠ 搬静态字段必须保持原声明顺序（繁简表教训：顺序反→cctor 秒崩 TypeInitializationException，Rebuild 接不住，验证必须真启动一次）。⚠ shim 遮蔽类型名（`LegacyWinUiShim.cs` 的 XamlRoot），跟原代码用 var/dynamic。⚠ **分号结尾的字段/属性绝不能用配平工具，手工按行搬**；多行锚点要转换行风格；`?` 等正则元字符要转义。
 - 已知现状：错误对话框不弹窗（dynamic XamlRoot 恒 null 只落日志）；CoverRasterizationScale 恒 1.0。均待另立任务。
-- 剩余：DSP 域收官（批 2-5）+ 小件宿主四刀收官（批 6-9，`collab/RESULT-2026-10-31-w13-small-hosts.md`）。新活文件：DspStateHost/AudioOutputHost（输出设备+AB 循环+热插拔）/SettingsApplyHost/NavHost（NavItemRef+加库）/MetadataHost（标签编辑器入口）/NativeTaskbar（域内补全）。**账面 176/88 全连深水区**：Playback 族 134（列宽/多选/极客行）、xaml.cs 启动链 24、SettingsHost 6（→ApplyUiStyleMode）、ExternalFile 6、AppFlow 2（→ApplyCategoryView）、WebBrowseActions 2（PlayCueFileAsync）。⚠ `next` 是顶层 shell 命令不是 transport 动作；实播探针 `W13DspBatchPlaybackSmoke.cjs`。
+- 剩余：批 6-10 已收官（`collab/RESULT-2026-10-31-w13-small-hosts.md` + `collab/RESULT-2026-10-31-w13-startup-host.md`）。新活文件：DspStateHost/AudioOutputHost（输出设备+AB 循环+热插拔）/SettingsApplyHost/NavHost（NavItemRef+加库）/MetadataHost（标签编辑器入口）/StartupHost（窗口尺寸+关闭策略）/NativeTaskbar（域内补全）。**账面 142 错（约 71 成员）全连深水区**：按声明文件 Features 26 / Library 22 / Library2 22 / Misc 20 / UiTheme 16 / GeekShell 6 / EqDsp 4 / Settings 4。⚠ `next` 是顶层 shell 命令不是 transport 动作；实播探针 `W13DspBatchPlaybackSmoke.cjs`。
+- **选目标先算闭包，别只看账本数字**：`tools/_w13_dep_closure.py <成员名>` 秒出「搬它会连锁拉进多少壳成员」。xaml.cs 的 MainWindow_Loaded/FirstActivated/Closed 闭包 21/30+/36；图书馆 5 个处理器闭包合计 72 —— 搬单个方法净收益可能为负。
+- **「整文件转活」最划算**：文件对外壳依赖为 0 时改一行壳清单就清掉它名下全部借用。已转活：StartupLoading/Lyrics/Search/Misc2（列宽域）。⚠ 粗扫外部依赖有假阳性（局部变量被当成成员），工具输出要人工核一眼。
 - DSP 方案 A 已收官（`259aeaa`）：六模块+两链路级模型走 `IDspParameterModel`，定位只走 `ModelOf(name)`。① 不进 dsp-rack.json 的（FIR 走 room-correction.json）要在 `ReloadDspPanelFromStores()` 补装载；② IR taps/采样率只在落盘时写；③ 滑杆事件只导入改动字段；④ 方案指纹不含 IR taps/采样率/声道数；⑤ setBypass 仍借道原生开关。
 
 ## 构建 / 发布
