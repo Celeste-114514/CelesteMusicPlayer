@@ -153,22 +153,6 @@ namespace CelesteMusicPlayer
             StartupLog.Write("EQ 曲线已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
         }
 
-        /// <summary>应用房间校正（卷积 FIR）状态到引擎 + 刷新 bit-perfect 提示 + 链路显示。
-        /// 由 RoomCorrectionWindow 调用（播放中实时生效）。</summary>
-        internal void ApplyRoomCorrection(RoomCorrectionState state)
-        {
-            if (state == null)
-            {
-                return;
-            }
-
-            _audioEngine?.SetRoomCorrection(state);
-            UpdateDspBitPerfectUi();
-            UpdateSignalChainDisplay();
-            StartupLog.Write($"房间校正已应用: enabled={state.Enabled} ir={state.IrPath} gain={state.GainDb}dB");
-        }
-
-
         private void SelectAudioFxEqPreset(string presetId)
         {
             for (int i = 0; i < AudioFxEqPresetCombo.Items.Count; i++)
@@ -1037,20 +1021,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>是否有任一 DSP 真正破坏 bit-perfect（口径与 <see cref="UpdateDspBitPerfectUi"/> 一致）。</summary>
-        private bool IsDspActiveForBadge()
-        {
-            bool eqActive = EqState.Current != null && EqState.Current.HasEffect();
-            bool chActive = AudioFxChannelToggle.IsOn || AudioFxChannelCrossfeedToggle.IsOn;
-            bool headroomActive = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
-            bool rgActive = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
-            var room = RoomCorrectionStore.Load();
-            bool firActive = room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath);
-            bool volActive = _audioEngine?.IsSoftwareVolumeActive ?? false;
-            return eqActive || chActive || headroomActive || rgActive || firActive || volActive;
-        }
-
-
         private void SelectAudioFxEqBandType(EqFilterType type)
         {
             for (int i = 0; i < AudioFxEqBandTypeCombo.Items.Count; i++)
@@ -1895,70 +1865,6 @@ namespace CelesteMusicPlayer
             return parts.Count == 0 ? "全部关闭（直通）" : string.Join("、", parts) + " 生效";
         }
 
-
-        /// <summary>更新 DSP 激活状态提示：任一 DSP 生效 → 非 bit-perfect。</summary>
-        private void UpdateDspBitPerfectUi()
-        {
-            if (AudioFxBitPerfectStatusText == null)
-            {
-                return;
-            }
-
-            // 同步主界面常驻 bit-perfect 徽章（与音频设置面板口径一致）
-            RefreshMainBitPerfectBadge();
-
-            // DSP 总旁路（A/B 对比）优先显示：旁路时输出 bit-perfect，无论 DSP 设置如何
-            bool bypass = RackParameters.Bypassed;
-            if (bypass)
-            {
-                AudioFxBitPerfectStatusText.Text = "bit-perfect 直通（DSP 已旁路）";
-                if (AudioFxEqPillPerfectText != null)
-                {
-                    AudioFxEqPillPerfectText.Text = "bit-perfect 直通（DSP 已旁路）";
-                }
-
-                if (_currentCategory == "AudioFX")
-                {
-                    NowPlayingText.Text = "DSP 已旁路（A/B 对比中）→ 输出 bit-perfect";
-                }
-
-                if (DspBypassStatusText != null)
-                {
-                    DspBypassStatusText.Text = "已旁路：所有 DSP 暂时不参与处理，输出恢复 bit-perfect。设置全部保留，关闭开关即恢复。";
-                }
-
-                UpdateDspNavIndicators();
-                return;
-            }
-
-            if (DspBypassStatusText != null)
-            {
-                DspBypassStatusText.Text = "开启 = 所有 DSP（EQ／声道／限幅／ReplayGain／卷积）立即旁路，输出恢复 bit-perfect；所有设置保留，关闭开关即恢复。用于对比「处理前 / 处理后」听感。";
-            }
-
-            // 口径与链路面板 IsBitPerfectPure / 引擎 RefreshActive 对齐，抽取为 IsDspActiveForBadge 复用：
-            // ①限幅单独开/关都不计入（开=待命不动样本、关=不介入）；②ReplayGain 计入；
-            // ③卷积要求 Enabled 且真导入过 IR；④HiFi 软件音量同样破坏 bit-perfect。
-            bool active = IsDspActiveForBadge();
-
-            if (AudioFxEqPillPerfectText != null)
-            {
-                AudioFxEqPillPerfectText.Text = active ? "输出非 bit-perfect（DSP 生效）" : "输出 bit-perfect 直出";
-            }
-
-            AudioFxBitPerfectStatusText.Text = active ? "非 bit-perfect（已使用 DSP）" : "bit-perfect 直通";
-            // 主界面信息条（左上角）提示：使用 DSP 时输出非 bit-perfect
-            if (_currentCategory == "AudioFX")
-            {
-                NowPlayingText.Text = active
-                    ? "⚠ 使用 DSP（EQ/声道/余量/ReplayGain/卷积）→ 输出非 bit-perfect"
-                    : (AudioFxSafetyLimiterToggle.IsOn
-                        ? "音效处理：全部关闭 → bit-perfect 直通（限幅待命，无其它 DSP 时不处理样本）"
-                        : "音效处理：全部关闭 → bit-perfect 直通");
-            }
-
-            UpdateDspNavIndicators();
-        }
 
         /// <summary>DSP 总旁路开关（A/B 对比）：开 = 全部 DSP 立即旁路（bit-perfect），设置保留。
         /// 仅内存态（不持久化），播放中实时切换。</summary>

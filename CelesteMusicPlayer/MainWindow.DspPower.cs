@@ -23,27 +23,7 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private readonly List<DspPowerEntry> _dspPowerEntries = new();
         private bool _dspPowerReady;
-        // 各「开关关掉再打开」要恢复的上次值（0/关闭 = 电源断开，记忆的是断开前的档位）
-        // ReplayGain / SRC 不在其中：它们的「断开前档位」由各自的参数模型自己持有。
-        private double _dspHeadroomMemory { get => ExtraParameters.HeadroomMemory; set => ExtraParameters.HeadroomMemory = value; }
-        private double _dspXfeedMemory { get => ExtraParameters.CrossfeedMemory; set => ExtraParameters.CrossfeedMemory = value; } // 耳机 Crossfeed 的强度百分比
-
-        private sealed class DspPowerEntry
-        {
-            public required ToggleSwitch Switch { get; init; }
-            public TextBlock? Hint { get; init; }
-
-            /// <summary>模块当前是否通电（同步开关状态用）。</summary>
-            public required Func<bool> IsOn { get; init; }
-
-            /// <summary>用户拨开关：把模块切到目标通电状态。</summary>
-            public required Action<bool> Apply { get; init; }
-
-            /// <summary>返回非 null 时开关禁用，并把该文本显示在提示位（如「先导入 IR」）。</summary>
-            public Func<string?>? DisabledHint { get; init; }
-        }
 
         /// <summary>构建页头电源开关表。InitDspNav 里调用一次（此刻 x:Name 字段已连上）。</summary>
         private void InitDspPowerEntries()
@@ -288,67 +268,5 @@ namespace CelesteMusicPlayer
             UpdateDspBitPerfectUi();
         }
 
-        /// <summary>
-        /// 把开关状态同步成各模块真实状态（导航指示刷新的末端一步）。
-        /// 全程 <see cref="_dspPowerSyncing"/> 守卫，避免回写 IsOn 时二次触发 handler 形成回路。
-        /// </summary>
-        private void SyncDspPowerSwitches()
-        {
-            if (_dspPowerEntries.Count == 0)
-            {
-                return;
-            }
-
-            bool bypass = RackParameters.Bypassed;
-            bool wasSyncing = _dspPowerSyncing;
-            _dspPowerSyncing = true;
-            try
-            {
-                foreach (DspPowerEntry entry in _dspPowerEntries)
-                {
-                    string? disabledHint = entry.DisabledHint?.Invoke();
-                    if (disabledHint != null)
-                    {
-                        entry.Switch.IsEnabled = false;
-                    }
-                    else
-                    {
-                        entry.Switch.IsEnabled = true;
-                    }
-
-                    entry.Switch.IsOn = entry.IsOn();
-
-                    if (entry.Hint != null)
-                    {
-                        if (disabledHint != null)
-                        {
-                            entry.Hint.Text = disabledHint;
-                            entry.Hint.Visibility = Visibility.Visible;
-                        }
-                        else if (bypass)
-                        {
-                            entry.Hint.Text = "已旁路";
-                            entry.Hint.Visibility = Visibility.Visible;
-                        }
-                        else
-                        {
-                            entry.Hint.Visibility = Visibility.Collapsed;
-                        }
-                    }
-                }
-
-                // 顺带维护「断开前的档位」记忆
-                if (AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01)
-                {
-                    _dspHeadroomMemory = AudioFxSafetyHeadroomSlider.Value;
-                }
-
-                // ReplayGain / SRC 的「断开前档位」由各自的参数模型维护（Set 时更新 MemoryIndex），此处不再从控件回填。
-            }
-            finally
-            {
-                _dspPowerSyncing = wasSyncing;
-            }
-        }
     }
 }

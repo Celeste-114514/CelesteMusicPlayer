@@ -659,47 +659,6 @@ namespace CelesteMusicPlayer
             RefreshRoomCorrectionInfo();
         }
 
-        /// <summary>刷新 IR 信息与削波风险提示。</summary>
-        private void RefreshRoomCorrectionInfo()
-        {
-            if (RoomIrInfoText == null)
-            {
-                return;
-            }
-
-            RoomCorrectionState st = FirParameters.Current;
-            if (!st.Enabled || string.IsNullOrWhiteSpace(st.IrPath))
-            {
-                RoomIrInfoText.Text = "未导入 IR：在上面「脉冲响应（IR）文件」卡片里点「浏览…」选一个 .wav。";
-                if (RoomClipRiskText != null)
-                {
-                    RoomClipRiskText.Text = "削波风险：—";
-                }
-
-                return;
-            }
-
-            string name = string.IsNullOrWhiteSpace(st.IrName) ? System.IO.Path.GetFileName(st.IrPath) : st.IrName;
-            int taps = st.IrTapCount > 0 ? st.IrTapCount : (_audioEngine?.ConvolutionIrTaps ?? 0);
-            int latencyFrames = _audioEngine?.ConvolutionLatencyFrames ?? 0;
-            double latencyMs = latencyFrames > 0 && st.IrSampleRate > 0 ? latencyFrames * 1000.0 / st.IrSampleRate : 0;
-            string chText = st.IrChannels >= 2 ? "立体声" : st.IrChannels == 1 ? "单声道" : "—";
-
-            RoomIrInfoText.Text = "IR：" + name
-                + " ｜ 长度 " + (taps > 0 ? taps + " taps" : "—")
-                + " ｜ 源采样率 " + (st.IrSampleRate > 0 ? st.IrSampleRate + " Hz" : "—")
-                + " ｜ 声道 " + chText
-                + " ｜ 卷积延迟 " + (latencyMs > 0 ? latencyMs.ToString("F1") + " ms" : "—");
-
-            if (RoomClipRiskText != null)
-            {
-                bool risk = _audioEngine?.ConvolutionClippingRisk ?? false;
-                RoomClipRiskText.Text = risk
-                    ? "⚠ 卷积输出已达到满刻度（已自动钳位）：把 trim 调低，或到「输入 · 余量」加大余量。"
-                    : "削波风险：无";
-            }
-        }
-
         // ---------- 输出安全监控 ----------
 
         private void OutMonitorReset_Click(object sender, RoutedEventArgs e)

@@ -87,12 +87,23 @@ def main():
 
     # ⚠ 顺序很重要（2026-10-31 踩过）：先准备好目标内容并写目标，最后才动源文件。
     # 反过来一旦目标侧失败，源文件已经被删了方法，内容直接丢失。
+    # 尾部检查用行级语义（混合换行文件里 class 闭合可能带 \r 残留，如 `    }\r`）：
+    # 结构必须是 `... 成员 \r\n    } \r\n } \r\n`（block namespace）或 `... \r\n } \r\n`（file-scoped）。
+    stripped = [x.rstrip(b'\r') for x in dst_raw[-200:].split(b'\n')]
+    while stripped and stripped[-1].strip() == b'':
+        stripped.pop()
+    ok_tail = (
+        (len(stripped) >= 2 and stripped[-1] == b'}' and stripped[-2] == b'    }')
+        or (len(stripped) >= 1 and stripped[-1] == b'}')
+    )
+    if not ok_tail:
+        raise SystemExit(f"目标文件尾部结构不认识，先人工确认: {stripped[-4:]}")
+    body = dst_raw[: dst_raw.rindex(b'}')]  # 到最后一个 '}' 之前
+    # 去掉 body 末尾的 class 闭合与空白，后面统一重建
+    body = body.rstrip()
+    if body.endswith(b'    }'):
+        body = body[: -len(b'    }')].rstrip()
     nl_t = b"\r\n" if b"\r\n" in dst_raw[-4000:] else b"\n"
-    tail_marker = nl_t + b"    }" + nl_t + b"}" + nl_t
-    if not dst_raw.endswith(tail_marker):
-        raise SystemExit("目标文件尾部不是预期的 `    }\\n}\\n`，先确认结构")
-    body = dst_raw[: -len(tail_marker)]
-    body = body.replace(b"\r\n", nl_t)
     chunk = b""
     if a.note:
         chunk += nl_t

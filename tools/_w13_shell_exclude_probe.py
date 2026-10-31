@@ -65,7 +65,6 @@ SHELL = [
     "MainWindow.Settings.cs",
     "MainWindow.ThemeFiles.cs",
     "MainWindow.CelesteTheme.cs",
-    "MainWindow.RoomIr.cs",
     "MainWindow.StartupLoading.cs",
 ]
 
