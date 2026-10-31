@@ -87,80 +87,6 @@
     <ProjectReference Include="..\CelesteUpdater\CelesteUpdater.csproj" />
   </ItemGroup>
 
-  <!--
-    W13：旧原生界面（XAML 窗口与面板）不再参与编译。
-    注意 —— 不删文件，只从编译项里排除：迷你播放器 / 零散播放窗口用户明确说过要自己重构，
-    源码必须原样留在仓库里；其余窗口属于已被网页界面取代的死界面，同样保留以便随时对照。
-  -->
-  <ItemGroup>
-    <Page Remove="App.xaml" />
-    <Page Remove="ArtistAvatarEditPanelControl.xaml" />
-    <Page Remove="ArtistAvatarEditorWindow.xaml" />
-    <Page Remove="ArtistAvatarSearchWindow.xaml" />
-    <Page Remove="AudioChainPanelControl.xaml" />
-    <Page Remove="ColorPickerWindow.xaml" />
-    <Page Remove="CurrentPlaylistWindow.xaml" />
-    <Page Remove="CustomSortOrderWindow.xaml" />
-    <Page Remove="EqualizerWindow.xaml" />
-    <Page Remove="FileAssociationPanelControl.xaml" />
-    <Page Remove="MiniPlayerWindow.xaml" />
-    <Page Remove="PlayQueueWindow.xaml" />
-    <Page Remove="ReplayGainScanWindow.xaml" />
-    <Page Remove="RoomCorrectionWindow.xaml" />
-    <Page Remove="ScatteredPlayWindow.xaml" />
-    <Page Remove="SettingsPanelControl.xaml" />
-    <Page Remove="SettingsWindow.xaml" />
-    <Page Remove="TagPanelControl.xaml" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="ArtistAvatarEditPanelControl.xaml.cs" />
-    <Compile Remove="ArtistAvatarEditorWindow.xaml.cs" />
-    <Compile Remove="ArtistAvatarSearchWindow.xaml.cs" />
-    <Compile Remove="AudioChainPanelControl.xaml.cs" />
-    <Compile Remove="ColorPickerWindow.xaml.cs" />
-    <Compile Remove="CurrentPlaylistWindow.xaml.cs" />
-    <Compile Remove="CustomSortOrderWindow.xaml.cs" />
-    <Compile Remove="EqualizerWindow.xaml.cs" />
-    <Compile Remove="FileAssociationPanelControl.xaml.cs" />
-    <Compile Remove="MiniPlayerWindow.xaml.cs" />
-    <Compile Remove="PlayQueueWindow.xaml.cs" />
-    <Compile Remove="ReplayGainScanWindow.xaml.cs" />
-    <Compile Remove="RoomCorrectionWindow.xaml.cs" />
-    <Compile Remove="ScatteredPlayWindow.xaml.cs" />
-    <Compile Remove="SettingsPanelControl.xaml.cs" />
-    <Compile Remove="SettingsPanelControl.WebDav.cs" />
-    <Compile Remove="SettingsWindow.xaml.cs" />
-    <Compile Remove="SettingsWindow.WebDav.cs" />
-    <Compile Remove="TagPanelControl.xaml.cs" />
-
-    <Compile Remove="MiniPlayerWindow.Chrome.cs" />
-    <Compile Remove="ScatteredPlayWindow.Chrome.cs" />
-    <Compile Remove="ScatteredPlayWindow.Eq.cs" />
-    <Compile Remove="ScatteredPlayWindow.Lyrics.cs" />
-    <Compile Remove="ScatteredPlayWindow.Playback.cs" />
-    <Compile Remove="ScatteredPlayWindow.Settings.cs" />
-    <Compile Remove="ScatteredPlayWindow.Visualizer.cs" />
-    <Compile Remove="SettingsWindow.About.cs" />
-    <Compile Remove="SettingsPanelControl.About.cs" />
-  
-    <!-- _w13_leafcut begin：旧界面壳，已无任何编译内引用 -->
-    <Compile Remove="MainWindow.LegacyBusinessState.cs" />
-    <Compile Remove="MainWindow.LevelMeter.cs" />
-    <Compile Remove="MainWindow.Crossfade.cs" />
-    <Compile Remove="MainWindow.FullScreen.cs" />
-    <Compile Remove="MainWindow.DspStatus.cs" />
-    <!-- _w13_leafcut end -->
-
-    <!-- _w13_npcluster begin -->
-    <!-- 原生播放信息页布局 / 终端页 / 可视化：只写无视觉树的占位控件 -->
-    <Compile Remove="MainWindow.NowPlayingLayout.cs" />
-    <Compile Remove="MainWindow.Terminal.cs" />
-    <Compile Remove="MainWindow.TerminalLyrics.cs" />
-    <Compile Remove="MainWindow.Visualizer.cs" />
-    <!-- _w13_npcluster end -->
-</ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
@@ -184,19 +110,6 @@
          版本与本地 NuGet 缓存一致，避免离线 restore 失败。
          运行时 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）此前已由 WASDK 传递依赖带进产物。 -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" GeneratePathProperty="true" />
-  </ItemGroup>
-
-  <!--
-    主题令牌基线字典（皮肤系统第 2 步）。
-    Themes\CelesteTokens.xaml 是纯 ResourceDictionary，没有 x:Class；SDK 默认 glob 会把
-    *.xaml 当 XamlPage 收走，而 Page 要求 x:Class —— XamlCompiler 会静默崩（只报退出码 1、
-    零错误信息、output.json 都不生成）。所以先从 Page 里摘掉。
-    现阶段还没有任何页面引用它（令牌刚装回来，接线是后面的事），先按 None 收录，
-    等真正并入元素级 MergedDictionaries 时再改成参与 XAML 编译。
-  -->
-  <ItemGroup>
-    <Page Remove="Themes\CelesteTokens.xaml" />
-    <None Include="Themes\CelesteTokens.xaml" />
   </ItemGroup>
 
   <!-- Publish Properties -->
