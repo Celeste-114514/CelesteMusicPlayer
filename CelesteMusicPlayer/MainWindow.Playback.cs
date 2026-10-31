@@ -1563,7 +1563,7 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>TagLib 读取标题 / 艺术家 / 专辑 / 音轨号 / 年份 / 时长</summary>
-        private static PlaylistItem CreatePlaylistItemFromPath(string path)
+        internal static PlaylistItem CreatePlaylistItemFromPath(string path)
         {
             if (SourceFromReference(path) is PlaylistItem referenced) return referenced;
             string fileName = Path.GetFileNameWithoutExtension(path);
