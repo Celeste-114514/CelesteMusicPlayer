@@ -60,10 +60,18 @@
 - ⚠ 路线：先搬业务方法出来，再整批排除界面文件。**别再靠正则猜死代码** —— 用 `tools/_w13_shell_exclude_probe.py`
   临时排除壳文件编译，让编译器报「还借了谁」（2026-10-31 实测 1024 错 / 259 个成员，明细 `collab/RESULT-2026-10-31-w13-shell-leafcut.md`）。
   **17 个旧窗口已全部 Compile Remove，「独立窗口拴着壳」这条已过期**：编译内只剩 MainWindow（空 Grid）和 App。
+- ⚠ 探针会假报「0 错误」：`rc=1` 但 `error CS`=0 是 Roslyn 崩在 `NullableWalker`（AccessViolation，本机老毛病）。
+  看到 0 错误先核 `rc` 与错误码，重跑一次即可，不是代码问题。
 - ✅ 旧壳第一刀（`161f68c`）：`LegacyBusinessState`/`LevelMeter`/`DspStatus`/`Crossfade`/`FullScreen` 五个
-  只写占位控件的文件整批 Compile Remove（700 行）。下一刀按「能不能自动验」排：纯工具六件套
-  （FormatTime/ContainsIgnoreCase/CoverDecodeTargetPx/ExtractCoverBytes/PickerHostHandle/FindAncestorListView，86 处）
-  → ShowErrorAsync(20) → 布局旗标 58 处 → DSP 状态机 → LegacyControls 463 字段。
+  只写占位控件的文件整批 Compile Remove（700 行）。
+- ✅ 旧壳第二刀（`7ad24f8`）：原生播放信息页布局 / 终端页 / 可视化 —— NowPlayingLayout(848)/Terminal(760)/
+  TerminalLyrics(345)/Visualizer(613) 退出编译，连同活文件里 800 行接线，**共 3,261 行**。
+  死因可证：占位控件 `ActualWidth` 恒 0 → `UpdateNowPlayingCardLayout()` 第一道守卫就 return，500 行从没跑过。
+  ⚠ 判断这类「布局数学」死活，看它读的尺寸是不是来自 `LegacyControls` 占位控件；是则必然早退。
+  ⚠ 删成员前还要问「它有没有顺手更新别人在用的状态」（`_nowPlayingLayoutName` → `Library2` 背景模糊）。
+- 下一刀：量账已降到 35 壳 / 916 错 / 234 成员（`collab/RESULT-2026-10-31-w13-native-nowplaying-cut.md`）。
+  按「能不能自动验」排：纯工具六件套（FormatTime 26/ContainsIgnoreCase 20/CoverDecodeTargetPx/ExtractCoverBytes 12/
+  PickerHostHandle 10/FindAncestorListView）→ ShowErrorAsync 20 → 布局旗标 58 处 → DSP 状态机 → LegacyControls 463 字段。
 - 剩余：标签在线搜索 + 歌词编排（`WebTagTools.cs`）、引擎本体（必须真出声）、
   `Features.cs`(178K)/`UiTheme.cs`(148K) 要先甄别哪些控件操作已死。
 - **DSP 方案 A 已收官**（`259aeaa`）：六模块 + 两个链路级模型全离开控件；契约 `IDspParameterModel`（`Owns/Describe/Set`），
