@@ -565,7 +565,6 @@ namespace CelesteMusicPlayer
             StartupLog.Write("MainWindow ctor begin");
             Instance = this;
             Content = RootShell;
-            InitializeLegacyBusinessState();
             // 缓存 UI 线程 DispatcherQueue 给引擎层（HiFiOutputBackend）在后台线程构造时取用，
             // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
             HiFiOutputBackend.UiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -589,13 +588,9 @@ namespace CelesteMusicPlayer
             }
             // 启动加载遮罩：XAML 里默认就是 Visible，这里只负责上色/挂点击/起兜底定时器
             SetupStartupLoading();
-            InitializeLevelMeter();
-            InitializeCrossfadeUi();
             InitializeSrcUi();
             InitializeOutputBufferUi();
             StartAudioDeviceWatcher();
-            // 全屏控制器（标题栏右上角按钮 + Esc 退出）
-            InitializeFullScreen();
             try
             {
                 _mainWindowHwnd = NativeHandle;

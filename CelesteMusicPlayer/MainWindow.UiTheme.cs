@@ -2026,14 +2026,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
 
-            // 先停电平表定时器：否则窗口销毁后它仍会 tick 并访问已分离的 XAML 元素，
-            // 在退出时抛 COMException (0x8000FFFF)。
-            try
-            {
-                _levelMeterTimer?.Stop();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.LevelMeter.cs", caught); }
-
             // 同理停掉设备监听：窗口销毁后 DeviceWatcher 的 COM 回调还会继续来，
             // 那时再去 TryEnqueue 访问已分离的 XAML 就会崩在退出阶段。
             try

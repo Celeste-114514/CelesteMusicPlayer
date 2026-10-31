@@ -1147,8 +1147,6 @@ namespace CelesteMusicPlayer
             // EQ 页快捷状态条（EQ 状态 / bit-perfect / 预增益 / 余量 / 预设）初始同步
             UpdateAudioFxEqQuickStrip();
 
-            // 顶部「设备 / 输出模式 / 会话格式」状态条初始同步
-            UpdateDspDeviceStatus();
         }
 
         /// <summary>

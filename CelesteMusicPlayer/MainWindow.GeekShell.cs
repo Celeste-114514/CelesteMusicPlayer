@@ -667,7 +667,6 @@ namespace CelesteMusicPlayer
                 SetGeekFavoriteState(
                     !string.IsNullOrWhiteSpace(_nowPlayingPath)
                     && (TrackStatsStore.Get(_nowPlayingPath)?.IsFavorite ?? false));
-                SetGeekFullScreenKey(_fullScreen?.IsFullScreen ?? false);
                 return;
             }
 

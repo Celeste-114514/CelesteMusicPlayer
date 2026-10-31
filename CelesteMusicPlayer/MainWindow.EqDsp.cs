@@ -1982,9 +1982,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 顶部设备/模式状态条：旁路态、"DSP 生效/直通" 徽章随本方法一起刷新
-            UpdateDspDeviceStatus();
-
             // 同步主界面常驻 bit-perfect 徽章（与音频设置面板口径一致）
             RefreshMainBitPerfectBadge();
 

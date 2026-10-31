@@ -173,7 +173,15 @@
     <Compile Remove="ScatteredPlayWindow.Visualizer.cs" />
     <Compile Remove="SettingsWindow.About.cs" />
     <Compile Remove="SettingsPanelControl.About.cs" />
-  </ItemGroup>
+  
+    <!-- _w13_leafcut begin：旧界面壳，已无任何编译内引用 -->
+    <Compile Remove="MainWindow.LegacyBusinessState.cs" />
+    <Compile Remove="MainWindow.LevelMeter.cs" />
+    <Compile Remove="MainWindow.Crossfade.cs" />
+    <Compile Remove="MainWindow.FullScreen.cs" />
+    <Compile Remove="MainWindow.DspStatus.cs" />
+    <!-- _w13_leafcut end -->
+</ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />

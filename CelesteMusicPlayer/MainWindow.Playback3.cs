@@ -1957,9 +1957,6 @@ namespace CelesteMusicPlayer
 
                 // 终端布局的左栏用的是同一批数据，这里顺带刷一次
                 UpdateTerminalInfo();
-
-                // DSP 面板顶部状态条（设备 / 模式 / 会话格式）跟着会话变化刷新
-                UpdateDspDeviceStatus();
             }
             catch
             {
