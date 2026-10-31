@@ -667,11 +667,6 @@ namespace CelesteMusicPlayer
                 _wavePhases[i] = _waveRandom.NextDouble() * Math.PI * 2;
             }
 
-            if (Content is FrameworkElement root)
-            {
-                root.Loaded += MainWindow_Loaded;
-            }
-
             StartupLog.Write("MainWindow ctor end");
 
             // 把版本号和日志路径写进窗口标题,排查时一眼能看出是不是在跑新版

@@ -23,7 +23,15 @@ public sealed partial class MainWindow
     /// <summary>当前已应用到界面的主题名；null 表示用的是内置默认。</summary>
     public string? AppliedCelesteThemeName => _celesteAppliedThemeName;
 
-        private void MainWindow_Loaded(dynamic sender, dynamic e)
+        /// <summary>
+        /// 窗口就绪后的启动初始化：建播放器与定时器、开网页壳、应用主题、挂任务栏按钮。
+        ///
+        /// 以前这方法是垫片根元素 root.Loaded 的事件处理器 —— 那条链是
+        /// 「构造函数 Content = 垫片根 → 订阅它的 Loaded → RaiseLoaded() 手动触发」，
+        /// 三处只要少一处，整段启动初始化就静默不跑（曲库不加载、播放器不建）。
+        /// 垫片根删掉后改成普通方法，由 StartWebShellSession 直接调，语义不变但不再依赖视觉树。
+        /// </summary>
+        private void RunPostLoadStartup()
         {
             StartupLog.Write("MainWindow_Loaded begin");
             try

@@ -143,7 +143,13 @@ public sealed partial class MainWindow
             // 「上次可能异常退出」不再弹原生对话框：那条已经交给网页的启动恢复页
             // （MainWindow.WebRecovery.cs + recovery.js），能给出诊断、安全模式、重载界面。
             // 原生弹窗弹在一个刚被藏起来的主窗口上，用户根本看不见 —— 之前等于什么都没说。
-            if (unclean) StartupLog.Write("[recovery] 检测到上次未正常退出，交由网页恢复页处理。");
+            if (unclean)
+            {
+                StartupLog.Write("[recovery] 检测到上次未正常退出，交由网页恢复页处理。");
+                // 恢复页一接管，本次启动就算"到位"了：不必再等曲库恢复走完才放行
+                // （那条路在这时候根本不会跑，以前要干等到 25s 兜底超时才亮提示）。
+                HideStartupLoading();
+            }
 
             // 设置文件损坏恢复提示：仅本次会话提示一次。
             // 恢复页也会带一句同样的说明，同时出现就是同一件事说两遍，所以让给恢复页。
