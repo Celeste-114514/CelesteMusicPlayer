@@ -70,7 +70,6 @@ namespace CelesteMusicPlayer
             if (operation == "setControl")
             {
                 WebDspApplyControl(ReadString(msg, "name"), msg);
-                SyncDspPowerSwitches();
                 return new { ok = true, controls = WebDspDescribeModule(ReadString(msg, "module")) };
             }
 
@@ -616,10 +615,8 @@ namespace CelesteMusicPlayer
             }
             try
             {
-                EnsureAudioFxUiBuilt();
                 LoadAudioFxUiFromStore();
                 LoadRoomCorrectionIntoPanel();
-                SyncDspPowerSwitches();
                 _webDspForcedLoad = true;
                 StartupLog.Write("[WebDsp] 首次访问，已按原生路径加载音效面板");
             }

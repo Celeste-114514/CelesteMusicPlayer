@@ -375,15 +375,10 @@ namespace CelesteMusicPlayer
             LoadDspRackUi();
             _dspRackReady = true;
 
-            // 页头电源开关表也要在这一刻建立（x:Name 字段已连上），随后统一刷指示。
-            // _dspPowerReady 在首次同步之后才置位——同步过程回写 IsOn 会就地触发 Toggled，
-            // 未就绪时 handler 一律忽略（XAML 解析期秒崩铁律的同款守卫）。
-            InitDspPowerEntries();
 
             // 先备好方案页状态（徽章/圆点要用协调器里的生效方案名），再统一刷指示
             RefreshDspProfileUi();
             UpdateDspNavIndicators();
-            _dspPowerReady = true;
             if (_dspPageIndex < 0)
             {
                 SelectDspPage(0);

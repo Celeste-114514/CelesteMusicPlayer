@@ -90,7 +90,6 @@ namespace CelesteMusicPlayer
             RoomCorrectionStore.Save(state);
             ApplyRoomCorrection(state);
             RefreshRoomCorrectionInfo();
-            SyncDspPowerSwitches();
         }
 
         private async void RoomIrBrowseButton_Click(object sender, RoutedEventArgs e)

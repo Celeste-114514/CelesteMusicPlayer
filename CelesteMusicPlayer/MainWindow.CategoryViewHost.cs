@@ -154,7 +154,6 @@ public sealed partial class MainWindow
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
-                    EnsureAudioFxUiBuilt();
                     LoadAudioFxUiFromStore();
                     UpdateDspBitPerfectUi();
                     break;

@@ -139,7 +139,6 @@ public sealed partial class MainWindow
 
             UpdateDspHeroBadges();
             // 页头电源开关与徽章/圆点同源同步（10 个可开关模块；同步过程有 _dspPowerSyncing 守卫）
-            SyncDspPowerSwitches();
             UpdateDspChannelBars();
         }
 
@@ -317,92 +316,11 @@ public sealed partial class MainWindow
                 bool risk = _audioEngine?.ConvolutionClippingRisk ?? false;
             }
         }
-        // DSP 批 2：电源开关同步族离壳
 
         /// <summary>
         /// 把开关状态同步成各模块真实状态（导航指示刷新的末端一步）。
         /// 全程 <see cref="_dspPowerSyncing"/> 守卫，避免回写 IsOn 时二次触发 handler 形成回路。
         /// </summary>
-        private void SyncDspPowerSwitches()
-        {
-            if (_dspPowerEntries.Count == 0)
-            {
-                return;
-            }
-
-            bool bypass = RackParameters.Bypassed;
-            bool wasSyncing = _dspPowerSyncing;
-            _dspPowerSyncing = true;
-            try
-            {
-                foreach (DspPowerEntry entry in _dspPowerEntries)
-                {
-                    string? disabledHint = entry.DisabledHint?.Invoke();
-                    if (disabledHint != null)
-                    {
-                        entry.Switch.IsEnabled = false;
-                    }
-                    else
-                    {
-                        entry.Switch.IsEnabled = true;
-                    }
-
-                    entry.Switch.IsOn = entry.IsOn();
-
-                    if (entry.Hint != null)
-                    {
-                        if (disabledHint != null)
-                        {
-                            entry.Hint.Text = disabledHint;
-                            entry.Hint.Visibility = Visibility.Visible;
-                        }
-                        else if (bypass)
-                        {
-                            entry.Hint.Text = "已旁路";
-                            entry.Hint.Visibility = Visibility.Visible;
-                        }
-                        else
-                        {
-                            entry.Hint.Visibility = Visibility.Collapsed;
-                        }
-                    }
-                }
-
-                // 顺带维护「断开前的档位」记忆
-                if (AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01)
-                {
-                    _dspHeadroomMemory = AudioFxSafetyHeadroomSlider.Value;
-                }
-
-                // ReplayGain / SRC 的「断开前档位」由各自的参数模型维护（Set 时更新 MemoryIndex），此处不再从控件回填。
-            }
-            finally
-            {
-                _dspPowerSyncing = wasSyncing;
-            }
-        }
-
-        private sealed class DspPowerEntry
-        {
-            public required ToggleSwitch Switch { get; init; }
-            public TextBlock? Hint { get; init; }
-
-            /// <summary>模块当前是否通电（同步开关状态用）。</summary>
-            public required Func<bool> IsOn { get; init; }
-
-            /// <summary>用户拨开关：把模块切到目标通电状态。</summary>
-            public required Action<bool> Apply { get; init; }
-
-            /// <summary>返回非 null 时开关禁用，并把该文本显示在提示位（如「先导入 IR」）。</summary>
-            public Func<string?>? DisabledHint { get; init; }
-        }
-        // DSP 批 2：电源开关同步族离壳（字段另手工搬）
-
-        /// <summary>
-        /// 把开关状态同步成各模块真实状态（导航指示刷新的末端一步）。
-        /// 全程 <see cref="_dspPowerSyncing"/> 守卫，避免回写 IsOn 时二次触发 handler 形成回路。
-        /// </summary>
-        private readonly List<DspPowerEntry> _dspPowerEntries = new();
 
         // 各「开关关掉再打开」要恢复的上次值（0/关闭 = 电源断开，记忆的是断开前的档位）
         // ReplayGain / SRC 不在其中：它们的「断开前档位」由各自的参数模型自己持有。
@@ -992,78 +910,8 @@ public sealed partial class MainWindow
             }
         }
 
-        /// <summary>首次进入音效面板时构建 EQ 滑杆与预设 / 单声道下拉。</summary>
-        private void EnsureAudioFxUiBuilt()
-        {
-            if (_audioFxEqBuilt)
-            {
-                return;
-            }
-
-            _audioFxEqBuilt = true;
-
-
-            if (AudioFxEqPresetCombo != null)
-            {
-                AudioFxEqPresetCombo.Items.Clear();
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "平坦", Tag = "flat" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "古典", Tag = "classical" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "流行", Tag = "pop" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "爵士", Tag = "jazz" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "摇滚", Tag = "rock" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "柔和", Tag = "soft" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "低音增强", Tag = "bass" });
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "自定义…", Tag = "custom" });
-                // 用户预设（含分隔 + 各命名预设）
-                var userPresets = EqUserPresetStore.Load();
-                if (userPresets.Count > 0)
-                {
-                    AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "—— 我的预设 ——", IsEnabled = false });
-                    foreach (var p in userPresets)
-                    {
-                        AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "★ " + (string.IsNullOrWhiteSpace(p.PresetName) ? "未命名" : p.PresetName), Tag = p.PresetId });
-                    }
-                }
-
-                // 删除我的预设（长按/右键除名）
-                AudioFxEqPresetCombo.Items.Add(new ComboBoxItem { Content = "管理（删除）我的预设…", Tag = "manage" });
-            }
-
-            if (AudioFxEqBandTypeCombo != null)
-            {
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "峰值 (Peak)", Tag = EqFilterType.Peaking });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低架 (Low Shelf)", Tag = EqFilterType.LowShelf });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高架 (High Shelf)", Tag = EqFilterType.HighShelf });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "低通 (Low Pass)", Tag = EqFilterType.LowPass });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "高通 (High Pass)", Tag = EqFilterType.HighPass });
-                AudioFxEqBandTypeCombo.Items.Add(new ComboBoxItem { Content = "切除 (Notch)", Tag = EqFilterType.Notch });
-            }
-
-            if (AudioFxChannelMonoCombo != null)
-            {
-                AudioFxChannelMonoCombo.Items.Clear();
-                AddMonoComboItem("off", "关闭（立体声）");
-                AddMonoComboItem("left", "只用左声道");
-                AddMonoComboItem("right", "只用右声道");
-                AddMonoComboItem("sum", "左右求和");
-            }
-
-
-            if (AudioFxRgModeCombo != null)
-            {
-                AudioFxRgModeCombo.Items.Clear();
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "关闭", Tag = ReplayGainMode.Off });
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "单曲 (Track)", Tag = ReplayGainMode.Track });
-                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "专辑 (Album)", Tag = ReplayGainMode.Album });
-            }
-        }
-
         // DSP 批 5：单声道下拉构建离壳
 
-        private void AddMonoComboItem(string mode, string label)
-        {
-            AudioFxChannelMonoCombo.Items.Add(new ComboBoxItem { Content = label, Tag = mode });
-        }
 
         private void SelectAudioFxMonoMode(string mode)
         {
