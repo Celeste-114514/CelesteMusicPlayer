@@ -131,10 +131,6 @@ public sealed partial class MainWindow
             UpdateLibrarySearchUi();
 
             ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
-            if (AlbumDetailSubInfoText != null)
-            {
-                // 行2：艺术家(超链接) | 发行时间 | 曲目数
-            }
 
             _albumTracks.Clear();
             List<PlaylistItem> tracks = _playlist

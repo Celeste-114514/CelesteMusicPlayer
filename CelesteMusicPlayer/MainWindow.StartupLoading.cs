@@ -43,13 +43,6 @@ namespace CelesteMusicPlayer
             {
                 // 转圈的进度环跟着主题色走；极客皮肤用磷光色（和其他界面一个口径）
 
-                if (StartupLoadingOverlay != null)
-                {
-                    // 点一下就放人：不等曲库恢复完也能先进去操作。
-                    // 2026-10-09 应用户要求去掉了"不想等？点一下这里可以先进去"的提示文字，
-                    // 交互本身留着——不显眼，但不想等的人随手一戳就能进，兜底超时之外
-                    // 的另一条路。哪天不想要了，把这两行和 Tapped 一起去掉即可。
-                }
 
                 _loadingSafetyTimer = DispatcherQueue.CreateTimer();
                 _loadingSafetyTimer.Interval = LoadingSafetyTimeout;

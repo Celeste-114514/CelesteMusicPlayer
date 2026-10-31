@@ -369,13 +369,6 @@ namespace CelesteMusicPlayer
         /// <summary>信息卡：更深毛玻璃 + 阴影立体感</summary>
         private void ApplyNowPlayingCardChrome()
         {
-            if (NowPlayingPane != null)
-            {
-                // 无外框：透明背景、无圆角（右侧面板不显示独立边框）。
-                // ⚠️ 必须用"透明画刷"而不是 null：WinUI 里 Background=null 的元素不参与命中测试，
-                // 点击会直接漏到它下面的音乐库界面（表现为播放页盖在上面，却能点到下面的「排序」）。
-                // 透明画刷视觉上完全一样，但会正常拦住鼠标。
-            }
 
             ApplyArtistSongsFrostChrome();
         }
