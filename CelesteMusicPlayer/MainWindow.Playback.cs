@@ -970,6 +970,148 @@ namespace CelesteMusicPlayer
         }
 
 
+        // ---------------------------------------------------------------------
+        // 文件加载入口（2026-10-31 第十四刀自壳 Misc.cs 原样搬来，依赖全在活文件：
+        // GetPlayer/CreatePlaylistItemFromPath=Playback、ClearNowPlayingPanel=Playback3、
+        // StopEngineIfActive=Playback4；尾部 ApplyCategoryView 按第十三刀口径改调活版。
+        // ---------------------------------------------------------------------
+        /// <summary>根据路径读元数据并加入列表，然后按当前排序规则重排。</summary>
+        /// <param name="persist">为 true 时写入上次会话（默认）。</param>
+        /// <param name="persistAsFiles">为 true 时按「文件列表」模式保存整份播放列表。</param>
+        private void LoadAndAddFiles(string[] filePaths, bool persist = true, bool persistAsFiles = false, bool replace = false)
+        {
+            if (filePaths == null || filePaths.Length == 0)
+            {
+                return;
+            }
+
+            string? playingPath = null;
+            if (replace)
+            {
+                // 替换模式：停止当前播放并清空媒体库，再载入新内容
+                MediaPlayer? player = GetPlayer();
+                if (player != null)
+                {
+                    player.Pause();
+                    player.Source = null;
+                }
+
+                StopEngineIfActive();
+                _playlist.Clear();
+                _currentIndex = -1;
+                ClearNowPlayingPanel();
+            }
+            else
+            {
+                // 记住当前正在播的文件，排序后要能找回下标
+                playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                    ? _playlist[_currentIndex].FilePath
+                    : null;
+            }
+
+            // HashSet 去重，避免大批量导入时对 _playlist 反复线性扫描
+            var knownPaths = new HashSet<string>(
+                _playlist.Select(i => i.FilePath),
+                StringComparer.OrdinalIgnoreCase);
+
+            int added = 0;
+
+            // 大批量导入时临时解绑列表视图，避免逐条 Add 触发 ListView 反复创建/测量容器造成卡顿
+            bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = null;
+            }
+
+            foreach (string path in filePaths)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                {
+                    continue;
+                }
+
+                // 内部缓存产物（DSD DoP 缓存 / 转码缓存 / WebDAV 下载缓存）不是本地曲库内容，不进音乐库
+                if (LibraryPathGuard.IsLibraryExcludedFile(path))
+                {
+                    continue;
+                }
+
+                if (!knownPaths.Add(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    PlaylistItem item = CreatePlaylistItemFromPath(path);
+                    // CUE 分轨展开：有同名 .cue 的文件按轨加入（设置关闭时原样返回单条）
+                    foreach (PlaylistItem track in CueTrackExpansion.Expand(new List<PlaylistItem> { item }))
+                    {
+                        _playlist.Add(track);
+                        added++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    knownPaths.Remove(path);
+                    System.Diagnostics.Debug.WriteLine($"加载失败: {path} → {ex.Message}");
+                }
+            }
+
+            // 循环结束恢复绑定；即使下方早返回(added==0)也能保持列表可见
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = _playlist;
+            }
+
+            if (added == 0)
+            {
+                if (replace)
+                {
+                    ApplyCategoryViewData();
+                }
+
+                return;
+            }
+
+            // 当前在「歌曲」分类时，按标题默认排序刷新列表
+            if (_currentCategory == "Songs")
+            {
+                ApplyCategoryViewData();
+            }
+            else if (_currentCategory == "Albums")
+            {
+                ApplyCategoryViewData();
+            }
+            else if (_currentCategory == "Artists" || _currentCategory == "AlbumArtists")
+            {
+                ApplyCategoryViewData();
+            }
+            else if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                // 播放列表保持用户自己的顺序（添加顺序 / 手动拖动的结果）——
+                // 这里只是往曲库补歌，不该顺手把播放队列重排一遍。
+                // 2026-10-08 用户实测：启动恢复出的播放队列被自动按标题打乱，就是这条分支干的。
+                // 用户主动点排序按钮走 SortField/SortOrder 那条路径，不受这里影响。
+                RenumberCollection(_queue.Items);
+            }
+            else
+            {
+                ApplySort(preservePlayingPath: playingPath);
+            }
+
+            // 不自动播放：用户双击或点播放后再开始
+            if (added > 0)
+            {
+                NowPlayingText.Text = $"已添加 {added} 首，共 {_playlist.Count} 首";
+            }
+
+            if (persist && persistAsFiles)
+            {
+                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
+            }
+        }
+
         /// <summary>TagLib 读取标题 / 艺术家 / 专辑 / 音轨号 / 年份 / 时长。
         /// TTA 例外：TagLib 没有 TTA 容器解析器，走 <see cref="CreatePlaylistItemFromTta"/>。</summary>
         internal static PlaylistItem CreatePlaylistItemFromPath(string path)
