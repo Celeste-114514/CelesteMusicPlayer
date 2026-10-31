@@ -11,7 +11,7 @@
 | `queue`（队列页：列表 / 分页 / 点播 / 拖动换序） | `MainWindow.WebTransport.cs` | `WebQueueService.QueueSnapshot` |
 | `more`（更多菜单：复制信息 / 文件夹中显示 / 加入播放列表） | 同上 | `WebQueueService.MoreMenu` |
 
-`MainWindow.WebTransport.cs` 从 258 行降到 163 行，只剩音频设置那一段（`audioSettings` 跟引擎贴得紧，不在这一刀里）。
+`MainWindow.WebTransport.cs` 从 258 行降到 164 行，只剩音频设置那一段（`audioSettings` 跟引擎贴得紧，不在这一刀里）。
 新增 `MainWindow.WebQueue.cs`（38 行，一行转发 + 宿主实现）。
 
 ### 宿主接口 `IWebQueueHost` 只给了六样
