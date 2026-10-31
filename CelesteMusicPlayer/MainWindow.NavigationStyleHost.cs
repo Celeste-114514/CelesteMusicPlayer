@@ -129,55 +129,6 @@ public sealed partial class MainWindow
             }
         }
 
-        /// <summary>
-        /// 排序按钮统一为操场形胶囊（高 32、圆角 16 = 两头半圆），底色为系统主题色。
-        /// </summary>
-        private void ApplyCapsuleSortButtonStyle(bool accent)
-        {
-            const double height = 32;
-            // 排序按钮：经典/图景保持胶囊（半高圆角）。这是所有排序按钮的总入口，
-            // 改这里一次覆盖全部复用点。只改形状，填充色不变。
-            var capsule = new CornerRadius(height / 2.0); // 半高等于半径 → 两头圆、中间直
-
-            // 排序相关按钮始终使用主题色；accent 参数保留以兼容旧调用
-            Brush background = ResolveAccentBrush();
-            Brush foreground = ResolveAccentForegroundBrush();
-
-            ApplyCapsuleToControl(SortFieldButton, height, capsule, background, foreground);
-            ApplyCapsuleToControl(SortOrderButton, height, capsule, background, foreground);
-            ApplyCapsuleToControl(ChangeSortButton, height, capsule, background, foreground);
-            ApplyCapsuleToControl(AlbumSortButton, height, capsule, background, foreground);
-            // 专辑页「升序 / 降序」切换按钮：与 AlbumSortButton 同属专辑浏览页，之前漏加导致背景模式（非极客）下
-            // 露出默认透明底 + 默认方角。统一纳入胶囊样式入口后，常态为主题色底 + 半高圆角，极客下随全局走直角。
-            ApplyCapsuleToControl(AlbumSortOrderButton, height, capsule, background, foreground);
-            if (ArtistSongSortButton != null)
-            {
-                ApplyCapsuleToControl(ArtistSongSortButton, height, capsule, background, foreground);
-            }
-
-            if (ArtistAlbumSortFieldButton != null)
-            {
-                ApplyCapsuleToControl(ArtistAlbumSortFieldButton, height, capsule, background, foreground);
-            }
-
-            if (ArtistAlbumSortOrderButton != null)
-            {
-                ApplyCapsuleToControl(ArtistAlbumSortOrderButton, height, capsule, background, foreground);
-            }
-
-            if (SelectAllMultiSelectButton != null)
-            {
-                Brush selectAllBg = accent ? background : ResolveCapsuleFillBrush();
-                Brush? selectAllFg = accent ? foreground : null;
-                ApplyCapsuleToControl(
-                    SelectAllMultiSelectButton,
-                    height,
-                    new CornerRadius(8),
-                    selectAllBg,
-                    selectAllFg);
-            }
-        }
-
         private static void ApplyCapsuleToControl(
             Control control,
             double height,

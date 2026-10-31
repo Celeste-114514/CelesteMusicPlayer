@@ -79,39 +79,19 @@ namespace CelesteMusicPlayer
                     MediaSession.UpdateTimeline(position);
                 }
 
-                // 时长变化时同步进度条上限（变速播放按"原歌曲时间"显示：WAV 时长 × 倍率）
+                // 变速播放按"原歌曲时间"显示：WAV 时长 × 倍率
                 double scale = TempoScale();
                 double duration = (_audioEngine?.Duration.TotalSeconds ?? 0) * scale;
-                if (duration > 1 && Math.Abs(ProgressSlider.Maximum - duration) > 1)
-                {
-                }
 
                 // 界面/歌词/SMTC/迷你播放器全部消费"源时间"：引擎位置 × 倍率
                 double seconds = position.TotalSeconds * scale;
-                if (seconds >= 0
-                    && seconds <= ProgressSlider.Maximum
-                    && Math.Abs(ProgressSlider.Value - seconds) >= 0.05)
-                {
-                    _isUpdatingProgressUi = true;
-                    try
-                    {
-                    }
-                    finally
-                    {
-                        _isUpdatingProgressUi = false;
-                    }
-                }
-
-                string timeText = FormatTime(TimeSpan.FromSeconds(seconds));
-                if (CurrentTimeText != null
-                    && !string.Equals(CurrentTimeText.Text, timeText, StringComparison.Ordinal))
-                {
-                }
 
                 TimeSpan sourcePos = TimeSpan.FromSeconds(seconds);
-                TimeSpan sourceDuration = TimeSpan.FromSeconds(duration);
                 _desktopLyricsWindow?.Sync(sourcePos);
-                _taskbarProgress?.SetProgress(seconds, ProgressSlider.Maximum, paused: false);
+                if (duration > 1)
+                {
+                    _taskbarProgress?.SetProgress(seconds, duration, paused: false);
+                }
 
                 // 引擎（HiFi 独占/ASIO）路径也要推进当前歌词行与滚动，
                 // 否则歌词不随播放滚动（普通 MediaPlayer 路径由 PositionTimer_Tick 调用）。
