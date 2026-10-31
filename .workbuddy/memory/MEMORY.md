@@ -63,6 +63,7 @@
 ## 独立窗口
 - ⛔ 用户 2026-10-28 拍板：迷你播放器、零散播放窗口暂不改，他要自己重构；不碰、不当参考。
 - 桌面歌词（`WebDesktopLyricsOverlay.cs`）必须 WebView2+裸 Win32 合成宿主（XAML Window 拿不到逐像素透明）；`controller.IsVisible=true` 会硬崩；构建加 `-p:CsWinRTAotOptimizerEnabled=false`。
+- ⚠ **桌面歌词必须跑在 `Windows.System.DispatcherQueueController.CreateOnDedicatedThread()` 给的线程上**（2026-10-31 `59c2828`）：主线程是手写 Win32 泵、没有系统级 DispatcherQueue，`Windows.UI.Composition.Compositor` 起不来。该线程自带消息循环，对外接口全部编组过去；**WebView2 环境必须在该线程自建**（复用主线程的 `CoreWebView2Environment` → CLR 0x80131506 直接杀进程），参数走 `NativeMainWebWindow.WebViewEnvironmentSpec()` 才能共用浏览器进程；Picker 要回 UI 线程。⛔ 别再试：`[DllImport("CoreMessaging.dll")] CreateDispatcherQueueForCurrentThread` **Debug 正常、Release 必 0xC0000005**（连 Main 第一行都崩），换 GetProcAddress 一样；`Microsoft.UI.Dispatching.DispatcherQueueController` 在本工程是垫片（UseWinUI=false）。回归探针 `tools/W13DesktopLyricsProbe.cjs`。
 
 ## 封面 / 标签
 - CoverArtService 三档缓存 160/320/768，改档位必须 CacheVersion+1。标签页保留 DataGrid（用户拍板）。

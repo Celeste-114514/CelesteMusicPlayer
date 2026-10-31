@@ -435,3 +435,54 @@ Rebuild 0 错误；publish 正常 / 269 文件；接口回归 failures+jsErrors 
 `Window.DispatcherQueue` 在非 UI 线程上会返回**调用线程自己的队列**，
 所以 `HasThreadAccess` 会误报 true —— 判断线程要用启动时捕获的 `_uiQueue`（已加进
 `WindowLifecycleHost`）。
+
+---
+
+# 批 38：桌面歌词合成宿主搬上「系统专用线程」——Compositor 崩溃已修（提交 `59c2828`）
+
+上一节把桌面歌词的报错定位成「进程里没有系统级 DispatcherQueue」，但当时**没有修**。
+这次按方案 1 修完了，用户那边点开桌面歌词不再弹「拒绝访问」。
+
+## 真正的原因链条（三层，缺一不可）
+
+1. W13 之后主线程跑的是 `NativeDispatcherQueue.cs` 的手写 Win32 泵，**不是** Windows App SDK
+   的 DispatcherQueue，所以进程里没有 CoreMessaging 的系统队列。
+2. `Windows.UI.Composition.Compositor` 要求**调用线程**上有那个系统队列 → 直接抛
+   `UnauthorizedAccessException: 拒绝访问 / The caller must initialize DispatcherQueue on this thread`。
+3. 修好队列以后还有第二颗雷：**跨线程复用主界面的 `CoreWebView2Environment`** 会让 CLR 报
+   `0x80131506`（Internal CLR error）**直接杀进程** —— 那个对象不是敏捷对象。
+
+## 怎么修的
+
+`WebDesktopLyricsOverlay` 整块搬到 `Windows.System.DispatcherQueueController.CreateOnDedicatedThread()`
+给出的线程上：该线程自带真 DispatcherQueue 和它自己的消息循环，满足合成与 WebView2 的双重要求。
+
+| 项 | 做法 |
+|---|---|
+| 线程 | 系统专用线程（不自己起线程、不碰 CoreMessaging 导出） |
+| 上下文 | 在该线程装 `SynchronizationContext`，`Initialize()` 的 await 才会回到它 |
+| 对外接口 | `Show/Close/Dispose/SetLyrics/Sync/SetLocked/ApplySettings/SetSavedPosition` 全部编组过去；`Close` 同步等待，保证关掉就叫关掉 |
+| WebView2 环境 | **自己另建**（参数取自 `NativeMainWebWindow.WebViewEnvironmentSpec()`，同一份用户数据目录 → 复用同一浏览器进程） |
+| 文件选择器 | 样式导入/导出回主 UI 线程开（专用线程不是 UI 线程） |
+| 事件 | `ClosedByUser` 编组回 UI 线程再触发；队列/定时器回调统一 try-catch+落日志，异常不再能杀进程 |
+
+## 三条走过的死路（都写进注释了，别再试）
+
+1. `[DllImport("CoreMessaging.dll")] CreateDispatcherQueueForCurrentThread` —— **Debug 正常，
+   Release 必崩 0xC0000005**，连 `Main` 第一行调用都崩。换 `NativeLibrary.GetExport` +
+   函数指针同样崩。
+2. `Microsoft.UI.Dispatching.DispatcherQueueController.CreateOnCurrentThread` —— 本工程
+   `UseWinUI=false`，这个类型整个是手写垫片，调它只会拿到假队列（这也是 10-31 那次
+   「反射建了真队列但仍报错」的真相：反射到的是垫片）。
+3. 复用主线程的 WebView2 环境 —— CLR 0x80131506 直接杀进程。
+
+## 验证（四道全绿，含新探针）
+
+- **`tools/W13DesktopLyricsProbe.cjs`（新增）**：连开连关两轮 + 歌词文字真的渲染出来
+  （读到「水たまりにキラキラ映る街に」）+ 无 Compositor 报错 + **开着歌词关主程序能干净退出**。
+- 接口回归：failures/jsErrors 空、`exitedAfterClose: true`、exitCode 0
+- 侧键探针 `ok: true`
+- 实播冒烟 `ok: true`、pos 8.1
+- Rebuild 0 错误；publish DLL 2,852,864 字节 / 269 文件
+
+出货已同步 `dist/web-ui-20261028`，回退件 `dist/web-ui-20261028-pre-desktop-lyrics-fix-20261031`。
