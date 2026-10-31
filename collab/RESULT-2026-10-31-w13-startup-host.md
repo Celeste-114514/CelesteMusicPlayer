@@ -14,7 +14,7 @@
 | 4 | `MainWindow.Lyrics.cs`（410 行）、`MainWindow.Search.cs`（45 行）**整文件转活** | →150 |
 | 5 | `MainWindow.Misc2.cs`（311 行，列宽域）**整文件转活**：`FitColumnsToAvailableWidth` / `ScheduleFitColumns` / 分隔条拖动四件 / 列宽读写 | →142 |
 
-探针壳清单：**21 → 18 个文件**。
+探针壳清单：**21 → 17 个文件**。
 
 ## 关键判断
 
