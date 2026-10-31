@@ -187,3 +187,46 @@ Rebuild 0 错误；publish DLL 2,978,304 字节 / 269 文件；接口回归 fail
 Playback 16 / Playback3 16 / Playback2 14 / xaml.cs 8 / SettingsHost 6 / 零散 8。
 xaml.cs 只剩 4 个（`MainWindow_Loaded` / `FirstActivated` / `Closed` / `LibraryPaneRoot_PointerPressed`），
 全连着主题域或导航历史域——属于下一阶段的大件，不适合小刀。
+
+---
+
+# 批 27-28：播放杂项 + 文件打开入口（68 → 36）
+
+用新写的「自足性扫描」一次性筛出所有**自身零壳依赖**的成员，成批搬走——比逐个试搬快得多。
+脚本逻辑：对每个剩余成员跑闭包，把「除了自己以外没有任何壳成员」的直接列出来。
+
+| 批 | 提交 | 内容 | 账面 |
+|---|---|---|---|
+| 27 | `33dae03` | 新 `MainWindow.PlaybackOpsHost.cs`：按路径回填索引、移入回收站、专辑集合解析、睡眠定时到点判定；`EnforceMinimumWindowSize` 并入 StartupHost | 68→58 |
+| 28 | `33dae03` | 同文件续：封面背景铺/撤、波形柱绘制、音频信息文本刷新、引擎淡入、额外资源自动下载；新 `MainWindow.FileOpenHost.cs`：打开文件 / 打开文件夹 / 导入 M3U / 播放 CUE（含 `PlayCueFileAsync`） | 58→36 |
+
+一次筛出的 8 个完全自足成员：`ClearAlbumArtBackground`、`DrawWaveformStyle`、`ImportM3u_Click`、
+`MaybeAutoDownloadExtrasAsync`、`OpenFileButton_Click`、`OpenFolderButton_Click`、
+`PlayCueFileAsync`、`UpdateAudioInfoTextAsync`；另有 3 个只差「同组内一个成员」
+（`ApplyAlbumArtBackgroundAsync→ClearAlbumArtBackground`、`OpenCue_Click→PlayCueFileAsync`，
+`FadeInEngineAsync` 的所谓依赖 `steps` 是局部常量、工具误报）。
+
+⚠ 工具假阳性再次出现：`EqDsp.cs -> Features.total` 的 `total` 也是局部变量。
+所以「按文件统计外部依赖」只能当线索，`total`/`steps`/`count` 这类名字必须人眼核。
+
+## 验证
+
+Rebuild 0 错误；publish 2,978,816 字节 / 269 文件；接口回归 failures+jsErrors 空、exitCode 0；
+实播 `ok=true`、pos 8.1。出货已同步，回退件 `dist/web-ui-20261028-pre-w13-playbackops-20261031`。
+
+## 剩余 36：卡在两个枢纽函数
+
+剩余 17 个成员全部有壳依赖（4–88 个），已无「零依赖可搬」的。
+按壳文件统计对外依赖，最小的几个卡在这些点：
+
+| 壳文件 | 外依赖数 | 卡在谁身上 |
+|---|---|---|
+| ShellPages.cs | 1 | `ApplyCategoryView`（Misc，分类视图大 switch，闭包 39） |
+| CelesteTheme.cs | 2 | ShellPages 的 `ReapplySettingsAccent` / `ReapplyTagPanelAccent` |
+| ArtistDetail.cs | 3 | `ArtistAvatarStoreKey`(Library)、`ApplyArtistAvatarToDetailIfOpen`(Library2)、`ApplyUiStyleMode`(UiTheme) |
+| Settings.cs | 3 | `ApplyExtendedSettingsLive`(Features)、`ExitMediaMultiSelect`(Misc)、`ApplyUiStyleMode` |
+| ThemeFiles.cs | 3 | `ApplyCelesteThemeAsync` / `LoadCelesteActiveTheme`(CelesteTheme)、`MainWindow_Loaded`(UiTheme) |
+
+**结论：下一步必须拔「枢纽」而不是搬成员。**
+两个枢纽：`ApplyCategoryView`（闭包 39）和 `ApplyUiStyleMode`（牵动 ArtistDetail / Settings / ThemeFiles）。
+拔掉一个能连带解锁 2-4 个壳文件，但要整块连闭包一起搬，属于一次独立的大活。
