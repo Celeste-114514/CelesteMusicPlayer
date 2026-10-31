@@ -193,3 +193,11 @@ ApplyFirParameters+RefreshFirReadouts（~10）、面板刷新族（SyncDspPowerS
 EnsureAudioFxUiBuilt/LoadAudioFxUiFromStore ~15）、Profile/机架管理（~15）、
 ApplySimpleTones+SyncAudioFxEqSimpleFromState（~4）、ApplyOpraCurve/NoteOpraApplied（~4）、
 ApplyDeviceDspProfileIfEnabled（2）。
+
+### DSP 域 2-5 批（2026-10-31 晚，本会话连续完成，明细见 RESULT-2026-10-31-w13-dsp-batches.md）
+- 批 2（`537fd31`）：RoomIr 整文件转活 + FIR/电源/bit-perfect 三件套 → 348。
+- 批 3（`6aaf20a`）：EQ 撤销/快照/AB/自动增益 + ApplyDspToEngine → ~324。
+- 批 4+5（`76328bc`）：13 个模块文件整文件转活 + EqDsp/Misc/GeekDsp/Features 外科手术 → 234。
+- **DSP 域收官：WebDsp/WebDspTools/WebOpra 借用清零**。全天 1,024 → 234（77%）。
+- ⚠ 搬家工具三修入库（8 空格闭合误剥 / 文件级命名空间假 `}` / LF-only 文件），字段属性永远手工搬。
+- 剩余 234/98 全在非 DSP 域（列表视觉、AB 循环、设置实时应用等）。
