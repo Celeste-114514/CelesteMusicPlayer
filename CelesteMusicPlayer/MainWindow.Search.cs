@@ -36,60 +36,10 @@ using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
 using Windows.UI;
 using Color = Windows.UI.Color;
-
-
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-
-        private ListView? FindAncestorListView(DependencyObject? node)
-        {
-            while (node != null)
-            {
-                if (node is ListView lv) return lv;
-                node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
-            }
-            return null;
-        }
-
-
-        /// <summary>中文搜索友好归一化：转小写 → 全角转半角 → 繁体转简体，实现容错匹配（搜繁体命中简体、搜全角命中半角等）。</summary>
-        private static string SearchNormalize(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-            {
-                return string.Empty;
-            }
-
-            var sb = new System.Text.StringBuilder(text.Length);
-            foreach (char c in text)
-            {
-                if (c == '\u3000')
-                {
-                    sb.Append(' ');
-                }
-                else if (c >= '\uFF01' && c <= '\uFF5E')
-                {
-                    sb.Append((char)(c - 0xFEE0)); // 全角 → 半角
-                }
-                else if (c < 0x20)
-                {
-                    continue;
-                }
-                else if (_tradToSimp.TryGetValue(c, out char simp))
-                {
-                    sb.Append(simp); // 繁体 → 简体
-                }
-                else
-                {
-                    sb.Append(c);
-                }
-            }
-
-            return sb.ToString().ToLowerInvariant();
-        }
-
-
+        // 2026-10-31：原来的 FindAncestorListView / SearchNormalize 已搬到 MainWindow.Utilities.cs（纯工具函数，活代码在用）。
     }
 }

@@ -23,10 +23,8 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        /// <summary>极客磷光色的三档（设置项「极客磷光色」）。琥珀为默认。</summary>
-        internal const string PhosphorAmber = "Amber";
-        internal const string PhosphorGreen = "Green";
-        internal const string PhosphorCyan = "Cyan";
+        // 三档磷光色常量（PhosphorAmber / Green / Cyan）2026-10-31 随 PhosphorColor 一起搬到
+        // MainWindow.Utilities.cs，那里是它们的唯一真相源。
 
         /// <summary>字符进度条有多少格。等宽字下每格宽度一致，格数越多越细腻。</summary>
         private const int GeekProgressBlocks = 28;
@@ -34,45 +32,6 @@ namespace CelesteMusicPlayer
         private bool _geekTransportSubscribed;
         private bool _geekProgressSized;
         private bool _geekProgressSliderSized;
-
-        private static Color PhosphorColor(string? name)
-        {
-            // 自定义磷光色：设置里存 "Custom:#RRGGBB"（兼容裸 "#RRGGBB"）。解析失败落回琥珀。
-            if (!string.IsNullOrWhiteSpace(name))
-            {
-                string value = name.Trim();
-                if (value.StartsWith("Custom:", StringComparison.OrdinalIgnoreCase))
-                {
-                    value = value.Substring("Custom:".Length).Trim();
-                }
-
-                if (value.StartsWith("#") && value.Length >= 7
-                    && uint.TryParse(value.AsSpan(1, 6), System.Globalization.NumberStyles.HexNumber, null, out uint rgb))
-                {
-                    return Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
-                }
-
-                if (!string.Equals(value, PhosphorGreen, StringComparison.Ordinal)
-                    && !string.Equals(value, PhosphorCyan, StringComparison.Ordinal)
-                    && !string.Equals(value, PhosphorAmber, StringComparison.Ordinal))
-                {
-                    // 未知值（含被截坏的十六进制）：回退默认，避免整界面丢色
-                    return Color.FromArgb(255, 0xFF, 0xB0, 0x00);
-                }
-
-                switch (value)
-                {
-                    case PhosphorGreen: return Color.FromArgb(255, 0x3E, 0xFF, 0x7A);   // 荧光绿
-                    case PhosphorCyan: return Color.FromArgb(255, 0x35, 0xE0, 0xFF);    // 青
-                }
-            }
-
-            return Color.FromArgb(255, 0xFF, 0xB0, 0x00);                               // 琥珀（默认）：老式 CRT 的暖黄
-        }
-
-        /// <summary>当前设置选中的磷光色（极客界面里唯一的彩色）。供桌面歌词等自绘窗口取色。</summary>
-        internal static Color GeekPhosphorColor()
-            => PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
 
         /// <summary>极客 transport 总入口：由 ApplyGeekChrome 在界面风格切换时调用一次。</summary>
         internal void ApplyGeekTransport(bool geek)

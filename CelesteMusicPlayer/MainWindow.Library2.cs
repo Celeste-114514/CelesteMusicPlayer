@@ -484,20 +484,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private int FindLibraryIndex(string filePath)
-        {
-            for (int i = 0; i < _playlist.Count; i++)
-            {
-                if (string.Equals(_playlist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-
         /// <summary>
         /// 从曲库汇总唯一专辑；封面优先取该专辑音轨号为 1 的文件。
         /// </summary>
@@ -994,39 +980,6 @@ namespace CelesteMusicPlayer
             AlbumDetailCoverImage.Source = null;
             ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
             AlbumDetailBackButton.Content = "← 返回专辑";
-        }
-
-
-        /// <summary>
-        /// 提取封面字节（可在后台线程调用）。按 UseInnerCoverFirst 设置决定
-        /// 内嵌标签封面与外置封面（folder.jpg / cover.jpg / 同名图）的优先级。
-        /// </summary>
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]?> CoverBytesCache = new();
-        private const int CoverBytesCacheMax = 200;
-
-        internal static byte[]? ExtractCoverBytes(string audioPath)
-        {
-            if (string.IsNullOrWhiteSpace(audioPath))
-            {
-                return null;
-            }
-
-            if (CoverBytesCache.TryGetValue(audioPath, out byte[]? cached))
-            {
-                return cached;
-            }
-
-            // 2026-10-29：取字节的实现搬到 CoverSourceReader（原 TryLoadInnerCover/TryLoadOuterCover），
-            // 规则不变：按 UseInnerCoverFirst 决定内嵌与外置的先后，缺哪边就用另一边。
-            byte[]? result = CoverSourceReader.Read(audioPath, AppSettingsStore.Load().UseInnerCoverFirst);
-
-            if (CoverBytesCache.Count >= CoverBytesCacheMax)
-            {
-                CoverBytesCache.Clear();
-            }
-
-            CoverBytesCache[audioPath] = result;
-            return result;
         }
 
 

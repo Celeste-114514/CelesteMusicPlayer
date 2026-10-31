@@ -393,23 +393,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>极客界面模式的设置值（设置项「界面风格」下拉里的「极客」）。</summary>
-        internal const string UiStyleGeek = "Geek";
-
-        /// <summary>当前是否处于极客界面模式（近黑终端风：等宽字、直角、技术读数）。供各面板刷新处判断。</summary>
-        internal static bool IsGeekUiStyleActive()
-        {
-            string mode;
-            try
-            {
-                mode = AppSettingsStore.Load().UiStyleMode;
-            }
-            catch
-            {
-                return false;
-            }
-
-            return mode == UiStyleGeek;
-        }
+        // UiStyleGeek 常量 2026-10-31 随 IsGeekUiStyleActive 一起搬到 MainWindow.Utilities.cs。
 
         /// <summary>当前是否处于「不透明风格」（经典或极客）：这两类模式下背景图层 / 封面背景 / 预设渐变一律不显示。</summary>
         internal static bool IsOpaqueUiStyleActive() => IsClassicUiStyleActive() || IsGeekUiStyleActive();
@@ -1937,37 +1921,6 @@ namespace CelesteMusicPlayer
 
                 ClearForegroundOnDescendants(child);
             }
-        }
-
-
-                private Brush ResolveAccentBrush()
-        {
-            // 极客界面：磷光色是界面里唯一的彩色 —— 选中竖条/选中底/排序胶囊/导航高亮等
-            // 一切"强调色"都跟随它，不混用设置里的主题色（用户实测反馈过选中背景漏主题色）。
-            if (IsGeekUiStyleActive())
-            {
-                return new SolidColorBrush(GeekPhosphorColor());
-            }
-
-            AppSettingsState settings = AppSettingsStore.Load();
-            if (settings.AccentSource == "Custom")
-            {
-                return new SolidColorBrush(ColorHelper.ParseHexColor(settings.CustomAccentColor) ?? Color.FromArgb(255, 0, 120, 212));
-            }
-
-            if (Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out object? brushObj)
-                && brushObj is Brush brush)
-            {
-                return brush;
-            }
-
-            if (Application.Current.Resources.TryGetValue("SystemAccentColor", out object? colorObj)
-                && colorObj is Color color)
-            {
-                return new SolidColorBrush(color);
-            }
-
-            return new SolidColorBrush(Color.FromArgb(255, 0, 120, 212));
         }
 
 
