@@ -37,6 +37,11 @@
 - ⚠ 工作树不明改动先当**自己被中断的残留**（本机网络/CPU 常打断）；动手前 `git log --oneline -5` 查并行改动，别覆盖。
 - ⚠ 测试宿主必须拷 `System.Security.Cryptography.ProtectedData.dll`（缺→DPAPI 失败→误判设置损坏）。
 - ⚠ 命令行传文件走「零散播放窗口」（精简引擎），测不到 FIR/EQ。
+- **服务边界（10-31 起）**：曲目动作 `WebTrackActionService`（trackAction+browse）、目录 `WebFolderBrowseService`、
+  曲库 `WebLibraryService`；宿主能力各走一个 `I*Host`（**只放服务造不出来的**：真播放/删盘/外部程序/页面快照）。
+  `WebOperationGate` 是「网页发起的耗时操作」唯一互斥，**曲目动作与目录浏览共用同一实例**，否则两个选择器会叠在一起。
+- ⚠ 探针发 `playAll` / `togglePlay` 必须用 `CelesteShell.send`：它们不回包，`request` 会等 12 秒超时抛"操作响应超时"，
+  且播放一直跑会让 `currentIndex` 自己往前走，插入位置再也对不上。
 
 ## Git 元数据损坏修复（本机零填充老毛病会命中 .git）
 - 症状：`git status` 报 index corrupt（签名 0x00000000）、`git branch` 报无法解析 HEAD → 通常是 refs/heads/main 与 index 头部被清零。
