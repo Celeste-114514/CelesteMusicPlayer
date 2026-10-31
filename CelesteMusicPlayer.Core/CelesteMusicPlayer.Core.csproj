@@ -16,7 +16,6 @@
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
     <Compile Include="../CelesteMusicPlayer/AppCachePaths.cs" Link="AppCachePaths.cs" />
-    <Compile Include="../CelesteMusicPlayer/AppClosePreferences.cs" Link="AppClosePreferences.cs" />
     <Compile Include="../CelesteMusicPlayer/AppLog.cs" Link="AppLog.cs" />
     <Compile Include="../CelesteMusicPlayer/AppSettingsStore.cs" Link="AppSettingsStore.cs" />
     <Compile Include="../CelesteMusicPlayer/AsioFeederProvider.cs" Link="AsioFeederProvider.cs" />
@@ -37,6 +36,7 @@
     <Compile Include="../CelesteMusicPlayer/DsdPreloadService.cs" Link="DsdPreloadService.cs" />
     <Compile Include="../CelesteMusicPlayer/DsdProbe.cs" Link="DsdProbe.cs" />
     <Compile Include="../CelesteMusicPlayer/DspCoreInterop.cs" Link="DspCoreInterop.cs" />
+    <Compile Include="../CelesteMusicPlayer/DspApplyService.cs" Link="DspApplyService.cs" />
     <Compile Include="../CelesteMusicPlayer/DspRackState.cs" Link="DspRackState.cs" />
     <Compile Include="../CelesteMusicPlayer/DspState.cs" Link="DspState.cs" />
     <Compile Include="../CelesteMusicPlayer/EqCurveState.cs" Link="EqCurveState.cs" />

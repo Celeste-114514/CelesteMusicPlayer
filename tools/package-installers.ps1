@@ -90,6 +90,7 @@ if (-not $SkipFrameworkDep) {
             '-p:EnableSourceControlManagerQueries=false',
             '-o', $publishFd)
     }
+    Remove-PublishNoise $publishFd
     $fdOut = Join-Path $outDir "CelesteMusicPlayer-Setup-$Version.exe"
     Invoke-Step 'makensis 框架依赖安装包' $makensis @(
         "-DAPP_VERSION=$Version",
@@ -110,6 +111,7 @@ if (-not $SkipSelfContained) {
             '-p:EnableSourceControlManagerQueries=false',
             '-o', $publishSc)
     }
+    Remove-PublishNoise $publishSc
     $scOut = Join-Path $outDir "CelesteMusicPlayer-Setup-SC-$Version.exe"
     Invoke-Step 'makensis 自包含安装包' $makensis @(
         "-DAPP_VERSION=$Version",
@@ -124,6 +126,23 @@ if (-not $SkipSelfContained) {
 # 事故背景：CI 上 publish 漏了 -p:WindowsPackageType=None，生成的 .pri 只有约 253KB
 # （正常约 1.6MB），XAML 页面资源整批缺失 → 用户装完一启动就失败，反馈「安装包打不开」。
 # 安装包能装、哈希能算，光看文件大小发现不了，只能靠这两条硬门槛拦住。
+function Remove-PublishNoise {
+    param([string] $Dir)
+    if (-not (Test-Path -LiteralPath $Dir)) { return }
+    # 2026-11-01：两类东西不该进安装包 ——
+    #   ① 第三方原生库的调试符号（libSkiaSharp.pdb 单个 84MB，用户拿到毫无用处，占掉半个安装包）；
+    #   ② 打包前若有人对产物跑过冒烟，目录里会多出 WebView2 的用户数据（9MB 缓存，绝不能发出去）。
+    $removed = 0
+    foreach ($pdb in @('libSkiaSharp.pdb')) {
+        $f = Join-Path $Dir $pdb
+        if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force; $removed++ }
+    }
+    foreach ($junk in Get-ChildItem -LiteralPath $Dir -Directory -Filter '*.WebView2' -ErrorAction SilentlyContinue) {
+        Remove-Item -LiteralPath $junk.FullName -Recurse -Force; $removed++
+    }
+    if ($removed -gt 0) { Write-Host "  [清理] $Dir 去掉 $removed 项（调试符号 / WebView2 用户数据）" }
+}
+
 function Assert-PublishHealthy {
     param([string] $Dir, [string] $Variant, [bool] $ExpectSelfContained)
 
