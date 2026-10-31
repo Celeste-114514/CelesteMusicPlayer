@@ -15,42 +15,6 @@ namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-        private string? _lastAppliedThemeName;
-        private bool _themeAppliedOnce;
-
-        /// <summary>
-        /// 把盘上的 CelesteThemeName 应用到界面。启动时（MainWindow_Loaded）与
-        /// 设置页改完主题文件时调用。测试皮肤激活时主题文件就是皮肤配色来源，
-        /// 由调用方负责随后重刷界面主题（换主题文件后需重新应用一次）。
-        /// </summary>
-        internal void ReloadThemeFromSettings()
-        {
-            try
-            {
-                string? name = AppSettingsStore.Load().CelesteThemeName;
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    name = null;
-                }
-
-                // 同一主题不重复应用：设置页很多开关变更都会走到这里，
-                // 每次都重挂字典 + 推网页是纯浪费。
-                if (_themeAppliedOnce
-                    && string.Equals(_lastAppliedThemeName, name, StringComparison.OrdinalIgnoreCase))
-                {
-                    return;
-                }
-
-                _lastAppliedThemeName = name;
-                _themeAppliedOnce = true;
-                _ = ApplyCelesteThemeAsync(name);
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.ReloadThemeFromSettings", caught);
-            }
-        }
-
         /// <summary>把当前生效主题（设置里选的文件，或内置默认）另存为一个新主题文件。</summary>
         internal static bool SaveCurrentThemeAs(string name, out string? error)
         {

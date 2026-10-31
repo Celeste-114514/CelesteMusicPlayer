@@ -43,38 +43,6 @@ namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-        private void MainWindow_Loaded(dynamic sender, dynamic e)
-        {
-            StartupLog.Write("MainWindow_Loaded begin");
-            try
-            {
-                InitializePlayerAndTimers();
-                // The web shell is the sole product UI; legacy controls remain the backing session.
-                OpenWebShell();
-                ApplyTaskbarPlayerPreference();
-                // 主题系统合闸（皮肤系统第 3 步）：启动时把设置里选的主题文件应用到界面。
-                // 内部有「同名不重复应用」守卫，设置页后续变更再调也无额外开销。
-                ReloadThemeFromSettings();
-                // 任务栏缩略图按钮：必须在 Loaded 后注册，任务栏按钮就绪时才生效。
-                // 立即调一次 Add()（首次准备 + 第一次尝试 AddButtons），
-                // 然后启动一个短间隔 pump timer 让 ITaskbarThumbnailButtons.Pump() 推动延迟重试，
-                // 覆盖 Explorer 任务栏图标 loaded→redraw 的临界窗口（~3 秒）。
-                _taskbarButtons?.Add();
-                StartThumbnailButtonsPump();
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("MainWindow_Loaded", ex);
-            }
-            finally
-            {
-                StartupLog.Write("MainWindow_Loaded end");
-                // 2026-10-07 内存排查：窗口渲染层就绪后的基线。
-                // 与 OnLaunched 那行相减 = WinUI 渲染 + 控件树 + 播放器的固定开销。
-                MemProbe.Log("MainWindow已加载");
-            }
-        }
-
         // （2026-10-31 第十八刀：缩略图按钮泵三件已随 NativeTaskbar.cs 域整体转活）
 
         private void ApplyStartupOverlayWindows()

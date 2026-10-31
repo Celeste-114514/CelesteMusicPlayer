@@ -307,15 +307,6 @@ namespace CelesteMusicPlayer
             // W13：原生设置面板已下线，设置改走网页设置页；保留方法让旧调用点不用动。
         }
 
-        /// <summary>
-        /// 主题 / 皮肤切换后让设置面板跟上。面板内部是 NavigationView（走系统刷子），
-        /// 不需要像音效处理那样手动重刷强调条，这里保留方法是为了不改旧调用点。
-        /// 等将来把面板换成 ShellPageHost 那套时，这里再改成真的重刷。
-        /// </summary>
-        internal void ReapplySettingsAccent()
-        {
-        }
-
         /// <summary>并入主 UI 的「标签」板块（2026-10-13 阶段 5a）。延迟创建：第一次点「标签」才造。</summary>
         // W13：原生标签面板随 XAML 界面下线（网页标签页取代）。
         private bool _tagUiBuilt;
@@ -461,12 +452,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-
-        /// <summary>主题 / 皮肤切换后重刷标签板块子导航的强调条。</summary>
-        internal void ReapplyTagPanelAccent()
-        {
-            // Tags use the web shell theme tokens.
-        }
 
         private void NavTagEditButton_Click(object sender, RoutedEventArgs e)
         {

@@ -1428,62 +1428,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ApplyAlbumsSearchFilter()
-        {
-            if (_currentCategory != "Albums" || AlbumGridView == null)
-            {
-                return;
-            }
-
-            string q = _librarySearchText.Trim();
-            if (string.IsNullOrEmpty(q))
-            {
-                if (!ReferenceEquals(AlbumGridView.ItemsSource, _albums))
-                {
-                    AlbumGridView.ItemsSource = _albums;
-                }
-
-                RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
-                return;
-            }
-
-            List<AlbumEntry> filtered = _albums
-                .Where(a =>
-                    ContainsIgnoreCase(a.Name, q)
-                    || ContainsIgnoreCase(a.Artist, q))
-                .ToList();
-
-            AlbumGridView.ItemsSource = filtered;
-            RefreshAlbumWallSelectionChrome(AlbumGridView, filtered);
-        }
-
-
-        private void ApplyArtistsSearchFilter()
-        {
-            if ((_currentCategory != "Artists" && _currentCategory != "AlbumArtists") || ArtistGridView == null)
-            {
-                return;
-            }
-
-            string q = _librarySearchText.Trim();
-            if (string.IsNullOrEmpty(q))
-            {
-                if (!ReferenceEquals(ArtistGridView.ItemsSource, _artists))
-                {
-                    ArtistGridView.ItemsSource = _artists;
-                }
-
-                return;
-            }
-
-            List<ArtistEntry> filtered = _artists
-                .Where(a => ContainsIgnoreCase(a.Name, q))
-                .ToList();
-
-            ArtistGridView.ItemsSource = filtered;
-        }
-
-
         // 频谱带缓存与音效面板构建（2026-10-31 误切归还）。
 
         private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];

@@ -41,8 +41,6 @@ SHELL = [
     "MainWindow.ShellPages.cs",
     "MainWindow.ArtistDetail.cs",
     "MainWindow.Settings.cs",
-    "MainWindow.ThemeFiles.cs",
-    "MainWindow.CelesteTheme.cs",
 ]
 
 ENV = dict(os.environ)

@@ -1753,24 +1753,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static IEnumerable<GridViewItem> EnumerateRealizedGridViewItems(GridView grid)
-        {
-            Panel? panel = VisualTreeWalker.FindItemsPanel(grid);
-            if (panel == null)
-            {
-                yield break;
-            }
-
-            foreach (UIElement child in panel.Children)
-            {
-                if (child is GridViewItem item)
-                {
-                    yield return item;
-                }
-            }
-        }
-
-
         /// <summary>保存全部状态后重启播放器(用于主题色等需重启生效的更改)。</summary>
         internal void RestartApp()
         {

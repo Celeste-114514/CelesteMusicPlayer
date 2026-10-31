@@ -475,62 +475,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 从曲库汇总唯一专辑；封面优先取该专辑音轨号为 1 的文件。
-        /// </summary>
-        private async Task RefreshAlbumViewAsync()
-        {
-            _albums.Clear();
-
-            if (_playlist.Count == 0)
-            {
-                return;
-            }
-
-            List<AlbumEntry> entries = BuildAlbumEntriesFromTracks(_playlist);
-            entries = ApplyAlbumSortToList(entries);
-
-            foreach (AlbumEntry entry in entries)
-            {
-                _albums.Add(entry);
-            }
-
-            ApplyAlbumsSearchFilter();
-
-            foreach (AlbumEntry entry in entries)
-            {
-                if (_currentCategory != "Albums")
-                {
-                    return;
-                }
-
-                // 2026-10-16 参考 ECHO：批量封面走分档缓存（Album 320），未命中回落原路径
-                BitmapImage? image = await CoverArtService.GetAsync(entry.CoverSourcePath, CoverVariant.Album);
-                if (image == null)
-                {
-                    byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
-                    if (bytes == null || bytes.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
-                }
-
-                if (image != null)
-                {
-                    entry.CoverImage = image;
-                    if (_openedAlbum != null &&
-                        string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
-                    {
-                        AlbumDetailCoverImage.Source = image;
-                        ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
-                    }
-                }
-            }
-        }
-
-
         private void AlbumSortMenu_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
@@ -610,37 +554,6 @@ namespace CelesteMusicPlayer
             }
 
             ApplyAlbumsSearchFilter();
-        }
-
-
-        private List<AlbumEntry> ApplyAlbumSortToList(List<AlbumEntry> source)
-        {
-            bool asc = _albumSortAscending;
-            IOrderedEnumerable<AlbumEntry> ordered = _albumSortMode switch
-            {
-                AlbumSortMode.Artist =>
-                    asc ? source.OrderBy(a => a.Artist, StringComparer.CurrentCultureIgnoreCase)
-                          : source.OrderByDescending(a => a.Artist, StringComparer.CurrentCultureIgnoreCase),
-                AlbumSortMode.Year =>
-                    asc ? source.OrderBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
-                          : source.OrderByDescending(a => a.Year),
-                AlbumSortMode.Added =>
-                    asc ? source.OrderBy(a => a.SortIndex)
-                          : source.OrderByDescending(a => a.SortIndex),
-                AlbumSortMode.Random =>
-                    source.OrderBy(_ => System.Guid.NewGuid()),
-                AlbumSortMode.TrackCount =>
-                    asc ? source.OrderBy(a => a.TrackCount).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
-                          : source.OrderByDescending(a => a.TrackCount).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
-                AlbumSortMode.TotalDuration =>
-                    asc ? source.OrderBy(a => a.TotalDuration.Ticks).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
-                          : source.OrderByDescending(a => a.TotalDuration.Ticks).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
-                _ =>
-                    asc ? source.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
-                          : source.OrderByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
-            };
-
-            return ordered.ToList();
         }
 
 
@@ -786,77 +699,6 @@ namespace CelesteMusicPlayer
             }
 
             e.Handled = true;
-        }
-
-
-        private void OpenAlbumDetail(AlbumEntry album, bool fromArtist)
-            => CommitLibraryNavigation(() => OpenAlbumDetailCore(album, fromArtist));
-
-        private void OpenAlbumDetailCore(AlbumEntry album, bool fromArtist)
-        {
-            _openedAlbum = album;
-            _albumOpenedFromArtist = fromArtist;
-
-            if (fromArtist)
-            {
-                ArtistListBorder.Visibility = Visibility.Collapsed;
-                AlbumListBorder.Visibility = Visibility.Visible;
-                AlbumDetailBackButton.Content = "← 返回艺术家";
-            }
-            else
-            {
-                AlbumDetailBackButton.Content = "← 返回专辑";
-            }
-
-            AlbumGridView.Visibility = Visibility.Collapsed;
-            AlbumDetailPanel.Visibility = Visibility.Visible;
-            AlbumSortPanel.Visibility = Visibility.Collapsed;
-            LibraryPaneTitle.Text = album.Name;
-            UpdateLibrarySearchUi();
-
-            AlbumDetailCoverImage.Source = album.CoverImage;
-            ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
-            AlbumDetailNameText.Text = album.Name;
-            AlbumDetailArtistText.Text = album.Artist;
-            if (AlbumDetailSubInfoText != null)
-            {
-                // 行2：艺术家(超链接) | 发行时间 | 曲目数
-                AlbumDetailSubInfoText.Text =
-                    " | " + album.YearText + " | " + album.TrackCount + " 首";
-            }
-
-            _albumTracks.Clear();
-            List<PlaylistItem> tracks = _playlist
-                .Where(t => string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase))
-                .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
-                .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-
-            foreach (PlaylistItem track in tracks)
-            {
-                _albumTracks.Add(track);
-            }
-
-            // DSD 专辑提示：专辑内全部曲目为 DSF/DFF 时显示
-            if (AlbumDetailDsdHint != null)
-            {
-                bool allDsd = tracks.Count > 0 && tracks.All(t => IsDsdFile(t.FilePath));
-                AlbumDetailDsdHint.Visibility = allDsd ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            // DSD 预加载区域（专辑内一首 DSD 都没有则整块隐藏）
-            UpdateAlbumDetailPreloadUi(tracks);
-
-            // 行3：编码器 | 位深/采样率 | 总时长（在后台线程算质量行，避免 CD 大专辑打开卡顿）
-            if (AlbumDetailTechText != null)
-            {
-                AlbumDetailTechText.Text = string.Empty;
-                _ = FillAlbumTechTextAsync(album, tracks);
-            }
-
-            // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
-            AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
         }
 
 
@@ -1221,33 +1063,6 @@ namespace CelesteMusicPlayer
 
         private void RefreshArtistAlbumSelectionChrome()
             => RefreshAlbumWallSelectionChrome(ArtistAlbumGridView, _artistAlbums);
-
-        private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
-        {
-            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(grid);
-            bool anyRealized = false;
-            foreach (GridViewItem container in EnumerateRealizedGridViewItems(grid))
-            {
-                anyRealized = true;
-                if (grid.ItemFromContainer(container) is AlbumEntry album)
-                {
-                    ApplyAlbumGridItemSelectionChrome(grid, container, album, selectedSet);
-                }
-            }
-
-            // 面板尚未生成时回退（极少见）
-            if (!anyRealized)
-            {
-                foreach (AlbumEntry album in albums)
-                {
-                    if (grid.ContainerFromItem(album) is GridViewItem container)
-                    {
-                        ApplyAlbumGridItemSelectionChrome(grid, container, album, selectedSet);
-                    }
-                }
-            }
-        }
-
 
     }
 }
