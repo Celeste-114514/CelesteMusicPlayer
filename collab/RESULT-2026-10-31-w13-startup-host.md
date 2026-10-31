@@ -391,3 +391,47 @@ Rebuild 0 错误；publish 正常 / 269 文件；接口回归 failures+jsErrors 
 
 剩下的旧界面周边（NowPlayingLayout / TerminalLyrics / Visualizer 等 9 个
 `Compile Remove` 文件）仍在仓库里但**从未参与编译**，属于下一步清理项。
+
+---
+
+# 批 36-37：文件夹动画 + 桌面歌词报错定位（用户反馈）
+
+## 文件夹分类「没有动画」—— 实际是内容蹦出来
+
+先量了三条分类切页时的动画状态（`getAnimations()` + 计算样式），
+**三种分类的页面淡入完全一致**（都 running、opacity 从 0 到 1），所以不是动画丢失。
+
+真正原因：文件夹页的目录是**异步读**的。外壳那次 240ms 淡入跑在一张**空页面**上，
+等数据回来时动画早结束了，内容直接「蹦」出来 —— 看起来就像没有动画。
+
+修法（`folders.js`）：`load()` 完成后再补一次同样的转场，让淡入落在有内容的页面上。
+
+## 桌面歌词：`Compositor` 起不来（**未修复，已定位**）
+
+报错：`UnauthorizedAccessException: 拒绝访问 | The caller must initialize DispatcherQueue on this thread`
+
+实测排除的项：
+- **不是线程问题**。诊断日志显示 `MainWindow_Loaded` 与网页命令回调**都在 tid=2**，
+  且 `_uiQueue.HasThreadAccess=True`。
+- **不是队列未建**。用反射调用真的 `Microsoft.UI.Dispatching.DispatcherQueueController.CreateOnCurrentThread()`
+  返回「已建立」，`new Compositor()` 仍然报同样的错。
+
+根因：`NativeDispatcherQueue.cs` 把 Windows App SDK 的 `DispatcherQueue` **整个替换成了手写 Win32 消息泵**
+（`Program.Main` 明确注释「不再走 Application.Start，队列由 NativeDispatcherQueue 提供」）。
+于是进程里根本没有**系统级队列**，`Windows.UI.Composition.Compositor` 无从附着。
+
+日志证据：10-29 桌面歌词成功创建 32 次；10-31 起 13 次全失败 —— 与 W13 换掉原生宿主的时间吻合。
+
+**修复需要单独一轮**，两条路：
+1. 桌面歌词改在**独立 STA 线程**上跑：该线程先 `DispatcherQueueController.CreateOnCurrentThread()`
+   建真队列，再建合成宿主（官方推荐的 composition host 写法）。代价：与主窗口的状态要跨线程编组。
+2. 给 `NativeDispatcherQueue` 垫片补一个「真队列」旁路（启动时建一次真 controller 并保存），
+   其余代码继续用垫片。风险：两套队列并存，`DispatcherQueueTimer` 的回调时机要复核。
+
+已把结论写进 `SetDesktopLyricsEnabled` 的注释，避免下次又当成线程 bug 修一遍。
+
+## 顺带记录
+
+`Window.DispatcherQueue` 在非 UI 线程上会返回**调用线程自己的队列**，
+所以 `HasThreadAccess` 会误报 true —— 判断线程要用启动时捕获的 `_uiQueue`（已加进
+`WindowLifecycleHost`）。
