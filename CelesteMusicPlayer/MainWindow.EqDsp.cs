@@ -95,7 +95,6 @@ namespace CelesteMusicPlayer
         };
 
 
-        private int _audioFxEqSelected = -1;
         private bool _audioFxEqDragging;
         private bool _audioFxEqBuilt;
         // 外部曲线（耳机校正 opra-* / Equalizer APO 导入等）在预设下拉里的动态展示项：
@@ -323,10 +322,6 @@ namespace CelesteMusicPlayer
 
         // ---- EQ 曲线绘制（对齐 ECHO：自适应纵轴 / 频谱背景 / 渐变曲线 / 节点字形 / 频率标签避让） ----
 
-        private const double EqCurveFreqMin = 20.0, EqCurveFreqMax = 20000.0;
-        private const double EqCurveGainMax = 24.0;
-
-        private static double Log2(double v) => Math.Log(v) / Math.Log(2.0);
 
         /// <summary>自适应纵轴量程阶梯（dB）：取能包住当前曲线的第一档，曲线平缓时视野更集中。</summary>
         private static readonly double[] EqGainLadder = { 12, 18, 24, 36 };
@@ -690,51 +685,6 @@ namespace CelesteMusicPlayer
                 double lw = 56;
                 double lx = Math.Clamp(bx - lw / 2, 0, Math.Max(0, w - lw));
                 children.Add(MakeEqAxisLabel(FormatHelper.FormatAudioFxFreq(b.FrequencyHz), lx, labelY, lw, TextAlignment.Center, labelColor));
-            }
-        }
-
-
-        /// <summary>单段在给定频率处的近似幅度贡献（dB）。峰值/架近似用理想带响应，低通/高通/切除按阶近似。</summary>
-        private static double ApproxBandGain(double f, EqBand b)
-        {
-            switch (b.FilterType)
-            {
-                case EqFilterType.LowPass:
-                    var cutoff = Math.Max(20, b.FrequencyHz);
-                    if (f >= cutoff) { double x = (f / cutoff); return -6.0 * Math.Log10(1 + x * x); }
-                    return 0;
-                case EqFilterType.HighPass:
-                    var hc = Math.Max(20, b.FrequencyHz);
-                    if (f <= hc) { double x = (hc / f); return -6.0 * Math.Log10(1 + x * x); }
-                    return 0;
-                case EqFilterType.Notch:
-                    double dNotch = Math.Abs(Log2(f / b.FrequencyHz));
-                    double n = b.Q <= 0 ? 1 : b.Q;
-                    if (dNotch <= 0.5 / n) return -6 * Math.Min(1, (0.5 / n - dNotch) * n * 2);
-                    return 0;
-                case EqFilterType.LowShelf:
-                case EqFilterType.HighShelf:
-                {
-                    double gain = Math.Clamp(b.GainDb, -24, 24);
-                    double pivot = b.FilterType == EqFilterType.LowShelf ? 200 : 4000;
-                    double dPivot = Math.Abs(Log2(f / pivot));
-                    // 简化搁架曲线：靠近目标频段趋近 gain
-                    double reach = b.FilterType == EqFilterType.LowShelf ? (f < pivot ? 0 : dPivot) : (f > pivot ? 0 : dPivot);
-                    double ratio = Math.Clamp(reach > 0 ? 1.0 - 0.05 : 1.0, 0, 1);
-                    // 用频率偏移近似：目标频段外逐渐累积到 gain
-                    double extent = Math.Abs(Log2(f / b.FrequencyHz));
-                    return gain * Math.Clamp(1.0 / (1.0 + 0.5 * extent), 0.2, 1.0) * ratio;
-                }
-                default: // Peaking / 其它
-                {
-                    if (Math.Abs(b.GainDb) < 0.01) return 0;
-                    double w = b.FrequencyHz;
-                    double x = Math.Log10(f / w) * 6; // 以 octave 计
-                    double q = Math.Max(0.1, b.Q);
-                    // 峰值带宽 ~ f/Q，用高斯近似
-                    double sigma = q > 0 ? 0.7 * (1.0 / q) : 0.6; // octaves
-                    return b.GainDb * Math.Exp(-(x * x) / (2 * sigma * sigma));
-                }
             }
         }
 
@@ -1347,33 +1297,6 @@ namespace CelesteMusicPlayer
             AutoGainAudioFxEqCore();
         }
 
-        /// <summary>自动增益核心（网页「音效处理」页直接调）。返回结果消息。</summary>
-        internal string AutoGainAudioFxEqCore()
-        {
-            PushEqUndoSnapshot();
-            // 估算峰值叠加增益：所有 band 在任一频率的最大正贡献 + headroom
-            double peak = 0;
-            double logMin = Log2(EqCurveFreqMin), logMax = Log2(EqCurveFreqMax);
-            double dAddFreq = Math.Pow(EqCurveFreqMax / EqCurveFreqMin, 1.0 / 200.0);
-            double f = EqCurveFreqMin;
-            for (int i = 0; i <= 200; i++)
-            {
-                double g = 0;
-                foreach (var b in EqState.Current.Bands) { if (b is { Enabled: true }) g += ApproxBandGain(f, b); }
-                peak = Math.Max(peak, g);
-                f *= dAddFreq;
-            }
-
-            double preampDb = -Math.Max(0, peak);
-            EqState.Current.PreampDb = Math.Clamp(preampDb, -24, 24);
-            RefreshAudioFxEqBandEditor();
-            ApplyDspToEngine();
-            string msg = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
-            NowPlayingText.Text = msg;
-            return msg;
-        }
-
-
         private void AudioFxEqReset_Click(object sender, RoutedEventArgs e)
         {
             PushEqUndoSnapshot();
@@ -1402,128 +1325,21 @@ namespace CelesteMusicPlayer
 
         // ---- ECHO 化增强：撤销 / 重做 / A-B / 步进 / 键盘微调 / preamp 滑杆 / 频谱背景 ----
 
-        private static bool IsShiftDown()
-        {
-            try
-            {
-                var state = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift);
-                return state.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-            }
-            catch { return false; }
-        }
-
-
-        /// <summary>推一份「修改前」快照进撤销栈。coalesce=true 时 400ms 内的连续编辑算一步（滑杆拖动 / 连击）。</summary>
-        private void PushEqUndoSnapshot(bool coalesce = false)
-        {
-            if (EqState.PushUndo(coalesce)) UpdateEqUndoUi();
-        }
-
-
-        private void UpdateEqUndoUi()
-        {
-            if (AudioFxEqUndoButton != null) AudioFxEqUndoButton.IsEnabled = EqState.CanUndo;
-            if (AudioFxEqRedoButton != null) AudioFxEqRedoButton.IsEnabled = EqState.CanRedo;
-        }
-
-
         private void AudioFxEqUndo_Click(object sender, RoutedEventArgs e)
         {
             UndoAudioFxEqCore();
         }
-
-        /// <summary>撤销 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
-        internal string UndoAudioFxEqCore()
-        {
-            if (!EqState.Undo()) return "没有可撤销的 EQ 修改";
-            SetAudioFxEqFromSnapshot(EqState.Current);
-            string msg = "已撤销 EQ 修改（还可撤销 " + EqState.UndoCount + " 步）";
-            NowPlayingText.Text = msg;
-            return msg;
-        }
-
 
         private void AudioFxEqRedo_Click(object sender, RoutedEventArgs e)
         {
             RedoAudioFxEqCore();
         }
 
-        /// <summary>重做 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
-        internal string RedoAudioFxEqCore()
-        {
-            if (!EqState.Redo()) return "没有可重做的 EQ 修改";
-            SetAudioFxEqFromSnapshot(EqState.Current);
-            const string msg = "已重做 EQ 修改";
-            NowPlayingText.Text = msg;
-            return msg;
-        }
-
-
-        /// <summary>用一份曲线快照整体替换当前状态并同步全界面（撤销/重做/A-B 共用）。</summary>
-        private void SetAudioFxEqFromSnapshot(EqCurveState snapshot)
-        {
-            if (snapshot == null) return;
-            _audioFxLoading = true;
-            try
-            {
-                EqState.Current = snapshot;
-                AudioFxEqEnableToggle.IsOn = snapshot.Enabled;
-                SetAudioFxEqPreampDisplay(snapshot.PreampDb);
-                SelectAudioFxEqPreset(string.IsNullOrWhiteSpace(snapshot.PresetId) ? "flat" : snapshot.PresetId);
-                _audioFxEqSelected = snapshot.Bands.Count > 0
-                    ? Math.Clamp(_audioFxEqSelected < 0 ? 0 : _audioFxEqSelected, 0, snapshot.Bands.Count - 1)
-                    : -1;
-                SelectAudioFxEqBand(_audioFxEqSelected);
-                RedrawAudioFxEqCurve();
-                RefreshAudioFxEqBandEditor();
-            }
-            finally
-            {
-                _audioFxLoading = false;
-            }
-
-            ApplyDspToEngine();
-            UpdateEqUndoUi();
-        }
-
-
         /// <summary>A/B 对比：首次点击把当前曲线存为参考 A；再点在 A / 现场 B 间切换试听；Shift+点击取消。</summary>
         private void AudioFxEqAb_Click(object sender, RoutedEventArgs e)
         {
             ToggleAudioFxEqAbCore();
         }
-
-        /// <summary>A/B 对比核心（网页「音效处理」页直接调；网页点击不含 Shift，走普通分支）。返回结果消息。</summary>
-        internal string ToggleAudioFxEqAbCore()
-        {
-            EqAbTransition change = EqState.ToggleAb(IsShiftDown());
-            string msg;
-            switch (change)
-            {
-                case EqAbTransition.Cancelled:
-                    AudioFxEqAbButton.Content = "A/B 对比";
-                    msg = "A/B 对比已取消";
-                    ApplyDspToEngine();
-                    break;
-                case EqAbTransition.Armed:
-                    AudioFxEqAbButton.Content = "试听 A（参考）";
-                    msg = "已把当前曲线存为参考 A；继续随意调整，再点本按钮在 A / 调整后 B 间切换试听";
-                    break;
-                case EqAbTransition.ShowingA:
-                    AudioFxEqAbButton.Content = "回到 B（调整后）";
-                    msg = "A/B 对比：正在试听参考曲线 A（此刻改曲线只作用于 A）";
-                    SetAudioFxEqFromSnapshot(EqState.Current);
-                    break;
-                default:
-                    AudioFxEqAbButton.Content = "试听 A（参考）";
-                    msg = "A/B 对比：已回到你的曲线 B";
-                    SetAudioFxEqFromSnapshot(EqState.Current);
-                    break;
-            }
-            NowPlayingText.Text = msg;
-            return msg;
-        }
-
 
         private void AudioFxEqFreqStepUp_Click(object sender, RoutedEventArgs e) => StepAudioFxEqBandFreq(1);
 
@@ -1761,108 +1577,6 @@ namespace CelesteMusicPlayer
             if (_audioFxLoading) return;
             AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(e.NewValue);
             ApplyReplayGainToEngine();
-        }
-
-
-        /// <summary>收集面板当前状态 → 持久化 + 应用到播放引擎。</summary>
-        private void ApplyDspToEngine()
-        {
-            // 面板未就绪（启动阶段控件以 XAML 默认值加载触发的 Toggled 等）不得持久化/应用，
-            // 否则会用默认的“打开”状态覆盖盘上用户上次关闭的设置，导致“关闭后重启又打开”。
-            if (!_audioFxPanelReady)
-            {
-                return;
-            }
-
-            // 诊断：记录触发保存的调用来源，便于定位“关闭后又变回打开”是被谁触发的。
-            string trigger = "";
-            try
-            {
-                System.Diagnostics.StackTrace st = new System.Diagnostics.StackTrace(1, false);
-                for (int i = 0; i < st.GetFrames()?.Length; i++)
-                {
-                    System.Reflection.MethodBase? m = st.GetFrame(i)?.GetMethod();
-                    string? decl = m?.DeclaringType?.Name;
-                    if (decl != null && decl != "MainWindow" && decl != "AppWindow" && !decl.StartsWith("<>c"))
-                    {
-                        trigger = decl + "." + m.Name;
-                        break;
-                    }
-                }
-                if (string.IsNullOrEmpty(trigger) && st.GetFrames()?.Length > 0)
-                {
-                    System.Reflection.MethodBase? m0 = st.GetFrame(0)?.GetMethod();
-                    trigger = m0?.DeclaringType?.Name + "." + m0?.Name;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            DspExtraState extra = ExtraParameters.Snapshot();
-            var ch = extra.ChannelBalance;
-            var safety = extra.Safety;
-            DspApply.Apply(EqState.Current, EqState.Previewing, extra, _audioEngine);
-            StartupLog.Write($"[DSP] 已保存 eq(Enabled={EqState.Current.Enabled},bands={EqState.Current.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
-
-            UpdateDspBitPerfectUi();
-            // 任何 DSP 改动都同步刷新左侧导航圆点 / 模块页徽章 / 左右偏差条
-            UpdateDspNavIndicators();
-            UpdateAudioFxEqQuickStrip();
-
-            // B4：DSP 变化 = 链路事件（内容去重：拖滑块连续回调同值不会刷屏）
-            NoteChainDsp("dsp", "DSP " + DescribeDspChainSummary());
-        }
-
-        /// <summary>
-        /// 一句话说出"现在链路上有哪些 DSP 在改样本"，给链路面板的输出记录用。
-        /// 口径与 AudioSignalPath 的判定同源（都以各 Store 为准，不看 UI 控件当前值）。
-        /// </summary>
-        private static string DescribeDspChainSummary()
-        {
-            var parts = new System.Collections.Generic.List<string>();
-            if (EqCurveStore.Load().HasEffect())
-            {
-                parts.Add("EQ");
-            }
-
-            var room = RoomCorrectionStore.Load();
-            if (room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath))
-            {
-                parts.Add("房间校正");
-            }
-
-            if (ReplayGainStore.Load().Mode != ReplayGainMode.Off)
-            {
-                parts.Add("ReplayGain");
-            }
-
-            var rack = DspRackStore.Load();
-            if (rack.Compressor.IsActive)
-            {
-                parts.Add("压缩");
-            }
-
-            if (rack.StereoField.IsActive)
-            {
-                parts.Add("声场");
-            }
-
-            if (rack.Matrix.IsActive)
-            {
-                parts.Add("矩阵");
-            }
-
-            var extra = DspExtraStore.Load();
-            if (extra.ChannelBalance.IsActive)
-            {
-                parts.Add("声道平衡");
-            }
-
-            if (extra.Safety.AffectsBits)
-            {
-                parts.Add("余量");
-            }
-
-            return parts.Count == 0 ? "全部关闭（直通）" : string.Join("、", parts) + " 生效";
         }
 
 

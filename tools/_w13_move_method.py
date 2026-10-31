@@ -89,20 +89,27 @@ def main():
     # 反过来一旦目标侧失败，源文件已经被删了方法，内容直接丢失。
     # 尾部检查用行级语义（混合换行文件里 class 闭合可能带 \r 残留，如 `    }\r`）：
     # 结构必须是 `... 成员 \r\n    } \r\n } \r\n`（block namespace）或 `... \r\n } \r\n`（file-scoped）。
-    stripped = [x.rstrip(b'\r') for x in dst_raw[-200:].split(b'\n')]
-    while stripped and stripped[-1].strip() == b'':
-        stripped.pop()
-    ok_tail = (
-        (len(stripped) >= 2 and stripped[-1] == b'}' and stripped[-2] == b'    }')
-        or (len(stripped) >= 1 and stripped[-1] == b'}')
-    )
-    if not ok_tail:
-        raise SystemExit(f"目标文件尾部结构不认识，先人工确认: {stripped[-4:]}")
-    body = dst_raw[: dst_raw.rindex(b'}')]  # 到最后一个 '}' 之前
-    # 去掉 body 末尾的 class 闭合与空白，后面统一重建
-    body = body.rstrip()
-    if body.endswith(b'    }'):
-        body = body[: -len(b'    }')].rstrip()
+    # 2026-10-31 二修（DSP 批 2 教训）：
+    # 旧版用 body.endswith(b'    }') 剥类闭合 —— 8 空格的方法闭合也 endswith(b'    }')，
+    # 会把最后一个成员的 `}` 吃掉（DspMatrixActive 被吃，编译器把后面整片吞进方法体）；
+    # 且对文件级命名空间（namespace X; 结尾只有 `    }`）硬补一个假 `}`。
+    # 现版按整行匹配，两种尾部都支持，且剥完闭合后校验 body 末行仍是成员闭合。
+    lines_dst = dst_raw.split(b"\n")
+    while lines_dst and lines_dst[-1].strip() == b"":
+        lines_dst.pop()
+    last = lines_dst[-1].rstrip(b"\r")
+    if last == b"}" and len(lines_dst) >= 2 and lines_dst[-2].rstrip(b"\r") == b"    }":
+        closer = [b"    }", b"}"]  # block namespace
+        body_lines = lines_dst[:-2]
+    elif last == b"    }":
+        closer = [b"    }"]  # file-scoped namespace
+        body_lines = lines_dst[:-1]
+    else:
+        raise SystemExit(f"目标文件尾部结构不认识，先人工确认: {lines_dst[-4:]}")
+    while body_lines and body_lines[-1].strip() == b"":
+        body_lines.pop()
+    if not body_lines[-1].rstrip(b"\r").rstrip().endswith(b"}"):
+        raise SystemExit("去掉类闭合后 body 末行不是成员闭合，先人工确认")
     nl_t = b"\r\n" if b"\r\n" in dst_raw[-4000:] else b"\n"
     chunk = b""
     if a.note:
@@ -112,7 +119,8 @@ def main():
     for blk in blocks:
         chunk += nl_t
         chunk += nl_t.join(blk) + nl_t
-    open(a.dst, "wb").write(body + chunk + b"    }" + nl_t + b"}" + nl_t)
+    out = b"\n".join(body_lines) + b"\n" + chunk + nl_t.join(closer) + nl_t
+    open(a.dst, "wb").write(out)
     print(f"已写入 {a.dst}（换行 {'CRLF' if nl_t == b'\\r\\n' else 'LF'}），开始删源文件")
 
     # 从后往前删，避免行号漂移
