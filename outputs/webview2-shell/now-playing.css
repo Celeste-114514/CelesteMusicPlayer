@@ -190,3 +190,7 @@ button.mini-cover:hover::after{
 }
 
 .player-spectrum[hidden]{display:none!important}.player-spectrum{height:72px;color:var(--accent,#b17b56);opacity:.85;flex:none}.player-spectrum svg{width:100%;height:100%;display:block}
+.np-spectrum{width:100%;margin:8px 0 4px;max-width:420px;align-self:flex-start;justify-content:flex-start}
+/* 详情页「音频仪表 / 音频终端」主题自带真频谱，不再显示这条注入的波形（用户 2026-11-01 反馈重复） */
+#now-playing[data-player-theme="instrument"] .np-spectrum,
+#now-playing[data-player-theme="terminal"] .np-spectrum{display:none!important}
