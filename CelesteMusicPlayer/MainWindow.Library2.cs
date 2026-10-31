@@ -1329,59 +1329,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ApplyAlbumGridItemSelectionChrome(
-            GridView grid,
-            GridViewItem container,
-            AlbumEntry album,
-            HashSet<object>? selectedSet = null)
-        {
-            Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
-            bool multiOnThisGrid = _isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, grid);
-            Brush unselectedBg = multiOnThisGrid
-                ? CreateMultiSelectFrostBrush()
-                : new SolidColorBrush(Colors.Transparent);
-
-            container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
-            container.BorderThickness = new Thickness(0);
-            DisableContainerSelectionCheckMark(container);
-
-            bool selected = multiOnThisGrid
-                ? VisualTreeWalker.IsItemSelected(grid, album, selectedSet)
-                : ReferenceEquals(grid.SelectedItem, album);
-
-            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "AlbumRowChrome");
-            if (chrome != null)
-            {
-                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
-                if (!TryApplyBarStyleRowSelection(chrome, selected, accent, unselectedBg))
-                {
-                    if (selected)
-                    {
-                        chrome.Background = accent;
-                        ApplyForegroundToDescendants(chrome, selectedFg);
-                    }
-                    else
-                    {
-                        chrome.Background = unselectedBg;
-                        ClearForegroundOnDescendants(chrome);
-                    }
-                }
-            }
-            else if (selected)
-            {
-                container.Background = accent;
-                container.Foreground = selectedFg;
-            }
-            else
-            {
-                container.Background = unselectedBg;
-                container.ClearValue(Control.ForegroundProperty);
-            }
-        }
-
-
         private async Task ApplyAlbumArtBackgroundAsync(byte[]? coverBytes, string forPath)
         {
             if (AlbumArtBackgroundImage == null)

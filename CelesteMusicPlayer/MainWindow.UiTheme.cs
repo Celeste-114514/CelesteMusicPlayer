@@ -1035,14 +1035,7 @@ namespace CelesteMusicPlayer
         internal static Brush ResolveClassicRowSelectionBrush(FrameworkElement? anchor)
             => new SolidColorBrush(ResolveClassicRowSelectionColor(anchor));
 
-        /// <summary>同上，返回颜色本身（导航项的底色要做淡入动画，得拿到颜色现搓画笔）。</summary>
-        internal static Color ResolveClassicRowSelectionColor(FrameworkElement? anchor)
-        {
-            bool dark = anchor?.ActualTheme == ElementTheme.Dark;
-            return dark
-                ? Color.FromArgb(58, 255, 255, 255)
-                : Color.FromArgb(40, 128, 128, 128);
-        }
+        /// <summary>行选中款与容器圆角软化已整体搬到 MainWindow.SelectionChromeHost.cs（W13 第二十二刀）。</summary>
 
         /// <summary>
         /// 行内细节按界面风格重塑（极客化浏览面板的行级部分）：
@@ -1174,51 +1167,6 @@ namespace CelesteMusicPlayer
             }
 
             host.Children.Add(rule);
-        }
-
-        /// <summary>
-        /// 经典 / 极客界面统一的列表行选中款：左侧 3px 主题色竖条 + 半透明灰底，文字保持原色。
-        /// 极客近黑底上「整行填强调色」过于突兀（用户实测反馈），所有列表统一走这一款。
-        /// 返回 true 表示已按该款处理，调用方不再走「整行强调色」分支。
-        /// </summary>
-        internal static bool TryApplyBarStyleRowSelection(
-            Border? chrome,
-            bool selected,
-            Brush accent,
-            Brush unselectedBg)
-        {
-            if (chrome == null || !IsOpaqueUiStyleActive())
-            {
-                return false;
-            }
-
-            bool dark = chrome.ActualTheme == ElementTheme.Dark;
-            chrome.BorderThickness = new Thickness(3, 0, 0, 0);
-
-            // 条样式底色是「半透明灰」而不是强调色，文字必须显式回落到主题前景色。
-            // 注意：ListViewItem/GridViewItem 默认模板的 Selected 视觉状态是用 ObjectAnimation
-            // 把 ContentPresenter.Foreground 动画成白色（动画优先级高于任何本地值，压不住），
-            // 所以选中时必须给行内每个 TextBlock 显式设值（ApplyForegroundToDescendants）；
-            // 未选中时 Clear 让行内文字恢复 DataTemplate 各自的主题色层次。
-            var rowForeground = new SolidColorBrush(dark
-                ? Color.FromArgb(255, 255, 255, 255)
-                : Color.FromArgb(255, 0, 0, 0));
-
-            if (selected)
-            {
-                // 选中底色走统一入口（令牌皮肤=Selection.Background，经典/极客=原半透明灰）
-                chrome.Background = new SolidColorBrush(ResolveClassicRowSelectionColor(chrome));
-                chrome.BorderBrush = accent;
-                ApplyForegroundToDescendants(chrome, rowForeground);
-            }
-            else
-            {
-                chrome.Background = unselectedBg;
-                chrome.BorderBrush = new SolidColorBrush(Colors.Transparent);
-                ClearForegroundOnDescendants(chrome);
-            }
-
-            return true;
         }
 
         // =====================================================================
@@ -1536,52 +1484,6 @@ namespace CelesteMusicPlayer
             else
             {
                 control.ClearValue(Control.ForegroundProperty);
-            }
-        }
-
-
-        /// <summary>关闭勾选标记，并尽量给 Presenter 圆角，避免系统方角选中层。</summary>
-        private static void SoftenItemPresenterCorners(DependencyObject root)
-        {
-            // 容器自带选中层(ListView/GridViewItemPresenter)的圆角：极客界面一律直角，
-            // 否则默认模板的选中高亮始终是圆角 8 —— 之前这里写死 8，导致极客下行选中框仍圆角
-            //（用户实测反馈：歌曲面板及复用该面板的多个页面都有此问题）。经典/图景保持 8。
-            var presenterRadius = new CornerRadius(IsGeekUiStyleActive() ? 0 : 8);
-
-            if (root is ListViewItemPresenter listPresenter)
-            {
-                listPresenter.CornerRadius = presenterRadius;
-                listPresenter.SelectionCheckMarkVisualEnabled = false;
-                try
-                {
-                    listPresenter.CheckBrush = new SolidColorBrush(Colors.Transparent);
-                    listPresenter.CheckHintBrush = new SolidColorBrush(Colors.Transparent);
-                    listPresenter.CheckSelectingBrush = new SolidColorBrush(Colors.Transparent);
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-                return;
-            }
-
-            if (root is GridViewItemPresenter gridPresenter)
-            {
-                gridPresenter.CornerRadius = presenterRadius;
-                gridPresenter.SelectionCheckMarkVisualEnabled = false;
-                try
-                {
-                    gridPresenter.CheckBrush = new SolidColorBrush(Colors.Transparent);
-                    gridPresenter.CheckHintBrush = new SolidColorBrush(Colors.Transparent);
-                    gridPresenter.CheckSelectingBrush = new SolidColorBrush(Colors.Transparent);
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-                return;
-            }
-
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                SoftenItemPresenterCorners(VisualTreeHelper.GetChild(root, i));
             }
         }
 

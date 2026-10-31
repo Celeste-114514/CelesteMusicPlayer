@@ -1829,68 +1829,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ApplyFolderBrowserItemSelectionChrome(
-            ListViewItem container,
-            FolderBrowserItem item,
-            HashSet<object>? selectedSet = null)
-        {
-            Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
-            bool multiOnThisList = _isMultiSelectMode && _multiSelectFolderList == FolderBrowserView;
-            Brush unselectedBg = multiOnThisList
-                ? CreateMultiSelectFrostBrush()
-                : new SolidColorBrush(Colors.Transparent);
-
-            container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
-            container.BorderThickness = new Thickness(0);
-            DisableContainerSelectionCheckMark(container);
-
-            bool selected = multiOnThisList
-                ? VisualTreeWalker.IsItemSelected(FolderBrowserView, item, selectedSet)
-                : ReferenceEquals(FolderBrowserView.SelectedItem, item);
-
-            bool searchHit = !multiOnThisList
-                && !string.IsNullOrEmpty(_folderSearchHighlightPath)
-                && string.Equals(item.FullPath, _folderSearchHighlightPath, StringComparison.OrdinalIgnoreCase);
-
-            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "FolderRowChrome");
-            if (chrome != null)
-            {
-                chrome.MinHeight = 36;
-                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
-                chrome.VerticalAlignment = VerticalAlignment.Stretch;
-                if (FolderBrowserView != null && FolderBrowserView.ActualWidth > 0)
-                {
-                    chrome.Width = FolderBrowserView.ActualWidth; // 行内容铺满整行，选中矩形右侧铺满
-                }
-                if (!TryApplyBarStyleRowSelection(chrome, selected || searchHit, accent, unselectedBg))
-                {
-                    if (selected || searchHit)
-                    {
-                        chrome.Background = accent;
-                        ApplyForegroundToDescendants(chrome, selectedFg);
-                    }
-                    else
-                    {
-                        chrome.Background = unselectedBg;
-                        ClearForegroundOnDescendants(chrome);
-                    }
-                }
-            }
-            else if (selected || searchHit)
-            {
-                container.Background = accent;
-                container.Foreground = selectedFg;
-            }
-            else
-            {
-                container.Background = unselectedBg;
-                container.ClearValue(Control.ForegroundProperty);
-            }
-        }
-
-
         /// <summary>汇总唯一艺术家 / 专辑艺术家，按名字升序；加载已保存的自定义头像</summary>
         private async Task RefreshArtistViewAsync()
         {

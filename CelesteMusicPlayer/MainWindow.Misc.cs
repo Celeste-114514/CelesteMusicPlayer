@@ -1915,30 +1915,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private Brush CreateMultiSelectFrostBrush()
-        {
-            // 经典界面：多选态不给未选中行铺底色。
-            // 原因：原实现用 ResolveUiBaseTintColor() 取基色，浅色主题下几个候选色都"接近白"被跳过，
-            // 最后落到深灰回退色(42,42,42)，于是浅色界面里所有歌曲行都变成一片深色底
-            //（鼠标划过时又被悬停底色顶掉 → 就是你看到的"滑过就消失"）。
-            if (FrostedGlass.ClassicMode != null)
-            {
-                return new SolidColorBrush(Colors.Transparent);
-            }
-
-            if (_cachedMultiSelectFrostBrush != null)
-            {
-                return _cachedMultiSelectFrostBrush;
-            }
-
-            // 使用半透明纯色，避免 Acrylic 采样悬停高亮后越来越白、移开也不恢复
-            Color baseTint = ResolveUiBaseTintColor();
-            _cachedMultiSelectFrostBrush = new SolidColorBrush(
-                Color.FromArgb(70, baseTint.R, baseTint.G, baseTint.B));
-            return _cachedMultiSelectFrostBrush;
-        }
-
-
         private static IEnumerable<GridViewItem> EnumerateRealizedGridViewItems(GridView grid)
         {
             Panel? panel = VisualTreeWalker.FindItemsPanel(grid);
@@ -1953,27 +1929,6 @@ namespace CelesteMusicPlayer
                 {
                     yield return item;
                 }
-            }
-        }
-
-
-        /// <summary>在容器已加载后关闭系统选中勾（避免与词条文字重叠）。</summary>
-        private void DisableContainerSelectionCheckMark(Control container)
-        {
-            SoftenItemPresenterCorners(container);
-            if (!container.IsLoaded)
-            {
-                void OnLoaded(object sender, RoutedEventArgs e)
-                {
-                    container.Loaded -= OnLoaded;
-                    SoftenItemPresenterCorners(container);
-                }
-
-                container.Loaded += OnLoaded;
-            }
-            else
-            {
-                DispatcherQueue.TryEnqueue(() => SoftenItemPresenterCorners(container));
             }
         }
 
