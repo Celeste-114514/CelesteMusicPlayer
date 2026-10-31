@@ -97,8 +97,6 @@ namespace CelesteMusicPlayer
                 Bool("RestoreLibrary", "启动时恢复音乐库"),
                 Bool("RestorePlayback", "启动时恢复到上次曲目与位置"),
                 Bool("AutoPlayWhenStart", "启动后自动开始播放", "只有在成功恢复出上次的曲目时才会起播。" + Requires("RestorePlayback")),
-                Sel("CloseAction", "关闭主窗口时", "Ask|每次询问;MinimizeToTray|最小化到托盘;Exit|直接退出",
-                    "控制旧主窗口。网页窗口的关闭按钮由网页宿主自己处理，暂不走这条策略。", scope: "native"),
                 Bool("AlwaysOnTop", "主窗口置顶", "只影响旧主窗口；网页窗口的置顶请看本页底部的「网页窗口置顶」按钮。", scope: "native")
             ).Concat(In("audio",
                 Sel("OutputMode", "输出模式", "Shared|WASAPI 共享;WasapiExclusive|WASAPI 独占;Asio|ASIO",
@@ -124,7 +122,6 @@ namespace CelesteMusicPlayer
                 Sel("UiStyleMode", "界面风格", "ClassicSystem|经典 · 跟随系统;ClassicLight|经典 · 浅色;ClassicDark|经典 · 深色;Scene|图景（背景图式）",
                     "只影响旧主窗口；网页界面是这一套之外的另一层。", scope: "native"),
                 Sel("CelesteThemeName", "主题文件", "$(themes)", "读 Themes\\*.celeste-theme 里的配色。只作用于旧主窗口的令牌。", scope: "native"),
-                Bool("EnableFrostedGlass", "亚克力毛玻璃背板", "旧主窗口的背景材质，和网页里的背景是两回事。", scope: "native"),
                 Sel("AccentSource", "强调色来源", "System|跟随系统;Custom|自定义"),
                 Col("CustomAccentColor", "自定义强调色", "只有「强调色来源」选了自定义才起作用。"),
                 Bool("EnableBackground", "显示背景", "网页背景暂由网页自己的样式决定，此项目前作用于旧界面。", scope: "native"),
@@ -233,8 +230,7 @@ namespace CelesteMusicPlayer
             )).Concat(In("system",
                 Bool("EnableGlobalHotkeys", "启用全局热键", "热键注册失败会在本页的「注册结果」里写出来，不会闷声失败。"),
                 Bool("EnableSmtc", "接入系统媒体控制", "任务栏预览 / 键盘媒体键的那套系统控件。"),
-                Bool("ShowTaskbarProgress", "任务栏显示播放进度", "作用于旧主窗口的任务栏按钮。", scope: "native"),
-                Bool("GlobalMouseWheelVolume", "滚轮调节音量", "作用于旧主窗口；网页里不劫持页面滚动。", scope: "native")
+                Bool("ShowTaskbarProgress", "任务栏显示播放进度", "作用于旧主窗口的任务栏按钮。", scope: "native")
             )).ToArray();
 
         private static string Requires(string dependency) => "需要同时开启「" + dependency + "」。";
@@ -248,7 +244,6 @@ namespace CelesteMusicPlayer
             ["RestoreLibrary"] = s => s.RestoreLibrary,
             ["RestorePlayback"] = s => s.RestorePlayback,
             ["AutoPlayWhenStart"] = s => s.AutoPlayWhenStart,
-            ["CloseAction"] = s => s.CloseAction,
             ["AlwaysOnTop"] = s => s.AlwaysOnTop,
             // audio
             ["OutputMode"] = s => s.OutputMode,
@@ -270,7 +265,6 @@ namespace CelesteMusicPlayer
             // appearance
             ["UiStyleMode"] = s => s.UiStyleMode,
             ["CelesteThemeName"] = s => s.CelesteThemeName,
-            ["EnableFrostedGlass"] = s => s.EnableFrostedGlass,
             ["AccentSource"] = s => s.AccentSource,
             ["CustomAccentColor"] = s => s.CustomAccentColor,
             ["EnableBackground"] = s => s.EnableBackground,
@@ -376,8 +370,7 @@ namespace CelesteMusicPlayer
             // system
             ["EnableGlobalHotkeys"] = s => s.EnableGlobalHotkeys,
             ["EnableSmtc"] = s => s.EnableSmtc,
-            ["ShowTaskbarProgress"] = s => s.ShowTaskbarProgress,
-            ["GlobalMouseWheelVolume"] = s => s.GlobalMouseWheelVolume
+            ["ShowTaskbarProgress"] = s => s.ShowTaskbarProgress
         };
 
         // —— 写（Patch 用）——
@@ -388,7 +381,6 @@ namespace CelesteMusicPlayer
             ["RestoreLibrary"] = (s, v) => s.RestoreLibrary = Bool(v),
             ["RestorePlayback"] = (s, v) => s.RestorePlayback = Bool(v),
             ["AutoPlayWhenStart"] = (s, v) => s.AutoPlayWhenStart = Bool(v),
-            ["CloseAction"] = (s, v) => s.CloseAction = One(v, "Ask", "MinimizeToTray", "Exit"),
             ["AlwaysOnTop"] = (s, v) => s.AlwaysOnTop = Bool(v),
             ["OutputMode"] = (s, v) => s.OutputMode = One(v, "Shared", "WasapiExclusive", "Asio"),
             ["HiFiSoftwareVolume"] = (s, v) => s.HiFiSoftwareVolume = Bool(v),
@@ -407,7 +399,6 @@ namespace CelesteMusicPlayer
             ["PlaybackRatePreservePitch"] = (s, v) => s.PlaybackRatePreservePitch = Bool(v),
             ["UiStyleMode"] = (s, v) => s.UiStyleMode = One(v, "ClassicSystem", "ClassicLight", "ClassicDark", "Scene"),
             ["CelesteThemeName"] = (s, v) => s.CelesteThemeName = Text(v, 260),
-            ["EnableFrostedGlass"] = (s, v) => s.EnableFrostedGlass = Bool(v),
             ["AccentSource"] = (s, v) => s.AccentSource = One(v, "System", "Custom"),
             ["CustomAccentColor"] = (s, v) => s.CustomAccentColor = Color(v),
             ["EnableBackground"] = (s, v) => s.EnableBackground = Bool(v),
@@ -509,8 +500,7 @@ namespace CelesteMusicPlayer
             ["LastFmLeastPercent"] = (s, v) => s.LastFmLeastPercent = Int(v, 1, 100),
             ["EnableGlobalHotkeys"] = (s, v) => s.EnableGlobalHotkeys = Bool(v),
             ["EnableSmtc"] = (s, v) => s.EnableSmtc = Bool(v),
-            ["ShowTaskbarProgress"] = (s, v) => s.ShowTaskbarProgress = Bool(v),
-            ["GlobalMouseWheelVolume"] = (s, v) => s.GlobalMouseWheelVolume = Bool(v)
+            ["ShowTaskbarProgress"] = (s, v) => s.ShowTaskbarProgress = Bool(v)
         };
 
         // —— 取值校验：写坏的值宁可直接报错退回，也不能悄悄落盘 ——

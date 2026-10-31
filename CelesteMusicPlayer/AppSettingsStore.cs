@@ -13,9 +13,6 @@ namespace CelesteMusicPlayer
     public sealed class AppSettingsState
     {
         // —— 常规 ——
-        /// <summary>Ask / MinimizeToTray / Exit</summary>
-        public string CloseAction { get; set; } = nameof(CloseWindowAction.Ask);
-
         public bool RestoreLibrary { get; set; } = true;
 
         public bool RestorePlayback { get; set; } = true;
@@ -25,8 +22,6 @@ namespace CelesteMusicPlayer
         public string StartupCategory { get; set; } = "UserPlaylist";
 
         public bool AutoRun { get; set; }
-
-        public bool EnableFrostedGlass { get; set; } = true;
 
         /// <summary>0–100</summary>
         public double Volume { get; set; } = 80;
@@ -71,8 +66,6 @@ namespace CelesteMusicPlayer
         public bool OpenDesktopLyricsOnStartup { get; set; }
 
         public bool OpenMiniPlayerOnStartup { get; set; }
-
-        public bool GlobalMouseWheelVolume { get; set; } = true;
 
         // —— 在线下载 ——
         public bool AutoDownloadLyrics { get; set; }
@@ -525,7 +518,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                     else
                     {
                         StartupLog.Write("Load 文件不存在 path=" + path + ", 用默认+迁移");
-                        _cache = MigrateFromLegacyClosePrefs(new AppSettingsState());
+                        _cache = new AppSettingsState();
                         SaveCore(_cache);
                     }
                 }
@@ -590,34 +583,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
 
-        private static AppSettingsState MigrateFromLegacyClosePrefs(AppSettingsState state)
-        {
-            try
-            {
-                AppClosePreferencesState legacy = AppClosePreferences.LoadLegacyFileOnly();
-                if (legacy.DontAskAgain)
-                {
-                    state.CloseAction = string.Equals(
-                        legacy.PreferredAction,
-                        nameof(CloseWindowAction.Exit),
-                        StringComparison.OrdinalIgnoreCase)
-                        ? nameof(CloseWindowAction.Exit)
-                        : nameof(CloseWindowAction.MinimizeToTray);
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
-
-            return state;
-        }
-
         private static AppSettingsState Normalize(AppSettingsState s)
         {
             s.Volume = Math.Clamp(s.Volume, 0, 100);
-            if (string.IsNullOrWhiteSpace(s.CloseAction))
-            {
-                s.CloseAction = nameof(CloseWindowAction.Ask);
-            }
-
             if (string.IsNullOrWhiteSpace(s.StartupCategory) || !ValidStartupCategories.Contains(s.StartupCategory))
             {
                 s.StartupCategory = "UserPlaylist";
@@ -758,12 +726,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         // 根因都是这个 Clone 少拷一个字段；现在交给机器每次都查一遍。
         internal static AppSettingsState Clone(AppSettingsState s) => new()
         {
-            CloseAction = s.CloseAction,
             RestoreLibrary = s.RestoreLibrary,
             RestorePlayback = s.RestorePlayback,
             StartupCategory = s.StartupCategory,
             AutoRun = s.AutoRun,
-            EnableFrostedGlass = s.EnableFrostedGlass,
             Volume = s.Volume,
             OutputDeviceId = s.OutputDeviceId,
             OutputMode = s.OutputMode,
@@ -775,7 +741,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 : "Cover",
             OpenDesktopLyricsOnStartup = s.OpenDesktopLyricsOnStartup,
             OpenMiniPlayerOnStartup = s.OpenMiniPlayerOnStartup,
-            GlobalMouseWheelVolume = s.GlobalMouseWheelVolume,
             AutoDownloadLyrics = s.AutoDownloadLyrics,
             AutoDownloadCover = s.AutoDownloadCover,
             LyricPageSource = s.LyricPageSource,

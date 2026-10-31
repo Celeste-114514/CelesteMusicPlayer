@@ -375,23 +375,6 @@ public sealed partial class MainWindow
             });
         }
 
-        private void ApplyFrostedGlassPreference(bool enabled)
-        {
-            try
-            {
-                FrostedGlass.BackdropEnabled = enabled;
-                if (enabled)
-                {
-                    FrostedGlass.ApplyWindowBackdrop(this);
-                }
-                else
-                {
-                    SystemBackdrop = null;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
         // W13 第三十四刀：界面风格应用
 
         /// <summary>
@@ -404,9 +387,6 @@ public sealed partial class MainWindow
         {
             try
             {
-                // 毛玻璃开关先同步给 FrostedGlass：经典 / 极客风格下它决定窗口背板与根面板底色
-                FrostedGlass.BackdropEnabled = settings.EnableFrostedGlass;
-
                 string mode = settings.UiStyleMode;
                 bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
                 // 2026-10-31：极客皮肤已整体移除（用户拍板：新外壳不做极客皮肤）。
@@ -431,20 +411,9 @@ public sealed partial class MainWindow
                     // 结果经典浅色界面下面板被一律涂成深灰 —— 也就是"浅色模式里一片深色底"的根因。
                     FrostedGlass.ClassicMode = darkClassic ? "Dark" : "Light";
 
-                    // 背板是否走毛玻璃由「外观设置」开关决定，经典 / 极客风格下同样生效：
-                    // 开 = 窗口背板走亚克力透出壁纸（此时不能给不透明底，否则会把毛玻璃盖住）；
-                    // 关 = 窗口给纯色底。面板卡片始终不透明，与本开关无关。
-                    if (settings.EnableFrostedGlass)
-                    {
-                        FrostedGlass.ApplyWindowBackdrop(this);
-                    }
-                    else
-                    {
-                        SystemBackdrop = null;
-                        Color rootBg = darkClassic
-                                    ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
-                                    : Windows.UI.Color.FromArgb(255, 243, 243, 243);
-                    }
+                    // 「亚克力毛玻璃背板」开关已随旧界面一起删除（2026-11-01 用户拍板）：
+                    // 现在恒走毛玻璃背板，不再有"关掉换成纯色底"的分支。
+                    FrostedGlass.ApplyWindowBackdrop(this);
 
                     // 多选行底色缓存的取色依赖界面基色，切风格必须失效重算
                     _cachedMultiSelectFrostBrush = null;
@@ -470,8 +439,8 @@ public sealed partial class MainWindow
                     FrostedGlass.ClassicMode = null;
                     _cachedMultiSelectFrostBrush = null;
 
-                    // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）
-                    ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
+                    // 现有界面：一切照旧（毛玻璃背板 + 背景图层恢复）
+                    FrostedGlass.ApplyWindowBackdrop(this);
                         ApplyBorderColorFromUiTint();
 
                     // 从经典切回来时，把系统按钮恢复成背景图式原本的浅灰配色

@@ -145,8 +145,8 @@ namespace CelesteMusicPlayer
         private static readonly HashSet<string> NativeStillUsedByWeb = new(StringComparer.Ordinal)
         {
             "MiniPlayerAlwaysOnTop", "OpenMiniPlayerOnStartup", "ScatteredPlayBackground", "TaskbarPlayerEnabled",
-            "OpenDesktopLyricsOnStartup", "AlwaysOnTop", "CloseAction", "StartupCategory",
-            "GlobalMouseWheelVolume", "ShowTaskbarProgress",
+            "OpenDesktopLyricsOnStartup", "AlwaysOnTop", "StartupCategory",
+            "ShowTaskbarProgress",
         };
 
         // —— patch ——

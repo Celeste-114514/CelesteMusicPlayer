@@ -165,9 +165,6 @@ namespace CelesteMusicPlayer
         {
             if (_exitStarted) return;
             _exitStarted = true;
-            // 先标记允许关闭，避免任何 Closing 处理器再弹“最小化到托盘还是退出”的对话框
-            _allowClose = true;
-
             try { _taskbarPlayer?.Dispose(); _taskbarPlayer = null; }
             catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.Exit", ex); }
 

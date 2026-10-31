@@ -428,8 +428,6 @@ namespace CelesteMusicPlayer
         /// RenderTargetBitmap 要求被渲染的元素在视觉树里、有 XamlRoot，所以必须由主窗口提供这个容器。
         /// </summary>
         internal Canvas? ThumbIconHostCanvas => _thumbIconHostCanvas;
-        private bool _allowClose;
-        private bool _closePromptOpen;
         private bool _applyingSettingsVolume;
         private DispatcherQueueTimer? _volumeSaveTimer;
         private double _volumeToSave;
@@ -640,7 +638,6 @@ namespace CelesteMusicPlayer
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
-            AppWindow.Closing += AppWindow_Closing;
             // 2026-10-16 删除：这里原来有 10 个 ApplyCapsuleToControl(..., ResolveCapsuleFillBrush(), ...)
             // 调用（专辑详情/播放列表操作栏/艺术家详情那批按钮）。E 组给这些按钮换上
             // ButtonNormalStyle/SecondaryStyle/DangerStyle 之后，这些旧调用给按钮设的
