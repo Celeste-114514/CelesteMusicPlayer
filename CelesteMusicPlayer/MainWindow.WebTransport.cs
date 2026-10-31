@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Windows.ApplicationModel.DataTransfer;
 
 namespace CelesteMusicPlayer
 {
@@ -160,99 +159,6 @@ namespace CelesteMusicPlayer
             };
         }
 
-        internal object WebQueue(JsonElement msg)
-        {
-            // 修订号与快照由队列自己维护：内容变了才 +1，轮询不会把修订号刷爆。
-            var (items, revision) = _queue.WebSnapshot();
-            string operation = msg.GetProperty("operation").GetString() ?? "";
-            if (operation == "play")
-            {
-                int index = msg.GetProperty("index").GetInt32();
-                if (msg.GetProperty("revision").GetInt32() != revision || index < 0 || index >= items.Length
-                    || WebTrackIdentity.Of(items[index]) != msg.GetProperty("trackId").GetString())
-                    throw new InvalidOperationException("播放队列已变化，请刷新后重试。");
-                PlayUserPlaylistAt(index);
-            }
-            else if (operation == "move")
-            {
-                int from = msg.GetProperty("from").GetInt32(), to = msg.GetProperty("to").GetInt32();
-                if (msg.GetProperty("revision").GetInt32() != revision || from < 0 || from >= items.Length
-                    || to < 0 || to >= items.Length || WebTrackIdentity.Of(items[from]) != msg.GetProperty("trackId").GetString())
-                    throw new InvalidOperationException("播放队列已变化，请刷新后重新拖动。");
-                if (from != to)
-                {
-                    // Preserve the exact occurrence, including duplicate songs and CUE segments. Never restart audio.
-                    _queue.Index = WebQueueRules.Move(_queue.Items, from, to, _queue.Index);
-                    RenumberCollection(_queue.Items);
-                    NotifyCurrentPlaylistWindow();
-                    if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
-                    items = _queue.Items.ToArray();
-                    _queue.Touch();
-                    revision = _queue.Revision;
-                }
-            }
-            else if (operation != "get") throw new ArgumentException("未知的队列操作。");
-            int offset = msg.TryGetProperty("offset", out var value) ? value.GetInt32() : 0;
-            if (offset < 0 || offset > items.Length) offset = 0;
-
-            // 摘要按整份队列算，不是按已经翻出来的那 200 首算：
-            // 分页加载到哪儿不影响"共 N 首 / 总时长"，否则滚动一下就变数。
-            double totalSeconds = 0, remainingSeconds = 0;
-            for (int i = 0; i < items.Length; i++)
-            {
-                double seconds = Math.Max(0, items[i].Duration.TotalSeconds);
-                totalSeconds += seconds;
-                if (_queue.Index >= 0 && i > _queue.Index) remainingSeconds += seconds;
-            }
-
-            return new
-            {
-                revision, total = items.Length, offset, currentIndex = _queue.Index,
-                order = _orderResolver.Order.ToString(),
-                summary = new { totalSeconds, remainingSeconds, hasCurrent = _queue.Index >= 0 && _queue.Index < items.Length },
-                previous = WebQueuePreview.Previous(items, _queue.Index, _orderResolver),
-                next = WebQueuePreview.Next(items, _queue.Index, _orderResolver),
-                tracks = items.Skip(offset).Take(200).Select((item, i) => new
-                {
-                    id = WebTrackIdentity.Of(item), index = offset + i, title = item.Title, artist = item.Artist,
-                    album = item.Album, duration = item.Duration.TotalSeconds,
-                    // 容器格式用扩展名判（不做位深/码率解析：那要逐个读文件，200 行会让宿主卡住）。
-                    // 位深和采样率这种要真读文件的，只在当前播放卡片上给（见 celeste.state.quality）。
-                    format = QueueFormatLabel(item),
-                    remote = item.IsRemote,
-                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
-                }).ToArray()
-            };
-        }
-
-        /// <summary>队列列表里的"格式"列：只报容器，不去读文件（读 200 个文件会让队列页卡住）。</summary>
-        private static string QueueFormatLabel(PlaylistItem item)
-        {
-            if (item.IsRemote) return "NET";
-            string extension = System.IO.Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
-            return extension.Length is > 0 and <= 5 ? extension : "";
-        }
-
-        internal object WebMore(JsonElement msg)
-        {
-            var current = GetCurrentPlayingItem();
-            string operation = msg.GetProperty("operation").GetString() ?? "";
-            if (operation == "get") return new { playlists = NamedPlaylistStore.List().ToArray() };
-            if (current == null) throw new InvalidOperationException("请先选择一首歌曲。");
-            if (msg.GetProperty("trackId").GetString() != WebTrackIdentity.Of(current)) throw new InvalidOperationException("当前歌曲已变化，请重新打开菜单。");
-            switch (operation)
-            {
-                case "copy":
-                    var data = new DataPackage(); data.SetText(current.Title + " - " + current.Artist); Clipboard.SetContent(data); break;
-                case "reveal": OpenFileLocationInExplorer(current.FilePath); break;
-                case "addToPlaylist":
-                    string name = msg.GetProperty("name").GetString() ?? "";
-                    if (!NamedPlaylistStore.List().Contains(name)) throw new InvalidOperationException("播放列表已不存在。");
-                    NamedPlaylistStore.SaveSongs(name, NamedPlaylistStore.LoadSongs(name).Append(current.PersistenceKey));
-                    break;
-                default: throw new ArgumentException("此功能还未接入网页。");
-            }
-            return new { message = operation == "copy" ? "已复制歌名与艺术家" : operation == "reveal" ? "已在文件夹中显示" : "已加入播放列表" };
-        }
+        // 队列页（queue）与「更多」菜单（more）已搬到 WebQueueService，转发在 MainWindow.WebQueue.cs。
     }
 }
