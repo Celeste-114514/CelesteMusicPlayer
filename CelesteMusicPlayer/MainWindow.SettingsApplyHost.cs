@@ -174,7 +174,6 @@ public sealed partial class MainWindow
 
             try
             {
-                ApplyNowPlayingCardChrome();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -537,8 +536,6 @@ public sealed partial class MainWindow
                     // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线（极客界面保持单色，终端风不上彩）
 
                     // 面板底色/选中样式全部按新主题重刷（顺序：先信息卡底色，再依赖它取色的胶囊/表头）
-                    ApplyNowPlayingCardChrome();
-                    ApplyArtistSongsFrostChrome();
                     ApplyCapsuleSortButtonStyle(accent: true);
                     ApplyPlaylistHeaderChipStyle();
                     RefreshPlaylistSelectionChrome();
@@ -560,8 +557,6 @@ public sealed partial class MainWindow
                     // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）
                     ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
                     ApplyCustomBackground(settings.CustomBackgroundPath);
-                    ApplyNowPlayingCardChrome();
-                    ApplyArtistSongsFrostChrome();
                     ApplyCapsuleSortButtonStyle(accent: true);
                     ApplyPlaylistHeaderChipStyle();
                     RefreshPlaylistSelectionChrome();

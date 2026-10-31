@@ -198,13 +198,10 @@ namespace CelesteMusicPlayer
             ApplyPlaybackOrderToPlayer();
             UpdatePlaybackOrderButtonUi();
             ClearNowPlayingPanel();
-            ApplyNowPlayingCardChrome();
             if (Content is FrameworkElement root)
             {
                 root.ActualThemeChanged += (_, _) =>
                 {
-                    ApplyNowPlayingCardChrome();
-                    ApplyArtistSongsFrostChrome();
                     RefreshPlaylistSelectionChrome();
                     ApplyPlaylistHeaderChipStyle();
                 };
@@ -364,13 +361,6 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.SyncTransportPlayState", caught);
             }
-        }
-
-        /// <summary>信息卡：更深毛玻璃 + 阴影立体感</summary>
-        private void ApplyNowPlayingCardChrome()
-        {
-
-            ApplyArtistSongsFrostChrome();
         }
 
 
@@ -833,7 +823,7 @@ namespace CelesteMusicPlayer
             double rate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
         }
 
-        private MediaPlayer? GetPlayer() => _mediaPlayer ?? PlayerElement?.MediaPlayer;
+        private MediaPlayer? GetPlayer() => _mediaPlayer;
 
 
 
@@ -1140,21 +1130,6 @@ namespace CelesteMusicPlayer
                 _currentCategory = "PlaylistWall";
                 ApplyCategoryViewData();
             });
-        }
-
-
-        // ---------------- 响度归一化（ReplayGain） ----------------
-
-        private void SelectAudioFxRgMode(ReplayGainMode mode)
-        {
-            for (int i = 0; i < AudioFxRgModeCombo.Items.Count; i++)
-            {
-                if (AudioFxRgModeCombo.Items[i] is ComboBoxItem { Tag: ReplayGainMode m } && m == mode)
-                {
-                    return;
-                }
-            }
-
         }
 
 
@@ -1520,37 +1495,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistDetailRow_PointerEntered(object sender, PointerRoutedEventArgs e)
-        {
-            if (sender is not Border chrome) return;
-            var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
-            if (dc == null || PlaylistDetailRowIsSelected(dc)) return;
-            chrome.Background = ResolveRowHoverBrush(chrome);
-        }
-
-
-        private void PlaylistDetailRow_PointerExited(object sender, PointerRoutedEventArgs e)
-        {
-            if (sender is not Border chrome) return;
-            var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
-            if (dc == null || PlaylistDetailRowIsSelected(dc)) return;
-            chrome.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        }
-
-
-        private bool PlaylistDetailRowIsSelected(PlaylistItem song)
-        {
-            try
-            {
-                return PlaylistDetailListView.SelectedItems.Contains(song);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-
         private void PlaylistDetailListView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
@@ -1677,46 +1621,6 @@ namespace CelesteMusicPlayer
             foreach (char c in System.IO.Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
             StorageFile m3uFile = await folder.CreateFileAsync(safe + ".m3u8", Windows.Storage.CreationCollisionOption.ReplaceExisting);
             await Windows.Storage.FileIO.WriteTextAsync(m3uFile, sb.ToString(), Windows.Storage.Streams.UnicodeEncoding.Utf8);
-        }
-
-
-
-
-        private void ExitPlaylistWallMultiSelect()
-        {
-            PlaylistWallGridView.SelectedItems.Clear();
-        }
-
-
-        private void PlaylistWallMultiExitButton_Click(object sender, RoutedEventArgs e) => ExitPlaylistWallMultiSelect();
-
-
-
-
-
-        private async System.Threading.Tasks.Task SetPlaylistCoverFromWebAsync(PlaylistCardViewModel vm)
-        {
-            try
-            {
-                string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(vm.Name);
-                if (string.IsNullOrWhiteSpace(url))
-                {
-                    return;
-                }
-
-                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-                http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
-                byte[] bytes = await http.GetByteArrayAsync(url);
-                if (bytes.Length > 0)
-                {
-                    PlaylistLibraryService.WriteCustomCover(vm.Name, bytes);
-                }
-
-                ApplyPlaylistWallCategory();
-            }
-            catch
-            {
-            }
         }
 
 
@@ -1850,7 +1754,7 @@ namespace CelesteMusicPlayer
 
         private void ApplySongsSearchFilter()
         {
-            if (_currentCategory != "Songs" || PlaylistView == null)
+            if (_currentCategory != "Songs")
             {
                 return;
             }
@@ -1882,7 +1786,7 @@ namespace CelesteMusicPlayer
         /// <summary>播放列表搜索：标题 / 艺术家 / 专辑 / 年份。</summary>
         private void ApplyUserPlaylistSearchFilter()
         {
-            if (_currentCategory != "UserPlaylist" || PlaylistView == null)
+            if (_currentCategory != "UserPlaylist")
             {
                 return;
             }
@@ -2208,18 +2112,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ApplyArtistSongsFrostChrome()        {
-
-            // 歌曲列表区无边框（与专辑详情页歌曲列表一致）
-            ArtistSongsFrostPanel.ClearValue(Border.CornerRadiusProperty);
-
-            if (ArtistTrackListView != null)
-            {
-                ApplyAccentSelectionResources(ArtistTrackListView);
-            }
-        }
-
-
         private List<PlaylistItem> GetTracksForArtist(string artistName, bool useCurrentSongSort)
         {
             List<PlaylistItem> tracks = _playlist
@@ -2311,7 +2203,7 @@ namespace CelesteMusicPlayer
             if (player?.Source == null)
             {
                 // 启动就绪态：还没播，快进/快退就当作"从这个位置开始播"
-                StartPlaybackFromPendingPosition(ProgressSlider.Value + seconds, pauseAfter: false);
+                StartPlaybackFromPendingPosition(Math.Max(0, _pendingStartSeconds + seconds), pauseAfter: false);
                 return;
             }
 

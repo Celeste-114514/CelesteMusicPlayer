@@ -860,7 +860,6 @@ public sealed partial class MainWindow
 
                 // ReplayGain：先装载模型，再让控件照模型投影（模型是唯一参数来源）
                 RgParameters.Load(ReplayGainStore.Load());
-                SelectAudioFxRgMode(RgParameters.Current.Mode);
                 RefreshAudioFxRgInfo();
             }
             finally
