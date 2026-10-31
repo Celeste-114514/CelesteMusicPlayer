@@ -19,19 +19,19 @@ namespace CelesteMusicPlayer
     {
         /// <summary>
         /// 列表小图 / 播放栏缩略图 / 迷你播放器封面。
-        /// 2026-10-19 由 96 提到 160：播放栏小封面显示 58px，屏幕 150% 缩放就是 87 物理像素、
-        /// 200% 是 116、250% 是 145 —— 96 在 200% 以上会被放大，正好是用户报的
-        /// 「播放栏封面糊，歌曲面板里的却清楚」（歌曲面板走 Album 320 档，所以清楚）。
-        /// 提到 160 后 250% 也仍是缩小显示。改档位同时要把 CacheVersion 升上去，
-        /// 否则磁盘里旧的 96 小图会一直命中，新档位永远生效不了。
+        /// 演进：96（初版）→ 160（2026-10-19）→ 240（2026-11-01）。
+        /// 2026-11-01：三档整体上调，并且**取档改成按物理像素算**（见 CoverCacheService.ForWebSize
+        /// 与 WebShellWindow 的封面请求、MainWindow.CoverDecodeTargetPx）：
+        /// 160 CSS px 的封面在 150% 缩放下要 240 物理像素、200% 要 320 —— 给 160 只能放大变糊。
+        /// ⚠ 改档位必须同时把 CoverCacheLayout.CacheVersion +1，否则磁盘上的旧小图会一直命中。
         /// </summary>
-        Thumb = 160,
+        Thumb = 240,
 
-        /// <summary>常规尺寸（歌单墙、专辑卡）。</summary>
-        Album = 320,
+        /// <summary>常规尺寸（歌单墙、专辑卡）。覆盖 480 物理像素以内的展示。</summary>
+        Album = 480,
 
-        /// <summary>详情页、播放页大图。</summary>
-        Large = 768,
+        /// <summary>详情页、播放页大图。1024 长边，2 倍屏下 512 CSS px 仍清晰。</summary>
+        Large = 1024,
     }
 
     /// <summary>封面缩放几何。纯算术，不碰任何图像库。</summary>

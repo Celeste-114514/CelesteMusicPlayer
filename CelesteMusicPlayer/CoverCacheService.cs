@@ -9,7 +9,18 @@ internal static class CoverCacheService
 {
     private static readonly SemaphoreSlim Gate = new(4, 4);
     private static readonly ConcurrentDictionary<string, Lazy<Task<string?>>> Flights = new(StringComparer.Ordinal);
-    internal static CoverVariant ForWebSize(int size) => size <= 160 ? CoverVariant.Thumb : CoverVariant.Large;
+    /// <summary>
+    /// 按「这个位置实际要多少物理像素」挑档位：取第一个装得下的档，都不够就用最大档。
+    /// 2026-11-01：原来是「≤160 给 Thumb，其余一律 Large」—— 于是列表里所有封面
+    /// 在 150% 缩放下都拿到 160px 的小图被浏览器放大（用户报的「糊」），
+    /// 而 Album 档从来没被网页用过。现在按需取档，三档都用上。
+    /// </summary>
+    internal static CoverVariant ForWebSize(int size)
+    {
+        if (size <= (int)CoverVariant.Thumb) return CoverVariant.Thumb;
+        if (size <= (int)CoverVariant.Album) return CoverVariant.Album;
+        return CoverVariant.Large;
+    }
     internal static Task<string?> GetAsync(byte[]? source, CoverVariant variant, string? root = null)
     {
         if(source is not {Length: > 0} || source.Length > 20_000_000)return Task.FromResult<string?>(null);

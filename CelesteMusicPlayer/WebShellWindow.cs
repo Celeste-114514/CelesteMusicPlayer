@@ -832,6 +832,41 @@ namespace CelesteMusicPlayer
             catch (Exception ex) { StartupLog.WriteException("WebShell.PushStartupNotice", ex); }
         }
 
+        /// <summary>
+        /// 从查询串取 size（CSS 像素），夹在 32–2048。
+        /// 没写 size 的请求（列表、队列、卡片、首页都是这种）按 320 算 —— 这些位置在
+        /// 100% 缩放下的展示尺寸就有 160–260，给 160 一直是"刚好不够"，看着就是糊的。
+        /// </summary>
+        private const int DefaultCoverCssSize = 320;
+
+        private static int ParseCoverSize(string query)
+        {
+            int index = query.IndexOf("size=", StringComparison.OrdinalIgnoreCase);
+            if (index < 0) return DefaultCoverCssSize;
+            int start = index + "size=".Length;
+            int end = query.IndexOf('&', start);
+            string raw = end < 0 ? query.Substring(start) : query.Substring(start, end - start);
+            return int.TryParse(raw, out int size) ? Math.Clamp(size, 32, 2048) : DefaultCoverCssSize;
+        }
+
+        /// <summary>当前窗口所在显示器的缩放（100% = 1.0），取不到按 1.0。上限 3 倍。</summary>
+        private double CoverDpiScale()
+        {
+            try
+            {
+                nint hwnd = Handle;
+                if (hwnd != nint.Zero)
+                {
+                    uint dpi = GetDpiForWindow(hwnd);
+                    if (dpi >= 96) return Math.Min(3.0, dpi / 96.0);
+                }
+            }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.CoverDpiScale", ex); }
+            return 1.0;
+        }
+
+        [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint hwnd);
+
         private async void OnCoverRequest(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
         {
             var deferral = args.GetDeferral();
@@ -839,7 +874,9 @@ namespace CelesteMusicPlayer
             try
             {
                 var uri = new Uri(args.Request.Uri);
-                int coverSize = uri.Query == "?size=768" ? 768 : uri.Query == "?size=480" ? 480 : 160;
+                // 网页给的是 CSS 像素，这里换算成**物理像素**再取档 —— 150% 缩放下
+                // 160 CSS px 的封面要 240 物理像素，不换算就等于让浏览器把 160 的小图放大。
+                int coverSize = (int)Math.Round(ParseCoverSize(uri.Query) * CoverDpiScale());
                 bool playlistCover = uri.AbsolutePath.StartsWith("/playlist/", StringComparison.Ordinal);
                 string id = uri.AbsolutePath.Substring(playlistCover ? "/playlist/".Length : "/cover/".Length);
                 var current = _owner.GetCurrentPlayingItem();
@@ -851,7 +888,7 @@ namespace CelesteMusicPlayer
                     if (!NamedPlaylistStore.List().Contains(name)) { args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
                     customCover = PlaylistLibraryService.CustomCoverPath(name);
                     path = customCover ?? PlaylistLibraryService.FirstExistingTrack(name);
-                    coverSize = 480;
+                    coverSize = (int)Math.Round(480 * CoverDpiScale());
                 }
                 else path = _tracks.TryGetValue(id, out var item) ? item.FilePath
                     : current != null && WebTrackIdentity.Of(current) == id ? current.FilePath

@@ -428,28 +428,42 @@ namespace CelesteMusicPlayer
             return d;
         }
 
-        /// <summary>
-        /// 封面解码目标像素 = 布局目标宽度 × 屏幕缩放。
-        /// 以前按承载图片的元素实测尺寸算，但那几个 Image 现在都是垫片（ActualWidth 恒 0），
-        /// 每次都是回退到调用方给的宽度 —— 索性直接收这个宽度，不再去问控件。
-        /// </summary>
+        /// <summary>封面解码目标像素 = 布局目标宽度 × 屏幕缩放（2026-11-01 起真读 DPI）。</summary>
         private int CoverDecodeTargetPx(double fallbackLayoutPx)
         {
             double layoutPx = fallbackLayoutPx;
-            return (int)Math.Clamp(Math.Ceiling(layoutPx * CoverRasterizationScale()), 96, 1024);
+            return (int)Math.Clamp(Math.Ceiling(layoutPx * CoverRasterizationScale()), 96, 1536);
         }
 
-        /// <summary>当前屏幕缩放（RasterizationScale，100%=1.0）。取不到按 1.0。</summary>
+        /// <summary>
+        /// 当前窗口所在显示器的缩放（96 DPI = 1.0），上限 3 倍；取不到按 1.0。
+        ///
+        /// 2026-11-01：以前这里恒返回 1.0（旧实现去问 Content.XamlRoot，而界面搬去网页壳后
+        /// Content 恒 null，每次都在运行时抛异常被 catch 成 1.0）。于是 150% / 200% 缩放下
+        /// 封面按逻辑像素解码、再由系统放大，看着就是糊的。现在直接问窗口的 DPI。
+        /// ⚠ 档位真值（Thumb 240 / Album 480 / Large 1024）也要跟着按物理像素算，见 CoverVariants。
+        /// </summary>
         private double CoverRasterizationScale()
         {
-            // ⚠ W13 之后这里恒为 1.0，这不是"待办"，是现状：
-            // 旧实现是 `var root = NowPlayingCoverImage?.XamlRoot ?? Content?.XamlRoot;`
-            // 而旧控件在 LegacyControls 里全是 dynamic 声明，shim 的 Image / Window 上根本没有
-            // XamlRoot 这个成员 —— 每次调用都在运行时抛 RuntimeBinderException，被 catch 成 1.0。
-            // 换句话说这个函数从"界面脱离 WinUI"那天起就没成功读过缩放值。
-            //
-            // 这里保留 1.0 而不是改用 GetDpiForWindow：后者会让封面按 1.25/1.5 倍解码，
-            // 内存与解码耗时都会变 —— 那是行为变更，不属于"搬迁"。要真的支持高 DPI 另开任务。
+            try
+            {
+                nint hwnd = _webShellWindow?.Handle ?? nint.Zero;
+                if (hwnd == nint.Zero)
+                {
+                    hwnd = NativeHandle;
+                }
+
+                if (hwnd != nint.Zero)
+                {
+                    uint dpi = GetDpiForWindow(hwnd);
+                    if (dpi >= 96)
+                    {
+                        return Math.Min(3.0, dpi / 96.0);
+                    }
+                }
+            }
+            catch (Exception ex) { StartupLog.WriteException("MainWindow.CoverRasterizationScale", ex); }
+
             return 1.0;
         }
 
@@ -738,20 +752,9 @@ namespace CelesteMusicPlayer
         private Brush ResolveAccentForegroundBrush()
             => ColorHelper.ResolveContrastingForeground(ResolveAccentBrush());
 
-        internal static bool IsClassicUiStyleActive()
-        {
-            string mode;
-            try
-            {
-                mode = AppSettingsStore.Load().UiStyleMode;
-            }
-            catch
-            {
-                return false;
-            }
-
-            return mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
-        }
+        /// <summary>经典界面（不透明风格）已于 2026-11-01 随「界面风格」设置一起删除（用户拍板）。
+        /// 这里恒返回 false，保留方法名是为了不改几十处调用点；网页界面的明暗由网页自己的外观层决定。</summary>
+        internal static bool IsClassicUiStyleActive() => false;
 
         /// <summary>当前是否处于「不透明风格」（经典或极客）：这两类模式下背景图层 / 封面背景 / 预设渐变一律不显示。</summary>
         internal static bool IsOpaqueUiStyleActive() => IsClassicUiStyleActive() || IsGeekUiStyleActive();

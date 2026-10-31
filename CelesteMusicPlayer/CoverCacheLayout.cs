@@ -25,9 +25,10 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 缓存版本号。档位尺寸一改就必须 +1 —— 目录按版本号分开，
         /// 旧版本目录自然失效（不再被读），不用做迁移。
-        /// v1 = Thumb 96；v2 = Thumb 160（2026-10-19）。
+        /// v1 = Thumb 96；v2 = Thumb 160（2026-10-19）；
+        /// v3 = 三档整体上调 + 按屏幕缩放取档（2026-11-01：Thumb 240 / Album 480 / Large 1024）。
         /// </summary>
-        public const int CacheVersion = 2;
+        public const int CacheVersion = 3;
 
         private const string AppFolderName = "CelesteMusicPlayer";
         private const string CacheFolderName = "CoverCache";
