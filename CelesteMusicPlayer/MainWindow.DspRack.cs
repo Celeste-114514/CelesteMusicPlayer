@@ -132,37 +132,7 @@ namespace CelesteMusicPlayer
 
 
 
-        // 压缩器每拍刷新（仅本页可见时轮询）：压缩量读数 + 8 秒折线 + 入口电平。
-        // 绘制全部交给 MainWindow.DspComp.cs，这里只负责把内核读数取出来递过去。
-        private void DspCompGr_Tick(object sender, object e)
-        {
-            UpdateDspCompMeters(_audioEngine?.CompressorGainReductionDb ?? 0f);
-        }
 
-        private void EnsureDspCompGrTimer(bool enable)
-        {
-            if (enable)
-            {
-                if (!_dspCompGrOn)
-                {
-                    _dspCompGrOn = true;
-                    if (_dspCompGrTimer == null)
-                    {
-                        var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                        _dspCompGrTimer = queue.CreateTimer();
-                        _dspCompGrTimer.Interval = TimeSpan.FromMilliseconds(200);
-                        _dspCompGrTimer.Tick += DspCompGr_Tick;
-                    }
-
-                    _dspCompGrTimer.Start();
-                }
-            }
-            else if (_dspCompGrOn)
-            {
-                _dspCompGrOn = false;
-                _dspCompGrTimer?.Stop();
-            }
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 事件：立体声场

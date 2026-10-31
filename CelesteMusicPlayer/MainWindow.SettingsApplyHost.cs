@@ -632,31 +632,4 @@ public sealed partial class MainWindow
 
         // W13 第三十四刀：系统背板
 
-        /// <summary>延后设置 Desktop Acrylic（壁纸色毛玻璃）；失败则回退 Mica / 纯色。</summary>
-        private void TryApplySystemBackdrop()
-        {
-            try
-            {
-                AppSettingsState settings = AppSettingsStore.Load();
-                FrostedGlass.BackdropEnabled = settings.EnableFrostedGlass;
-                if (!settings.EnableFrostedGlass)
-                {
-                    SystemBackdrop = null;
-                    StartupLog.Write("SystemBackdrop disabled by settings");
-                    return;
-                }
-
-                FrostedGlass.ApplyWindowBackdrop(this);
-                StartupLog.Write(
-                    SystemBackdrop is DesktopAcrylicBackdrop
-                        ? "DesktopAcrylicBackdrop applied"
-                        : SystemBackdrop is MicaBackdrop
-                            ? "MicaBackdrop fallback applied"
-                            : "SystemBackdrop cleared");
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("ApplyWindowBackdrop", ex);
-            }
-        }
     }

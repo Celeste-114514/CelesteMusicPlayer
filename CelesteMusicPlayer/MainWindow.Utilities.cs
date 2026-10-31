@@ -507,15 +507,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private ListView? FindAncestorListView(DependencyObject? node)
-        {
-            while (node != null)
-            {
-                if (node is ListView lv) return lv;
-                node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
-            }
-            return null;
-        }
 
 
 

@@ -70,34 +70,6 @@ public sealed partial class MainWindow
             }
         }
 
-        private static void ApplyCapsuleToControl(
-            Control control,
-            double height,
-            CornerRadius capsule,
-            Brush background,
-            Brush? foreground)
-        {
-            control.Height = height;
-            control.MinHeight = height;
-            control.CornerRadius = capsule;
-            control.Background = background;
-            control.BorderThickness = new Thickness(0);
-            control.Padding = new Thickness(14, 0, 14, 0);
-            // 防止按钮被父容器纵向拉伸导致其高度大于胶囊(32)使文字中心落到胶囊下半 → 视觉偏下；
-            // 强制垂直居中对齐 + 相对父容器居中，使文字相对主题胶囊真正垂直居中。
-            control.VerticalAlignment = VerticalAlignment.Center;
-            control.HorizontalContentAlignment = HorizontalAlignment.Center;
-            control.VerticalContentAlignment = VerticalAlignment.Center;
-
-            if (foreground != null)
-            {
-                control.Foreground = foreground;
-            }
-            else
-            {
-                control.ClearValue(Control.ForegroundProperty);
-            }
-        }
 
         /// <summary>
         /// 设置变更后重画进度条：波形配色（渐变/纯色）与白度都是这里读的，

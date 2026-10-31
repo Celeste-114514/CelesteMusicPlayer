@@ -605,67 +605,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void EnterMultiSelectMode(PlaylistItem? preselect)
-        {
-            // 退出专辑 / 文件夹多选，避免两套多选并存
-            if (_multiSelectAlbumGrid != null)
-            {
-                ExitAlbumMultiSelectUiOnly();
-            }
-
-            if (_multiSelectFolderList != null)
-            {
-                ExitFolderMultiSelectUiOnly();
-            }
-
-            ListView? target = ResolveMultiSelectTargetList();
-            if (target == null)
-            {
-                return;
-            }
-
-            _multiSelectTargetList = target;
-            _multiSelectAlbumGrid = null;
-            if (target == PlaylistView)
-            {
-                _playlistItemDefaultStyle ??= PlaylistView.ItemContainerStyle;
-            }
-            else if (target == ArtistTrackListView)
-            {
-                _artistTrackItemDefaultStyle ??= ArtistTrackListView.ItemContainerStyle;
-            }
-            else if (target == AlbumTrackListView)
-            {
-                _albumTrackItemDefaultStyle ??= AlbumTrackListView.ItemContainerStyle;
-            }
-
-            _isMultiSelectMode = true;
-            SetListSelectionMode(target, ListViewSelectionMode.Multiple);
-
-            ConfigureMultiSelectPrimaryAction();
-            UpdateSelectAllMultiSelectButtonState();
-            UpdateUserPlaylistActionBarVisibility();
-            ApplyAccentSelectionResources(target);
-            ApplyMultiSelectItemStyle(target);
-            UpdateLibrarySearchUi();
-            if (target == PlaylistView)
-            {
-            }
-
-            if (preselect != null)
-            {
-                try
-                {
-                    target.SelectedItems.Add(preselect);
-                }
-                catch
-                {
-                    target.SelectedItem = preselect;
-                }
-            }
-
-            DispatcherQueue.TryEnqueue(RefreshMultiSelectItemBackgrounds);
-        }
 
 
 
@@ -1308,26 +1247,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 关闭系统默认选中底（方角），选中态改由模板内 SongRowChrome / AlbumRowChrome 圆角 Border 绘制。
-        /// 多选状态下内容铺满由 ListViewItem 覆盖模板的 ContentPresenter=Stretch 保证。
-        /// </summary>
-        private void ApplyMultiSelectItemStyle(ListView target)
-        {
-            ApplyAccentSelectionResources(target);
-
-            var style = new Style(typeof(ListViewItem));
-            style.Setters.Add(new Setter(ListViewItem.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
-            style.Setters.Add(new Setter(ListViewItem.VerticalContentAlignmentProperty, VerticalAlignment.Stretch));
-            style.Setters.Add(new Setter(ListViewItem.PaddingProperty, new Thickness(0)));
-            style.Setters.Add(new Setter(ListViewItem.MinHeightProperty, 40.0));
-            style.Setters.Add(new Setter(ListViewItem.BackgroundProperty, new SolidColorBrush(Colors.Transparent)));
-            style.Setters.Add(new Setter(ListViewItem.CornerRadiusProperty, new CornerRadius(8)));
-            style.Setters.Add(new Setter(ListViewItem.MarginProperty, new Thickness(0, 2, 0, 2)));
-            style.Setters.Add(new Setter(ListViewItem.BorderThicknessProperty, new Thickness(0)));
-            target.ItemContainerStyle = style;
-            RefreshAllSongListSelectionChrome();
-        }
 
 
 
@@ -1338,20 +1257,11 @@ namespace CelesteMusicPlayer
 
 
 
-        private void RefreshMultiSelectItemBackgrounds() => RefreshAllSongListSelectionChrome();
-
-        private void RefreshAllSongListSelectionChrome()
-        {
-            RefreshPlaylistSelectionChrome();
-            RefreshArtistTrackSelectionChrome();
-            RefreshAlbumTrackSelectionChrome();
-        }
 
 
 
 
-        private void RefreshAlbumTrackSelectionChrome()
-            => RefreshRealizedSongListSelectionChrome(AlbumTrackListView);
+
 
         /// <summary>
         /// 歌曲列表 / 多选：选中为圆角主题色矩形（画在 SongRowChrome 上）；
@@ -1391,10 +1301,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>刷新「全选」图标。恒早退：_isMultiSelectMode 恒 false（见上）。</summary>
-        private void UpdateSelectAllMultiSelectButtonState()
-        {
-        }
         // 多选范围选择挂接（2026-10-31 从 MainWindow.Misc.cs 搬来）：多选域随 Playback2。
 
         /// <summary>给列表挂上 Shift 连选一段 / Ctrl 跳选（转发到共用实现 RangeMultiSelect）。</summary>

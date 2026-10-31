@@ -790,8 +790,6 @@ namespace CelesteMusicPlayer
 
 
 
-        private static Color Lighten(Color c, double t)
-            => Color.FromArgb(255, (byte)(c.R + (255 - c.R) * t), (byte)(c.G + (255 - c.G) * t), (byte)(c.B + (255 - c.B) * t));
 
         private static Color Darken(Color c, double t)
             => Color.FromArgb(255, (byte)(c.R * (1 - t)), (byte)(c.G * (1 - t)), (byte)(c.B * (1 - t)));

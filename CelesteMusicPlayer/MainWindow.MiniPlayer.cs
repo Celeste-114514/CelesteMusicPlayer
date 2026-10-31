@@ -45,8 +45,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>标题栏按钮列入口（MainWindow.xaml TitleBarFloatingButtons）。</summary>
-        private void MiniPlayerButton_Click(object sender, RoutedEventArgs e) => ShowMiniPlayerWindow();
 
         /// <summary>设置里开了「启动时打开迷你播放器」时，首次激活后调一次。</summary>
         internal void OpenMiniPlayerIfStartupEnabled()
