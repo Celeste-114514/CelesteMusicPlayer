@@ -116,8 +116,8 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
   - 关闭窗口时的「缩到托盘 / 退出 / 每次询问」策略
   - 滚轮调节音量、空格暂停、左右方向键快进退 —— 这三项将在网页界面重新提供
 - 📦 发布说明
-  - `CelesteMusicPlayer-Setup-26.11.1.exe`（框架依赖，需 .NET 10 桌面运行时，25.3MB）
-  - `CelesteMusicPlayer-Setup-SC-26.11.1.exe`（自包含，不依赖本机 .NET，62.8MB）
+  - `CelesteMusicPlayer-Setup-26.11.1.0.exe`（框架依赖，需 .NET 10 桌面运行时，25.3MB）
+  - `CelesteMusicPlayer-Setup-SC-26.11.1.0.exe`（自包含，不依赖本机 .NET，62.8MB）
   - `SHA256SUMS.txt` 随附，应用内更新据此校验
   - 可直接覆盖安装，设置与曲库保留
 
