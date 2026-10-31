@@ -153,3 +153,37 @@ Playback4 2 / AppFlow 2 / ExternalFile 2 / WebBrowseActions 2 / WebTags 2。
 ⚠ 遗留（不影响功能，属死代码）：`SettingsWindow.xaml.cs` / `SettingsPanelControl.xaml.cs` 里
 还有极客下拉项与磷光色设置（这两个是已停用的旧原生设置窗口，入口早已改成切面板）；
 `AppSettingsStore.GeekPhosphorColor` 字段与 `PhosphorColor()` 仍在，等旧界面整体退休时一并清。
+
+---
+
+# 批 23-26：多选 / 文件夹浏览 / 行样式入口 / 进度条手势（118 → 68）
+
+极客皮肤删掉后，好几处「原本连着 GeekBrowse」的成员变干净了，顺着一路收。
+
+| 批 | 提交 | 内容 | 账面 |
+|---|---|---|---|
+| 23 | `5a20ad4` | 新 `MainWindow.MultiSelectHost.cs`（250 行）：选择模式安全切换（None 中转）、多选目标解析、专辑/文件夹多选退出、媒体条主按钮语义、单元格详情文案 | 118→100 |
+| 24 | `5a20ad4` | 新 `MainWindow.FolderBrowseHost.cs`（262 行）：文件夹树搜索跳转（上/下一条、跳到第 N 条、按路径展开）、导航条刷新、根节点重建、子项枚举、展开收起、音频扩展名判定 | 100→80 |
+| 25 | `a19ca4f` | 三个 `ContainerContentChanging`（专辑墙/艺术家专辑/文件夹浏览）并入 SelectionChromeHost —— 极客方角调用删掉后它们已自足 | 80→74 |
+| 26 | `9e33236` | 新 `MainWindow.SeekGestureHost.cs`：进度条按下/松开/丢捕获 + `EndNowPlayingSeekGesture` | 74→68 |
+
+## 两个必须记住的坑
+
+1. **`MainWindow.NowPlayingLayout.cs` 不参与编译**：它在 csproj 的 `_w13_npcluster` 排除块里
+   （连同 Terminal/TerminalLyrics/Visualizer）。批 26 一开始把进度条手势搬进它，编译立刻报
+   「找不到方法」——搬到那里等于删掉。**判断目标文件是否活，不能只看壳清单，还要看 csproj 的
+   Compile Remove 块。**
+2. **手写垫底成员后必须删原件**：批 23/24 连续两次踩到，手写 `IsMultiSelectSelection`、
+   `IsSupportedAudioFile` 垫在目标文件里，工具又搬来一份 → CS0111。
+   正确做法：垫底只用一个**不会被搬**的临时字段，搬完再删。
+
+## 验证
+
+Rebuild 0 错误；publish DLL 2,978,304 字节 / 269 文件；接口回归 failures+jsErrors 空、exitCode 0；
+实播 `ok=true`、pos 8.09。出货已同步，回退件 `dist/web-ui-20261028-pre-w13-seekgesture-20261031`。
+
+## 剩余 68 错
+
+Playback 16 / Playback3 16 / Playback2 14 / xaml.cs 8 / SettingsHost 6 / 零散 8。
+xaml.cs 只剩 4 个（`MainWindow_Loaded` / `FirstActivated` / `Closed` / `LibraryPaneRoot_PointerPressed`），
+全连着主题域或导航历史域——属于下一阶段的大件，不适合小刀。
