@@ -11,11 +11,14 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     // 系统接管拖动（HTCAPTION）的时间戳：网页侧那条 drag-start 轮询要避开这窗口，
     // 否则两套机制同时移窗口会互相打架。
     private long _systemDragTicks;
-    internal bool SystemDragActive => Environment.TickCount64 - Interlocked.Read(ref _systemDragTicks) < 400;
+    private bool _systemMoving;
+    internal bool SystemDragActive => _systemMoving;
     internal event Action? TaskbarRecreated;
     [System.Runtime.InteropServices.DllImport("user32.dll",CharSet=System.Runtime.InteropServices.CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
     protected override void WndProc(ref System.Windows.Forms.Message message)
     {
+        if (message.Msg == 0x231) _systemMoving = true;
+        if (message.Msg == 0x232) _systemMoving = false;
         if ((uint)message.Msg == TaskbarCreatedMessage) { TaskbarPreview?.Enable(); TaskbarRecreated?.Invoke(); }
         if (TaskbarPreview?.Handle((uint)message.Msg, message.LParam) == true) { message.Result = 0; return; }
         // 网页自绘 chrome 的窗口没有非客户区，系统给的最大化矩形就是整块显示器（连任务栏一起盖住），
@@ -27,8 +30,13 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
             message.Result = 0;
             return;
         }
-        if (message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { Interlocked.Exchange(ref _systemDragTicks, Environment.TickCount64); message.Result = (nint)2; return; }
-        if (message.Msg == 0x83 && this is WebShellWindow) { message.Result = 0; return; }
+        if (this is not WebShellWindow && message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { Interlocked.Exchange(ref _systemDragTicks, Environment.TickCount64); message.Result = (nint)2; return; }
+        if (this is WebShellWindow)
+        {
+            if (message.Msg == 0x83 || message.Msg == 0x85) { message.Result = 0; return; } // No non-client frame to size or paint.
+            if (message.Msg == 0x86) { message.Result = 1; return; } // Activation must not repaint the removed frame.
+
+        }
         base.WndProc(ref message);
     }
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]

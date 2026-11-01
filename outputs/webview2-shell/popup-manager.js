@@ -66,7 +66,8 @@
     const availableBelow = viewportHeight - top - margin;
     const availableAbove = anchorRect.top - gap - margin;
     let maxHeight = options.maxHeight ?? 360;
-    if (side === 'top') maxHeight = Math.min(maxHeight, Math.max(120, availableAbove));
+    if (options.fitViewport) maxHeight = Math.min(maxHeight, viewportHeight - 2 * margin);
+    else if (side === 'top') maxHeight = Math.min(maxHeight, Math.max(120, availableAbove));
     else maxHeight = Math.min(maxHeight, Math.max(120, availableBelow));
 
     left = Math.max(margin, Math.min(left, viewportWidth - size.width - margin));

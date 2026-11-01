@@ -32,3 +32,5 @@
    几何与滤镜必须和 #bg-layer::before 完全一致，否则新旧两层会在边缘错开、模糊也不一样。 */
 #bg-layer .bg-ghost{position:absolute;inset:-6%;background-size:var(--bg-fit);background-position:var(--bg-pos);background-repeat:no-repeat;filter:blur(var(--bg-blur)) brightness(var(--bg-brightness));opacity:1;pointer-events:none;transition:opacity var(--dur-theme) var(--ease-continuity)}
 #bg-layer .bg-ghost.is-out{opacity:0}
+
+body.is-maximized{padding:0!important}body.is-maximized .shell{border-radius:0!important;border:0!important}body.is-maximized .now-playing-page{border-radius:0}

@@ -46,10 +46,12 @@
   }
   /* 主窗已经没有原生边框了（聚焦时那圈主题色带就是它画的），改大小由这里接管：
      离窗口边 6px 内按下 -> 发 resize-start 带边名，宿主起循环按光标位移重设窗口。 */
+  document.addEventListener('celeste:message', e=>{if(e.detail.kind==='celeste.window')document.body.classList.toggle('is-maximized',!!e.detail.maximized);});
   const EDGE=6;
   const CURSORS={n:'ns-resize',s:'ns-resize',e:'ew-resize',w:'ew-resize',
                  ne:'nesw-resize',sw:'nesw-resize',nw:'nwse-resize',se:'nwse-resize'};
   function edgeAt(x,y){
+    if(document.body.classList.contains('is-maximized'))return '';
     const w=window.innerWidth,h=window.innerHeight;
     let e='';
     if(y<EDGE)e+='n';else if(y>=h-EDGE)e+='s';
@@ -76,7 +78,7 @@
     const surface=pickSurface();
     if(!surface||!surface.contains(target))return;
     e.preventDefault();
-    try{surface.setPointerCapture(e.pointerId);}catch{}
+    // Let Windows capture the pointer during its native move loop.
     dragging=true;
     window.CelesteShell.send('window',{action:'drag-start'});
   }

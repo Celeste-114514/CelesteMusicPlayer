@@ -15,5 +15,5 @@
 #browse-page .album-sort-actions{flex-wrap:wrap;justify-content:flex-end;max-width:70%}#browse-page .album-sort-actions .secondary{margin:0;height:38px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}#browse-page .albums-heading{gap:18px}
 @media(max-width:850px){#browse-page .album-sort-actions{max-width:100%;justify-content:flex-start}.playlist-detail-cover{width:88px;height:88px}}
 
-.track-context-menu{max-height:min(360px,calc(100vh - 32px));overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.track-context-menu{max-height:calc(100vh - 16px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .track-selection-bar{flex-wrap:wrap}

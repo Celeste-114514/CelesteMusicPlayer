@@ -99,7 +99,8 @@
       placement: 'bottom-start',
       gap: 0,
       margin: 8,
-      maxHeight: Math.max(220, window.innerHeight - 16),
+      maxHeight: window.innerHeight - 16,
+      fitViewport: true,
       exclusive: true,
       onClose: () => { epoch++; }
     });
@@ -158,7 +159,9 @@
 
   async function openTracks(row, x, y) {
     if (busy) return;
-    if (scope !== container(row) || !selected.has(key(row))) { reset(); scope = container(row); selected.add(key(row)); anchor = row; paint(); }
+    if (scope !== container(row)) reset();
+    scope = container(row);
+    if (!selected.has(key(row))) { selected.clear(); selected.add(key(row)); anchor = row; paint(); }
     close();                       // 关掉上一个；epoch 也跟着前进
     returnFocus = row;
     const generation = epoch;
@@ -191,6 +194,8 @@
     if (queue) { button(element, '置顶', () => invoke('pin')); button(element, '从播放队列中删除', () => invoke('removeQueue')); }
     else { button(element, '添加至播放队列', () => invoke('addQueue')); button(element, '添加到播放列表', () => invoke('addPlaylist')); }
     button(element, '多选', () => { multi = true; paint(); row.focus({ preventScroll: true }); });
+    button(element, '全选', () => { multi = true; rows().forEach(item=>selected.add(key(item))); paint(); });
+    button(element, '全不选', () => { multi = true; selected.clear(); paint(); });
     divider(element);
     button(element, caps.favorite ? '取消喜欢' : '添加到我喜欢的音乐', () => invoke('favorite', { value: !caps.favorite }));
     const ratings = document.createElement('div');
@@ -206,6 +211,8 @@
     button(element, '定位到专辑', () => window.CelesteAlbums.openForTrack(snapshot.trackIds?.[0] || snapshot.entries?.[0].trackId), items.length !== 1);
     divider(element);
     button(element, caps.canDelete ? '从磁盘删除（回收站）' : '从磁盘删除（不可用）', () => invoke('delete'), !caps.canDelete);
+    element.style.maxHeight=(window.innerHeight-16)+'px';
+    const entry=popup.stack.find(entry=>entry.id===MENU_ID);if(entry)popup.reposition(entry);
     element.querySelector('button:not(:disabled)')?.focus({ preventScroll: true });
   }
 

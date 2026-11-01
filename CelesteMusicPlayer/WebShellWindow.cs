@@ -82,6 +82,7 @@ namespace CelesteMusicPlayer
             Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00040000, true);   // WS_THICKFRAME
             AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+            Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00C00000, true); // Retain caption capabilities; NCCALCSIZE removes its visual area.
             SetFrameless(Handle);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
@@ -115,6 +116,11 @@ namespace CelesteMusicPlayer
             };
         }
 
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (_ready && !_closed) DispatcherQueue.TryEnqueue(() => { if (_ready && !_closed) SendWindowState(); });
+        }
         private bool _forceClose;
         internal void CloseForExit() { _forceClose = true; Close(); }
 
@@ -134,7 +140,7 @@ namespace CelesteMusicPlayer
             if (args.DidPresenterChange) SendWindowState();
         }
 
-        private void SendWindowState() => Post(new { kind = "celeste.window", version = 1, fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen });
+        private void SendWindowState() => Post(new { kind = "celeste.window", version = 1, fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, maximized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized } });
 
         private void SendVisibility() => Post(new
         {
@@ -212,7 +218,7 @@ namespace CelesteMusicPlayer
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
-                core.Settings.IsNonClientRegionSupportEnabled = true;
+                core.Settings.IsNonClientRegionSupportEnabled = false; // JS forwards one native move loop; Chromium must not also capture CSS drag regions.
                 core.NavigationStarting += (_, args) => { if (!IsTrusted(args.Uri)) args.Cancel = true; };
                 // 网页里的外链一律由宿主代开：只放行 https 官方站点（ExternalLink 里判），
                 // 剩下的一律吞掉，避免导航把整个外壳页面顶掉。
@@ -640,11 +646,21 @@ namespace CelesteMusicPlayer
         private void StartWindowDrag()
         {
             if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
-                presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
+                !IsLeftButtonDown()) return;
             // 原生 HTCAPTION 已经接管这次拖动时不要再起轮询线程，两套一起移窗口会抖。
             if (SystemDragActive) return;
+            if (presenter.State == OverlappedPresenterState.Maximized &&
+                NativeMethods.GetCursorPos(out var cursor) && NativeMethods.GetWindowRect(Handle, out var maximized))
+            {
+                double ratio = Math.Clamp((cursor.X - maximized.Left) / (double)Math.Max(1,maximized.Right-maximized.Left),0,1);
+                presenter.Restore();
+                if (NativeMethods.GetWindowRect(Handle, out var restored))
+                    NativeMethods.SetWindowPos(Handle, IntPtr.Zero,
+                        cursor.X-(int)((restored.Right-restored.Left)*ratio), cursor.Y-(int)(24*DeviceDpi/96.0),
+                        0,0,SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
             NativeReleaseCapture();
-            NativeSendMessage(Handle, 0xA1, (nint)2, 0); // WM_NCLBUTTONDOWN / HTCAPTION
+            NativeSendMessage(Handle, 0x112, (nint)0xF012, 0); // SC_MOVE | HTCAPTION; use the current physical cursor.
         }
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="ReleaseCapture")]
         private static extern bool NativeReleaseCapture();

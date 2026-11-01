@@ -87,7 +87,8 @@
   function sync(){
     const state=shell.getState();receivedAt=performance.now();
     if(trackId!==state.trackId){trackId=state.trackId;generation++;target=[];displayed=[];hasSignal=false;signal.setAttribute('d','M0 257H800');drawOverview([]);}
-    $('np-artist').textContent=(theme==='instrument'?state.artist:[state.artist,state.album].filter(Boolean).join(' · '))||'—';
+    $('np-artist').textContent=state.artist||'—';
+    $('np-album').textContent=state.album||'';
     $('np-title').dataset.album=state.album?`FROM · ${state.album}`:'CELESTE · AUDIO INSTRUMENT';
     text('np-visual-source',state.source||'—');text('np-visual-quality',state.quality||'—');text('np-visual-duration',fmt(state.duration));facts(state);
     $('np-overview').style.setProperty('--position',`${num((state.position||0)/Math.max(1,state.duration||1))*100}%`);

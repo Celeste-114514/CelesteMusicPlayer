@@ -75,7 +75,8 @@
   function render() {
     const state = shell.getState();
     titleEl.textContent = state.title || '没有正在播放的歌曲';
-    artistEl.textContent = (page.dataset.playerTheme === 'instrument' ? state.artist : [state.artist, state.album].filter(Boolean).join(' · ')) || '—';
+    artistEl.textContent = state.artist || '—';
+    $('np-album').textContent = state.album || '';
     const quality = $('track-quality')?.textContent || '';
     metaEl.textContent = quality && !/等待播放/.test(quality) ? quality : '';
     metaEl.hidden = !metaEl.textContent;
@@ -128,7 +129,8 @@
         row.className = 'np-lyric' + (line.tr ? ' is-translation' : '');
         row.dataset.time = String(line.t);
         row.dataset.index = String(index);
-        row.textContent = line.text || ' ';
+        const bilingual=!line.tr&&(line.text||'').match(/^(.+?)\s+\/\s+(.+[\u3400-\u9fff].*)$/);
+        if(bilingual){row.append(document.createTextNode(bilingual[1]));const translation=document.createElement('span');translation.className='np-inline-translation';translation.textContent=bilingual[2];row.append(translation);}else row.textContent = line.text || ' ';
         // 有时间才能点着跳；纯文本歌词只展示，不装作能定位
         if (line.t >= 0 && shell.getState().duration > 0) {
           row.addEventListener('click', () => {

@@ -194,3 +194,27 @@ button.mini-cover:hover::after{
 /* 详情页「音频仪表 / 音频终端」主题自带真频谱，不再显示这条注入的波形（用户 2026-11-01 反馈重复） */
 #now-playing[data-player-theme="instrument"] .np-spectrum,
 #now-playing[data-player-theme="terminal"] .np-spectrum{display:none!important}
+
+/* Approved default detail layout: a reading column and one shared transport area. */
+.np-album{display:none}
+#now-playing[data-player-theme=default] .np-body{width:min(1240px,100%);margin:0 auto;grid-template-columns:minmax(260px,400px) minmax(0,1fr);grid-template-rows:auto auto auto auto minmax(0,1fr) auto auto auto;column-gap:72px;row-gap:0;padding:36px 28px 28px;overflow:auto;align-content:start}
+#now-playing[data-player-theme=default] .np-left{display:contents}
+#now-playing[data-player-theme=default] .np-artwork{grid-column:1;grid-row:1;width:min(320px,100%,max(180px,calc(100dvh - 530px)));justify-self:center;margin-bottom:26px}
+#now-playing[data-player-theme=default] .np-cover{width:100%;border-radius:18px}
+#now-playing[data-player-theme=default] :is(.np-title,.np-artist,.np-album,.np-meta,.np-spectrum){grid-column:1;width:min(320px,100%);justify-self:center;align-self:start;max-width:100%}
+#now-playing[data-player-theme=default] .np-title{grid-row:2;font-size:calc(30px * var(--text-scale));margin:0 0 10px}
+#now-playing[data-player-theme=default] .np-artist{grid-row:3;font-size:calc(15px * var(--text-scale));margin-bottom:6px}
+#now-playing[data-player-theme=default] .np-album{display:block;grid-row:4;font-size:calc(13px * var(--text-scale));line-height:1.6;color:var(--muted);margin-bottom:18px}
+#now-playing[data-player-theme=default] .np-meta{grid-row:5;font-size:calc(10px * var(--text-scale));line-height:1.7}
+#now-playing[data-player-theme=default] .np-spectrum{grid-row:6;height:44px;margin:24px 0 30px}
+#now-playing[data-player-theme=default] .np-right{grid-column:2;grid-row:1/7;min-height:220px;align-self:stretch}
+#now-playing[data-player-theme=default] .np-lyrics{padding: min(21vh,160px) 0}
+#now-playing[data-player-theme=default] .np-lyric{padding:13px 0;line-height:1.7}
+#now-playing[data-player-theme=default] .np-lyric.is-current:not(.is-translation){font-size:calc(25px * var(--text-scale));transform:none}
+#now-playing[data-player-theme=default] .np-progress{grid-column:1/-1;grid-row:7;margin:12px 0 0;padding-top:22px;border-top:1px solid var(--line);width:100%;align-self:end}
+#now-playing[data-player-theme=default] .np-controls{grid-column:1/-1;grid-row:8;justify-content:center;gap:28px;padding-top:20px}
+body.is-maximized #now-playing{border-radius:0}
+@media(max-width:900px){#now-playing[data-player-theme=default] .np-body{column-gap:28px;grid-template-columns:minmax(210px,35%) minmax(0,1fr);padding:20px}#now-playing[data-player-theme=default] .np-title{font-size:24px}#now-playing[data-player-theme=default] .np-lyric.is-current:not(.is-translation){font-size:21px}}
+@media(max-height:700px){#now-playing[data-player-theme=default] .np-body{padding-top:10px}#now-playing[data-player-theme=default] .np-artwork{width:180px;margin-bottom:14px}#now-playing[data-player-theme=default] .np-spectrum{height:28px;margin:12px 0}#now-playing[data-player-theme=default] .np-controls{padding-top:12px}}
+
+#now-playing[data-player-theme=default] .np-inline-translation{display:block;font-size:calc(14px * var(--text-scale));font-weight:400;color:var(--muted);line-height:1.7;margin-top:6px}
