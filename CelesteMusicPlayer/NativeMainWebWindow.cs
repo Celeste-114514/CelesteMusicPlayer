@@ -33,7 +33,10 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         if (this is not WebShellWindow && message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { Interlocked.Exchange(ref _systemDragTicks, Environment.TickCount64); message.Result = (nint)2; return; }
         if (this is WebShellWindow)
         {
-            if (message.Msg == 0x83 || message.Msg == 0x85) { message.Result = 0; return; } // No non-client frame to size or paint.
+            // Do not preserve/copy old client pixels across acrylic resizes: the transparent
+            // WebView surface must repaint at its new size, including the former caption area.
+            if (message.Msg == 0x83) { message.Result = message.WParam != 0 ? (nint)0x300 : 0; return; } // WVR_REDRAW
+            if (message.Msg == 0x85) { message.Result = 0; return; }
             if (message.Msg == 0x86) { message.Result = 1; return; } // Activation must not repaint the removed frame.
 
         }

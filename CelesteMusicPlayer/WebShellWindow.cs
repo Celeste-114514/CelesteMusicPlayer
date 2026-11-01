@@ -670,54 +670,16 @@ namespace CelesteMusicPlayer
         private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
         private void StopWindowDrag() => Interlocked.Increment(ref _dragGeneration);
 
-        /// <summary>
-        /// 自绘边缘改大小：网页在离窗口边 6px 内按下时发 edge（n/s 与 e/w 可组合），
-        /// 这里起一条后台线程按光标位移重算窗口矩形。和拖动同源：靠 GetAsyncKeyState 判活，
-        /// 因为按住期间 WebView 收不到 pointerup。与拖动共用 _dragGeneration，
-        /// 新的拖动/改大小会立刻顶掉上一个循环。
-        /// </summary>
+        /// <summary>Use the Windows sizing loop so acrylic and WebView bounds follow the same UI-thread resize lifecycle.</summary>
         private void StartWindowResize(string edge)
         {
-            if (_closed || string.IsNullOrEmpty(edge) ||
-                AppWindow.Presenter is not OverlappedPresenter presenter ||
-                presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
-            IntPtr hwnd = Handle;
-            if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out var cursor) ||
-                !NativeMethods.GetWindowRect(hwnd, out var bounds)) return;
-            bool west = edge.Contains('w'), east = edge.Contains('e');
-            bool north = edge.Contains('n'), south = edge.Contains('s');
-            if (!west && !east && !north && !south) return;
-            int startX = cursor.X, startY = cursor.Y;
-            int left0 = bounds.Left, top0 = bounds.Top;
-            int width0 = bounds.Right - bounds.Left, height0 = bounds.Bottom - bounds.Top;
-            int minWidth = MinimumSize.Width, minHeight = MinimumSize.Height;
-            int ticket = Interlocked.Increment(ref _dragGeneration);
-            new Thread(() =>
-            {
-                bool preciseTimer = NativeMethods.timeBeginPeriod(1) == 0;
-                try
-                {
-                    int lastX = left0, lastY = top0, lastW = width0, lastH = height0;
-                    while (Volatile.Read(ref _dragGeneration) == ticket && IsLeftButtonDown())
-                    {
-                        if (!NativeMethods.GetCursorPos(out var point)) break;
-                        int dx = point.X - startX, dy = point.Y - startY;
-                        int x = left0, y = top0, w = width0, h = height0;
-                        if (west) { x = left0 + dx; w = width0 - dx; if (w < minWidth) { w = minWidth; x = left0 + width0 - minWidth; } }
-                        else if (east) { w = Math.Max(minWidth, width0 + dx); }
-                        if (north) { y = top0 + dy; h = height0 - dy; if (h < minHeight) { h = minHeight; y = top0 + height0 - minHeight; } }
-                        else if (south) { h = Math.Max(minHeight, height0 + dy); }
-                        if (x != lastX || y != lastY || w != lastW || h != lastH)
-                        {
-                            if (!NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, x, y, w, h,
-                                SWP_NOZORDER | SWP_NOACTIVATE)) break;
-                            lastX = x; lastY = y; lastW = w; lastH = h;
-                        }
-                        Thread.Sleep(4);
-                    }
-                }
-                finally { if (preciseTimer) NativeMethods.timeEndPeriod(1); }
-            }) { IsBackground = true, Name = "Celeste window resize" }.Start();
+            if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
+                presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown() || SystemDragActive) return;
+            int border = edge switch { "w" => 1, "e" => 2, "n" => 3, "nw" => 4, "ne" => 5, "s" => 6, "sw" => 7, "se" => 8, _ => 0 };
+            if (border == 0) return;
+            StopWindowDrag();
+            NativeReleaseCapture();
+            NativeSendMessage(Handle, 0x112, (nint)(0xF000 | border), 0); // SC_SIZE
         }
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
 
