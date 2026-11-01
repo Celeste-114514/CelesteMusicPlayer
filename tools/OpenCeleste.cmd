@@ -1,2 +1,2 @@
 @echo off
-start "" /D "%~dp0..\dist\web-ui-20261028" "%~dp0..\dist\web-ui-20261028\CelesteMusicPlayer.exe"
+start "" /D "%~dp0..\dist\bugfix-20261102-r5-final" "%~dp0..\dist\bugfix-20261102-r5-final\CelesteMusicPlayer.exe"

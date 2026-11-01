@@ -909,7 +909,7 @@
     (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item) && !isBgParam(item) && !/^material-/.test(item.id)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
 
-    const materialCard = section({title:'材质与毛玻璃',note:'Windows 使用亚克力背板，Apple 使用银白磨砂与柔和控件。关闭透明效果可获得更清晰的实色界面。'});
+    const materialCard = section({title:'材质与毛玻璃',note:'Windows 使用 Fluent 配色与磨砂层次，Apple 使用银白磨砂与柔和控件。透明效果作用于界面内部；关闭后可获得更清晰的实色界面。'});
     const materialToggle = node('label', undefined, 'set-row');
     materialToggle.append(node('span', '透明与磨砂效果', 'set-label'));
     const materialInput = document.createElement('input'); materialInput.type = 'checkbox';

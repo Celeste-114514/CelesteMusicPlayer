@@ -119,7 +119,18 @@ namespace CelesteMusicPlayer
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            _web?.ParentWindowPositionChanged();
             if (_ready && !_closed) DispatcherQueue.TryEnqueue(() => { if (_ready && !_closed) SendWindowState(); });
+        }
+        protected override void OnLocationChanged(EventArgs e)
+        {
+            base.OnLocationChanged(e);
+            _web?.ParentWindowPositionChanged();
+        }
+        protected override void OnDpiChanged(System.Windows.Forms.DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            _web?.ParentWindowPositionChanged();
         }
         private bool _forceClose;
         internal void CloseForExit() { _forceClose = true; Close(); }
@@ -265,14 +276,21 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                int style = values.TryGetValue("material-style", out var raw) && int.TryParse(raw, out var parsed) ? parsed : 0;
-                bool transparent = !values.TryGetValue("material-transparency", out var enabled) || enabled != "0";
-                bool highContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
-                bool glass = style > 0 && transparent && !highContrast;
-                int backdrop = glass ? 3 : 1; int dark = mode == "dark" ? 1 : 0;
-                NativeMainWebWindow.SetMaterial(Handle, backdrop, dark);
-                _web.DefaultBackgroundColor = glass ? Microsoft.UI.Colors.Transparent : mode == "dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
-                return glass;
+                // A transparent HWND WebView over the DWM acrylic backdrop leaves stale
+                // surfaces on this host when resizing/moving its top/left edges. Keep the
+                // web material layers, but give their controller and native parent an
+                // opaque, matching base; do not expose unpainted desktop/backdrop pixels.
+                string fallback = mode == "dark" ? "#202020" : "#f3f3f3";
+                string background = values.TryGetValue("bg", out var raw) ? raw : fallback;
+                System.Drawing.Color color;
+                try { color = System.Drawing.ColorTranslator.FromHtml(background); }
+                catch { color = System.Drawing.ColorTranslator.FromHtml(fallback); }
+                BackColor = System.Drawing.Color.FromArgb(255,color.R,color.G,color.B);
+                NativeMainWebWindow.SetMaterial(Handle, 1, mode == "dark" ? 1 : 0);
+                _web.BackColor = BackColor;
+                _web.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255,color.R,color.G,color.B);
+                return false;
+
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.Material", ex); return false; }
         }

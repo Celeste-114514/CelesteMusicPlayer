@@ -150,7 +150,20 @@ internal sealed class NativeWebViewPanel : System.Windows.Forms.Panel
         _core = _controller.CoreWebView2;
         ResizeView(); _controller.IsVisible = true;
     }
-    private void ResizeView() { if (_controller != null) _controller.Bounds = new System.Drawing.Rectangle(0,0,ClientSize.Width,ClientSize.Height); }
+    private void ResizeView()
+    {
+        if (_controller == null) return;
+        var bounds = new System.Drawing.Rectangle(0,0,ClientSize.Width,ClientSize.Height);
+        if (_controller.Bounds != bounds) _controller.Bounds = bounds;
+    }
+    internal void ParentWindowPositionChanged()
+    {
+        if (_controller == null || IsDisposed) return;
+        ResizeView();
+        _controller.NotifyParentWindowPositionChanged();
+    }
+    protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); ParentWindowPositionChanged(); }
+    protected override void OnLayout(System.Windows.Forms.LayoutEventArgs e) { base.OnLayout(e); ResizeView(); }
     protected override void OnResize(EventArgs e) { base.OnResize(e); ResizeView(); }
     internal void Reload() => CoreWebView2.Reload();
     protected override void Dispose(bool disposing) { if(disposing) { _controller?.Close(); _controller=null; } base.Dispose(disposing); }
