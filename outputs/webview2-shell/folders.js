@@ -20,6 +20,7 @@
   async function request(operation,payload={}){if(live)return window.CelesteTransport.request('folders',{operation,...payload});if(operation==='roots')return{nodes:[{id:'demo-root',name:'D:\\Music',path:'D:\\Music',folder:true}],total:allDemo().length,rootCount:1};if(operation==='children')return{nodes:payload.nodeId==='demo-root'?[{id:'demo-rock',name:'Rock',path:'D:\\Music\\Rock',folder:true},{id:'demo-file',name:'Sample.flac',path:'D:\\Music\\Sample.flac',folder:false}]:[]};if(operation==='songs')return{nodeId:payload.nodeId,path:payload.nodeId==='demo-root'?'D:\\Music':'D:\\Music\\Rock',tracks:allDemo()};throw new Error('请在桌面播放器中使用此功能。');}
   const visibleNodes=()=>{const output=[];function walk(items,depth){for(const item of items){output.push({item,depth});if(item.folder&&expanded.has(item.id))walk(cache.get(item.id)||[],depth+1);}}walk(roots,0);return output;};
   function renderTree(focusId){
+    const oldIds=new Set([...tree.children].map(row=>row.dataset.nodeId));
     tree.replaceChildren();
     if(!roots.length){tree.append(node('p','请选择文件夹','setting-note'));return;}
     visibleNodes().forEach(({item,depth})=>{
@@ -41,11 +42,14 @@
       row.addEventListener('keydown',event=>{const rows=[...tree.querySelectorAll('[role=treeitem]')],i=rows.indexOf(row);if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();rows[Math.max(0,Math.min(rows.length-1,i+(event.key==='ArrowDown'?1:-1)))]?.focus();}else if(event.key==='ArrowRight'&&item.folder){event.preventDefault();if(!expanded.has(item.id))toggle(item,true);else rows[i+1]?.focus();}else if(event.key==='ArrowLeft'){event.preventDefault();if(item.folder&&expanded.has(item.id))toggle(item,false);else{const parent=rows.slice(0,i).reverse().find(other=>Number(other.getAttribute('aria-level'))<depth+1);parent?.focus();}}else if(event.key==='Enter'){event.preventDefault();item.folder?select(item):action('play',item);}else if(event.key===' '&&item.folder){event.preventDefault();toggle(item,true);}});
       row.addEventListener('contextmenu',async event=>{event.preventDefault();if(item.folder)window.CelesteTrackMenu?.folder(event,item,action);else{await select(item);const song=list.querySelector('.folder-track');if(song)window.CelesteTrackMenu?.open(song,event.clientX,event.clientY);}});
       tree.append(row);
+      if(focusId&&!oldIds.has(item.id)&&!matchMedia('(prefers-reduced-motion: reduce)').matches) row.animate([{opacity:0,height:'0px',minHeight:'0px',margin:'0px 0',overflow:'hidden'},{opacity:1,height:'36px',minHeight:'36px',margin:'2px 0',overflow:'hidden'}],{duration:200,easing:'ease-out'});
     });if(focusId)[...tree.children].find(row=>row.dataset.nodeId===focusId)?.focus({preventScroll:true});
   }
   async function toggle(item,details){
     treeSelection=item.id;
-    if(expanded.has(item.id)){expanded.delete(item.id);renderTree(item.id);if(details)select(item);return;}
+    if(expanded.has(item.id)){
+      if(!matchMedia('(prefers-reduced-motion: reduce)').matches){const all=[...tree.children],at=all.findIndex(row=>row.dataset.nodeId===item.id),depth=Number(all[at]?.getAttribute('aria-level'));const leaving=[];for(let i=at+1;i<all.length&&Number(all[i].getAttribute('aria-level'))>depth;i++)leaving.push(all[i]);await Promise.all(leaving.map(row=>row.animate([{opacity:1,height:'36px',minHeight:'36px',margin:'2px 0'},{opacity:0,height:'0px',minHeight:'0px',margin:'0px 0'}],{duration:180,fill:'forwards'}).finished.catch(()=>{})));}
+      expanded.delete(item.id);renderTree(item.id);if(details)select(item);return;}
     expanded.add(item.id);renderTree(item.id);if(details)select(item);
     if(cache.has(item.id))return;const generation=epoch;
     if(pending.has(item.id))return;

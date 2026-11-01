@@ -21,6 +21,7 @@ namespace CelesteMusicPlayer
         /// 白名单见 <see cref="AppSettingsStore.ValidStartupCategories"/>；非法值由 Normalize 回退到播放队列。</summary>
         public string StartupCategory { get; set; } = "UserPlaylist";
 
+        public string CloseAction { get; set; } = "Exit";
         public bool AutoRun { get; set; }
 
         /// <summary>0–100</summary>
@@ -728,6 +729,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             RestorePlayback = s.RestorePlayback,
             StartupCategory = s.StartupCategory,
             AutoRun = s.AutoRun,
+            CloseAction = s.CloseAction,
             Volume = s.Volume,
             OutputDeviceId = s.OutputDeviceId,
             OutputMode = s.OutputMode,

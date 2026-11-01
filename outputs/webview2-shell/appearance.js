@@ -872,7 +872,8 @@
       groups.get(preset.group).push(preset);
     });
     groups.forEach((list, name) => {
-      const card = section({ title: name, tag: list.length + ' 套' });
+      const card = node('details', undefined, 'settings-card preset-group');
+      card.append(node('summary', name + ' · ' + list.length + ' 套'));
       const grid = node('div', undefined, 'preset-grid');
       list.forEach(preset => grid.append(presetCard(preset)));
       card.append(grid);

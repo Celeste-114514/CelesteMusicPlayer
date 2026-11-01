@@ -432,7 +432,7 @@
     host.append(volume);
 
     const dsd = section({ title: 'DSD 高级兼容' });
-    addFields(dsd, ['DsdOutputMode', 'DopContainerMode', 'DsdPreloadEnabled', 'AsioFeederEnabled', 'DsdCachePath', 'TranscodeCacheLimitMb']);
+    addFields(dsd, ['DsdOutputMode', 'DopContainerMode', 'AsioFeederEnabled', 'TranscodeCacheLimitMb']);
     host.append(dsd);
   }
 
@@ -659,10 +659,10 @@
   }
 
   function renderStorage(host) {
-    const cache = section({ title: '缓存', note: '三种缓存各管各的：ffmpeg 转码、网络音乐下载、DSD 预载。清理互不影响。' });
+    const cache = section({ title: '缓存', note: 'ffmpeg 转码与网络音乐下载分别管理，清理互不影响。' });
     const grid = node('div', undefined, 'set-grid2');
     const slots = {};
-    ['transcode', 'webdav', 'dsd'].forEach(kind => {
+    ['transcode', 'webdav'].forEach(kind => {
       const box = node('div', undefined, 'set-stat');
       const top = node('div', undefined, 'set-stat-top');
       top.append(node('em', '—'));
@@ -680,11 +680,6 @@
     }));
     actions.append(button('清理下载缓存', async () => {
       const result = await request('cache', { action: 'clear', kind: 'webdav' });
-      await paintCache(slots);
-      status(result.cleared, 'ok');
-    }));
-    actions.append(button('清理 DSD 预载', async () => {
-      const result = await request('cache', { action: 'clear', kind: 'dsd' });
       await paintCache(slots);
       status(result.cleared, 'ok');
     }));
@@ -731,7 +726,7 @@
 
   async function paintCache(slots) {
     if (!live) return;
-    const titles = { transcode: '转码缓存', webdav: '网络音乐下载缓存', dsd: 'DSD 预载缓存' };
+    const titles = { transcode: '转码缓存', webdav: '网络音乐下载缓存' };
     try {
       const stats = await request('cache', { action: 'stats' });
       Object.entries(titles).forEach(([kind, title]) => {

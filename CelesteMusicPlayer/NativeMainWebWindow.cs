@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -28,6 +28,7 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
             return;
         }
         if (message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { Interlocked.Exchange(ref _systemDragTicks, Environment.TickCount64); message.Result = (nint)2; return; }
+        if (message.Msg == 0x83 && this is WebShellWindow) { message.Result = 0; return; }
         base.WndProc(ref message);
     }
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]

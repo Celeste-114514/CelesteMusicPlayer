@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -79,7 +79,7 @@ namespace CelesteMusicPlayer
             //   代价是丢掉系统自带的边缘改大小，改为网页侧发 resize-start + 宿主轮询实现，
             //   与拖动同一条路子（见 window-drag.js 与下方 StartWindowResize）。
             if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(false, false);
-            Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00040000, false);   // WS_THICKFRAME
+            Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00040000, true);   // WS_THICKFRAME
             AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
             SetFrameless(Handle);
@@ -91,6 +91,13 @@ namespace CelesteMusicPlayer
             NetworkLibraryService.Changed += SourcesChanged;
             AppWindow.Changed += BackgroundWindowChanged;
             DispatcherQueue.TryEnqueue(async () => { if (!_closed) await InitializeAsync(); });
+            FormClosing += (_, e) =>
+            {
+                if (_forceClose || e.CloseReason != System.Windows.Forms.CloseReason.UserClosing) return;
+                string behavior = AppSettingsStore.Load().CloseAction;
+                if (behavior == "Tray") { e.Cancel = true; Hide(); }
+                else if (behavior == "Minimize") { e.Cancel = true; if (AppWindow.Presenter is OverlappedPresenter p) p.Minimize(); }
+            };
             Closed += (_, _) =>
             {
                 _closed = true; _ready = false; _timer.Stop();
@@ -107,6 +114,9 @@ namespace CelesteMusicPlayer
                 _web.Dispose();
             };
         }
+
+        private bool _forceClose;
+        internal void CloseForExit() { _forceClose = true; Close(); }
 
         private void SourcesChanged() => DispatcherQueue.TryEnqueue(() => { _dirty = true; _metadataSent.Clear(); });
         internal void NotifySourceStatus(string text) => Post(new { kind = "celeste.sourceStatus", version = 1, message = text });
@@ -633,35 +643,13 @@ namespace CelesteMusicPlayer
                 presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
             // 原生 HTCAPTION 已经接管这次拖动时不要再起轮询线程，两套一起移窗口会抖。
             if (SystemDragActive) return;
-            IntPtr hwnd = Handle;
-            if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out var cursor) ||
-                !NativeMethods.GetWindowRect(hwnd, out var bounds)) return;
-            int offsetX = cursor.X - bounds.Left, offsetY = cursor.Y - bounds.Top;
-            int ticket = Interlocked.Increment(ref _dragGeneration);
-            new Thread(() =>
-            {
-                // Scoped timer resolution: no permanent system/process power setting changes.
-                bool preciseTimer = NativeMethods.timeBeginPeriod(1) == 0;
-                try
-                {
-                    int lastX = bounds.Left, lastY = bounds.Top;
-                    while (Volatile.Read(ref _dragGeneration) == ticket && IsLeftButtonDown())
-                    {
-                        if (!NativeMethods.GetCursorPos(out var point)) break;
-                        int x = point.X - offsetX, y = point.Y - offsetY;
-                        if (x != lastX || y != lastY)
-                        {
-                            // Synchronous call applies backpressure rather than queueing stale moves.
-                            if (!NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0,
-                                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) break;
-                            lastX = x; lastY = y;
-                        }
-                        Thread.Sleep(4);
-                    }
-                }
-                finally { if (preciseTimer) NativeMethods.timeEndPeriod(1); }
-            }) { IsBackground = true, Name = "Celeste window drag" }.Start();
+            NativeReleaseCapture();
+            NativeSendMessage(Handle, 0xA1, (nint)2, 0); // WM_NCLBUTTONDOWN / HTCAPTION
         }
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="ReleaseCapture")]
+        private static extern bool NativeReleaseCapture();
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="SendMessageW")]
+        private static extern nint NativeSendMessage(nint hwnd, uint message, nint wParam, nint lParam);
 
         private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
         private void StopWindowDrag() => Interlocked.Increment(ref _dragGeneration);

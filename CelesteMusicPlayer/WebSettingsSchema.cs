@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -91,6 +91,7 @@ namespace CelesteMusicPlayer
         internal static readonly Def[] Defs = Build().Where(d => d.scope != "native").ToArray();
 
         private static Def[] Build() => In("general",
+                Sel("CloseAction", "点击关闭按钮时", "Exit|退出程序;Minimize|最小化到任务栏;Tray|隐藏到系统托盘"),
                 Bool("AutoRun", "随 Windows 启动", "写入当前用户的启动项；取消勾选会立刻删掉启动项，不是只改数字。"),
                 Sel("StartupCategory", "启动后进入的分类", "UserPlaylist|播放队列;Songs|歌曲;Albums|专辑;Artists|艺术家;AlbumArtists|专辑艺人;Favorites|我喜欢的音乐;Ratings|评分;Recent|最近播放;PlaylistWall|播放列表",
                     "只控制旧主窗口启动时停在哪个分类；网页界面启动时固定进入主页。", scope: "native"),
@@ -237,6 +238,7 @@ namespace CelesteMusicPlayer
         internal static readonly Dictionary<string, Func<AppSettingsState, object?>> Readers = new(StringComparer.Ordinal)
         {
             // general
+            ["CloseAction"] = s => s.CloseAction,
             ["AutoRun"] = s => s.AutoRun,
             ["StartupCategory"] = s => s.StartupCategory,
             ["RestoreLibrary"] = s => s.RestoreLibrary,
@@ -373,6 +375,7 @@ namespace CelesteMusicPlayer
         // —— 写（Patch 用）——
         internal static readonly Dictionary<string, Action<AppSettingsState, JsonElement>> Writers = new(StringComparer.Ordinal)
         {
+            ["CloseAction"] = (s, v) => s.CloseAction = One(v, "Exit", "Minimize", "Tray"),
             ["AutoRun"] = (s, v) => s.AutoRun = Bool(v),
             ["StartupCategory"] = (s, v) => s.StartupCategory = One(v, "UserPlaylist", "Songs", "Albums", "Artists", "AlbumArtists", "Favorites", "Ratings", "Recent", "PlaylistWall"),
             ["RestoreLibrary"] = (s, v) => s.RestoreLibrary = Bool(v),

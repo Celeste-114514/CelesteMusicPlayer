@@ -189,3 +189,5 @@
 .settings-apply-bar button{height:36px;min-width:88px;margin:0!important;padding:0 20px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center}
 .settings-apply-bar .secondary{border:1px solid var(--line);background:var(--panel);color:var(--ink)}
 @media(max-width:1150px){.settings-apply-bar{margin-left:16px;margin-right:16px}}
+
+.preset-group summary{cursor:pointer;padding:8px;font-weight:600}.preset-group[open] summary{margin-bottom:16px}

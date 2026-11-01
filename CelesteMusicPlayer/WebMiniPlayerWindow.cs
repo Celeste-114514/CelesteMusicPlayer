@@ -50,6 +50,7 @@ internal sealed class WebMiniPlayerWindow : NativeMainWebWindow
             p.IsResizable = false; p.IsMaximizable = false;
             p.IsAlwaysOnTop = AppSettingsStore.Load().MiniPlayerAlwaysOnTop;
         }
+        SetFrameless(Handle);
         Resize(false);
         DispatcherQueue.TryEnqueue(Initialize);
         MiniPlayerBridge.StateChanged += StateChanged;
@@ -67,6 +68,16 @@ internal sealed class WebMiniPlayerWindow : NativeMainWebWindow
         if (width == _lastPixelWidth && height == _lastPixelHeight) return;
         AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(width, height));
         _lastPixelWidth = width; _lastPixelHeight = height;
+        using var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int diameter = (int)Math.Round(24 * scale);
+        path.AddArc(0, 0, diameter, diameter, 180, 90);
+        path.AddArc(Width-diameter, 0, diameter, diameter, 270, 90);
+        path.AddArc(Width-diameter, Height-diameter, diameter, diameter, 0, 90);
+        path.AddArc(0, Height-diameter, diameter, diameter, 90, 90);
+        path.CloseFigure();
+        var previous = Region;
+        Region = new System.Drawing.Region(path);
+        previous?.Dispose();
     }
     private void Expand(bool expanded, bool animate)
     {
@@ -154,6 +165,7 @@ internal sealed class WebMiniPlayerWindow : NativeMainWebWindow
     }
     private async void Initialize()
     {
+        SetFrameless(Handle);
         Resize(false);
         try
         {

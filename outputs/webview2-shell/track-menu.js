@@ -46,7 +46,10 @@
     const done = document.createElement('button');
     done.textContent = '完成';
     done.onclick = reset;
-    bar.append(label, operate, done);
+    const all = document.createElement('button'), none = document.createElement('button');
+    all.textContent = '全选'; all.onclick = () => { rows().forEach(row => selected.add(key(row))); paint(); };
+    none.textContent = '全不选'; none.onclick = () => { selected.clear(); paint(); };
+    bar.append(label, all, none, operate, done);
     setBarVisible(true);
   }
 
