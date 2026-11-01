@@ -1,5 +1,4 @@
 using System;
-using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 namespace CelesteMusicPlayer;
@@ -7,10 +6,20 @@ namespace CelesteMusicPlayer;
 internal class NativeMainWebWindow : System.Windows.Forms.Form
 {
     internal NativeTaskbarPreview? TaskbarPreview;
+    protected virtual bool ClientOnlyChrome => false;
+    internal bool UsesClientOnlyChrome => ClientOnlyChrome;
+    protected override System.Windows.Forms.CreateParams CreateParams
+    {
+        get
+        {
+            var parameters = base.CreateParams;
+            if (ClientOnlyChrome)
+                parameters.Style = (parameters.Style & ~0x00C00000) | 0x000F0000;
+            return parameters;
+        }
+    }
     private static readonly uint TaskbarCreatedMessage = RegisterWindowMessage("TaskbarButtonCreated");
-    // 系统接管拖动（HTCAPTION）的时间戳：网页侧那条 drag-start 轮询要避开这窗口，
-    // 否则两套机制同时移窗口会互相打架。
-    private long _systemDragTicks;
+    // Only an actual native move/size loop owns capture; a hit-test alone does not.
     private bool _systemMoving;
     internal bool SystemDragActive => _systemMoving;
     internal event Action? TaskbarRecreated;
@@ -30,12 +39,23 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
             message.Result = 0;
             return;
         }
-        if (this is not WebShellWindow && message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { Interlocked.Exchange(ref _systemDragTicks, Environment.TickCount64); message.Result = (nint)2; return; }
-        if (this is WebShellWindow)
+        if (!ClientOnlyChrome && message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { message.Result = (nint)2; return; }
+        if (ClientOnlyChrome)
         {
-            // Do not preserve/copy old client pixels across acrylic resizes: the transparent
-            // WebView surface must repaint at its new size, including the former caption area.
-            if (message.Msg == 0x83) { message.Result = message.WParam != 0 ? (nint)0x300 : 0; return; } // WVR_REDRAW
+            if (message.Msg == 0x83)
+            {
+                // A maximized thick-frame window extends beyond the work area. Keep its
+                // client inside the work area instead of exposing the hidden resize frame.
+                if (IsZoomed(message.HWnd))
+                {
+                    var rect = System.Runtime.InteropServices.Marshal.PtrToStructure<NRect>(message.LParam);
+                    var info = new NMonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<NMonitorInfo>() };
+                    if (GetMonitorInfoW(MonitorFromRect(ref rect,2),ref info))
+                        System.Runtime.InteropServices.Marshal.StructureToPtr(info.Work,message.LParam,false);
+                }
+                message.Result = message.WParam != 0 ? (nint)0x300 : 0; // WVR_REDRAW
+                return;
+            }
             if (message.Msg == 0x85) { message.Result = 0; return; }
             if (message.Msg == 0x86) { message.Result = 1; return; } // Activation must not repaint the removed frame.
 
@@ -50,6 +70,8 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     private struct NRect { public int Left, Top, Right, Bottom; }
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct NMonitorInfo { public int Size; public NRect Monitor, Work; public int Flags; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool IsZoomed(nint hwnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint MonitorFromRect(ref NRect rect, int flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, int flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMonitorInfoW(nint monitor, ref NMonitorInfo info);
     private static void ClampMaximizeToWorkArea(nint hwnd, nint lParam)
@@ -110,6 +132,9 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
         if (System.IO.File.Exists(iconPath)) Icon = new System.Drawing.Icon(iconPath);
 
+        // The managed and native border models must agree. Mutating only HWND styles
+        // leaves WinForms sizing its children as a standard captioned form on restore.
+        if (ClientOnlyChrome) FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
         AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
         MinimumSize = new System.Drawing.Size(640,480);
         AppWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.Interop.GetWindowIdFromWindow(Handle));
@@ -119,13 +144,23 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     internal static void SetMaterial(nint hwnd,int backdrop,int dark) { DwmSetWindowAttribute(hwnd,38,ref backdrop,4); DwmSetWindowAttribute(hwnd,20,ref dark,4); }
     // 网页自绘 chrome 的窗口收尾：去掉系统那圈 1px 边线，并保留 Win11 圆角。
     // 边线不关的话，聚焦时窗口四周会浮出一条主题色细线（顶部那条粗带的同源问题）。
-    internal static void SetFrameless(nint hwnd)
+    internal static void SetFrameless(nint hwnd, bool clientOnly = false)
     {
+        if (clientOnly)
+        {
+            int disabled=1; // DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED
+            DwmSetWindowAttribute(hwnd,2,ref disabled,4);
+            var margins = new FrameMargins();
+            DwmExtendFrameIntoClientArea(hwnd,ref margins);
+        }
         int rounded=2;          // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND
         DwmSetWindowAttribute(hwnd,33,ref rounded,4);
         int none=unchecked((int)0xFFFFFFFE);   // DWMWA_COLOR_NONE
         DwmSetWindowAttribute(hwnd,34,ref none,4);
     }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct FrameMargins { public int Left, Right, Top, Bottom; }
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(nint hwnd, ref FrameMargins margins);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
     public new void Activate() { if (BackgroundVerification) { AppWindow.Hide(); return; } Show(); base.Activate(); SetForegroundWindow(Handle); }
 }
@@ -150,21 +185,36 @@ internal sealed class NativeWebViewPanel : System.Windows.Forms.Panel
         _core = _controller.CoreWebView2;
         ResizeView(); _controller.IsVisible = true;
     }
+    private bool _aligningParent;
+    private void AlignToParentClient()
+    {
+        // Windows can translate child HWNDs while snapping/restoring custom chrome.
+        // Dock layout alone does not run for that native translation; keep the web
+        // host anchored immediately, not only after the mouse button is released.
+        if (_aligningParent || Dock != System.Windows.Forms.DockStyle.Fill || Parent is not NativeMainWebWindow { UsesClientOnlyChrome: true } parent) return;
+        var bounds = parent.ClientRectangle;
+        if (Bounds == bounds) return;
+        _aligningParent = true;
+        try { Bounds = bounds; }
+        finally { _aligningParent = false; }
+    }
     private void ResizeView()
     {
         if (_controller == null) return;
         var bounds = new System.Drawing.Rectangle(0,0,ClientSize.Width,ClientSize.Height);
         if (_controller.Bounds != bounds) _controller.Bounds = bounds;
     }
+    internal string Geometry => $"panel={Bounds},screen={PointToScreen(System.Drawing.Point.Empty)},controller={_controller?.Bounds},parent={_controller?.ParentWindow}";
     internal void ParentWindowPositionChanged()
     {
         if (_controller == null || IsDisposed) return;
+        AlignToParentClient();
         ResizeView();
         _controller.NotifyParentWindowPositionChanged();
     }
     protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); ParentWindowPositionChanged(); }
-    protected override void OnLayout(System.Windows.Forms.LayoutEventArgs e) { base.OnLayout(e); ResizeView(); }
-    protected override void OnResize(EventArgs e) { base.OnResize(e); ResizeView(); }
+    protected override void OnLayout(System.Windows.Forms.LayoutEventArgs e) { base.OnLayout(e); AlignToParentClient(); ResizeView(); }
+    protected override void OnResize(EventArgs e) { base.OnResize(e); AlignToParentClient(); ResizeView(); }
     internal void Reload() => CoreWebView2.Reload();
     protected override void Dispose(bool disposing) { if(disposing) { _controller?.Close(); _controller=null; } base.Dispose(disposing); }
 }

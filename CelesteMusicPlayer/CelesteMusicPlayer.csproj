@@ -76,6 +76,7 @@
   <!-- 允许 EQ 声道隔离回归测试工程访问 internal 类型 -->
   <ItemGroup>
     <InternalsVisibleTo Include="EqRegression" />
+    <InternalsVisibleTo Include="NativeChromeRegression" />
   </ItemGroup>
 
   <!--

@@ -110,14 +110,14 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 
 **2026-10-27 用户决定：网页壳是正式且唯一的产品主界面。** 原 WinUI 界面源码保留，MainWindow 暂作为隐藏的既有播放/控件后端；正常启动、托盘恢复和文件激活不再展示原主界面，也不提供返回旧界面入口。后续功能都以网页 UI 为落点。
 
-2026-10-28 当前交付目录为 `dist/bugfix-20261102-r5-final/`。用户日常验证统一双击仓库根目录 `打开当前播放器.lnk`，直接启动 EXE，避免批处理黑窗；由 `tools/NewCurrentPlayerShortcut.ps1` 重建。`tools/OpenCeleste.cmd` 保留为工具兼容入口，指向同一目录。旧 dist 目录保留回退，不表示当前运行版本；`dist/web-ui-current/` 当前是普通目录，不是最新版链接。
+2026-10-28 当前交付目录为 `dist/bugfix-20261102-r8/`。用户日常验证统一双击仓库根目录 `打开当前播放器.lnk`，直接启动 EXE，避免批处理黑窗；由 `tools/NewCurrentPlayerShortcut.ps1` 重建。`tools/OpenCeleste.cmd` 保留为工具兼容入口，指向同一目录。旧 dist 目录保留回退，不表示当前运行版本；`dist/web-ui-current/` 当前是普通目录，不是最新版链接。
 
 **交付必须面向不懂代码的用户**：默认同步上述固定运行目录；结论明确“已同步/尚未同步”、是否需重启和回退位置。提交号只是源码回退点，不能当程序入口。若必须更换验证目录，同步更新根目录快捷方式、生成脚本、工具入口和 `先看这里-仓库与验证入口.md`，不要再让用户在多个产物目录找 EXE。
 
 **★ 网页源码唯一真身：`outputs/webview2-shell/`。**
 `dist/*/WebShell/` 是**构建产物**（`CelesteMusicPlayer.csproj:90` 用 `<Content Include="..\outputs\webview2-shell\*...">` 拷过去的），
 **在 dist 下改会被下次构建覆盖，等于白改。** 改完 src 之后要手动 `cp` 同步到正在实跑的那个 dist 目录
-（当前是 `dist/bugfix-20261102-r5-final/WebShell/`）才能立刻看到效果。
+（当前是 `dist/bugfix-20261102-r8/WebShell/`）才能立刻看到效果。
 
 文件：`index.html`、`shell.js`、`shell.css`（主壳）、`navigation.css`、`library.css`、`collections.css`、
 `songs.css`、`corner.css`、`transport*.css|js`、`albums.js`、`artists.js`、`browse.js`、`sort-menus.js`、`waveform.js`。
@@ -211,4 +211,4 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
    - ⚠ **`_webcheck/dsp.png` 那批截图是 10-09/10-10 的，过期**（`EqDsp.cs` 10-17 才改过），
      拿它对版式会把已经改掉的东西又"修"回去。要外观一律读代码。
 
-2026-11-02：当前验证入口已切换 dist/bugfix-20261102-r5-final（旧目录实例仍在运行，不覆盖运行中文件）。桌面“CelesteMusicPlayer 最新测试版”和根目录入口一致。主窗口采用不透明 WebView 底色，Windows/Apple 风格保留网页内部材质层，避免桌面亚克力在缩放时产生残片；外层移动/尺寸/DPI 变化同步 WebView 控制器位置。
+2026-11-02：当前验证入口为 dist/bugfix-20261102-r8，桌面“CelesteMusicPlayer 最新测试版”和根目录入口一致。WinForms 管理的边框属性与 CreateParams 统一为无原生标题栏，保留尺寸边框与最大化能力；原生鼠标消息携带真实屏幕坐标。网页承载面板在吸附/还原时即时对齐客户区；最大化客户区对齐显示器工作区。Windows/Apple 原生透明材质已恢复。tools/NativeChromeRegression 在不切换的独立桌面验证原生与网页几何，不操作用户桌面。

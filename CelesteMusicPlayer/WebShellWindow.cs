@@ -20,6 +20,7 @@ namespace CelesteMusicPlayer
     /// <summary>Single web view. The MainWindow owner remains the sole audio session.</summary>
     internal sealed class WebShellWindow : NativeMainWebWindow
     {
+        protected override bool ClientOnlyChrome => true;
         private const string Origin = "https://celeste.internal";
         // Virtual-host mapped resources bypass WebResourceRequested. Covers use
         // a separate, unmapped host and are served only by this handler.
@@ -69,22 +70,17 @@ namespace CelesteMusicPlayer
             owner.BindNativeTaskbar(Handle);
             TaskbarRecreated += () => owner.BindNativeTaskbar(Handle);
             Title = "Celeste";
+            if (Array.Exists(Environment.GetCommandLineArgs(), a => a == "--window-geometry-test"))
+                Title = "Celeste · 窗口坐标测试";
             _statusLayer.Controls.Add(_status);
             _statusLayer.Controls.Add(_reload);
             _reload.Click += (_, _) => ReloadShell();
             Controls.Add(_web); Controls.Add(_statusLayer); _statusLayer.BringToFront();
-            // 网页自绘 chrome，原生一层一点都不留：标题栏、细边框、可调大小边框全部去掉。
-            // ⚠ 实测（2026-10-30）：只要留着 WS_THICKFRAME，窗口聚焦时系统就会在顶部画出
-            //   一条 7px 的主题色横带（DWM 的 BORDER_COLOR / NCRP / ExtendFrame 都抹不掉）。
-            //   代价是丢掉系统自带的边缘改大小，改为网页侧发 resize-start + 宿主轮询实现，
-            //   与拖动同一条路子（见 window-drag.js 与下方 StartWindowResize）。
-            if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(false, false);
-            Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00040000, true);   // WS_THICKFRAME
-            AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
-            AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
-            Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00C00000, true); // Retain caption capabilities; NCCALCSIZE removes its visual area.
-            SetFrameless(Handle);
+            // The base Form and its CreateParams share a borderless client model.
+            // Native thick-frame/min/max styles retain resizing and Aero Snap, without WS_CAPTION.
+            SetFrameless(Handle, clientOnly: true);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
+            if (Array.Exists(Environment.GetCommandLineArgs(), a => a == "--window-geometry-test")) Location = System.Drawing.Point.Empty;
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += (_, _) => { if (_ready) { TaskbarPreview?.Update(); SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
             _library = (INotifyCollectionChanged)owner.LibraryTracks;
@@ -276,21 +272,14 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                // A transparent HWND WebView over the DWM acrylic backdrop leaves stale
-                // surfaces on this host when resizing/moving its top/left edges. Keep the
-                // web material layers, but give their controller and native parent an
-                // opaque, matching base; do not expose unpainted desktop/backdrop pixels.
-                string fallback = mode == "dark" ? "#202020" : "#f3f3f3";
-                string background = values.TryGetValue("bg", out var raw) ? raw : fallback;
-                System.Drawing.Color color;
-                try { color = System.Drawing.ColorTranslator.FromHtml(background); }
-                catch { color = System.Drawing.ColorTranslator.FromHtml(fallback); }
-                BackColor = System.Drawing.Color.FromArgb(255,color.R,color.G,color.B);
-                NativeMainWebWindow.SetMaterial(Handle, 1, mode == "dark" ? 1 : 0);
-                _web.BackColor = BackColor;
-                _web.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255,color.R,color.G,color.B);
-                return false;
-
+                int style = values.TryGetValue("material-style", out var raw) && int.TryParse(raw, out var parsed) ? parsed : 0;
+                bool transparent = !values.TryGetValue("material-transparency", out var enabled) || enabled != "0";
+                bool highContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
+                bool glass = style > 0 && transparent && !highContrast;
+                int backdrop = glass ? 3 : 1; int dark = mode == "dark" ? 1 : 0;
+                NativeMainWebWindow.SetMaterial(Handle, backdrop, dark);
+                _web.DefaultBackgroundColor = glass ? Microsoft.UI.Colors.Transparent : mode == "dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
+                return glass;
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.Material", ex); return false; }
         }
@@ -660,7 +649,7 @@ namespace CelesteMusicPlayer
             else if (action == "maximize") { if (presenter.State == OverlappedPresenterState.Maximized) presenter.Restore(); else presenter.Maximize(); }
         }
 
-        /// <summary>Track the physical cursor independently of WebView2/UI dispatcher traffic.</summary>
+        /// <summary>Transfer the custom titlebar mouse gesture to the native Windows move loop.</summary>
         private void StartWindowDrag()
         {
             if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
@@ -677,8 +666,7 @@ namespace CelesteMusicPlayer
                         cursor.X-(int)((restored.Right-restored.Left)*ratio), cursor.Y-(int)(24*DeviceDpi/96.0),
                         0,0,SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             }
-            NativeReleaseCapture();
-            NativeSendMessage(Handle, 0x112, (nint)0xF012, 0); // SC_MOVE | HTCAPTION; use the current physical cursor.
+            StartNativeMouseOperation(2); // HTCAPTION
         }
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="ReleaseCapture")]
         private static extern bool NativeReleaseCapture();
@@ -696,8 +684,32 @@ namespace CelesteMusicPlayer
             int border = edge switch { "w" => 1, "e" => 2, "n" => 3, "nw" => 4, "ne" => 5, "s" => 6, "sw" => 7, "se" => 8, _ => 0 };
             if (border == 0) return;
             StopWindowDrag();
+            StartNativeMouseOperation(border + 9); // HTLEFT ... HTBOTTOMRIGHT
+        }
+        private void StartNativeMouseOperation(int hitTest)
+        {
+            if (!NativeMethods.GetCursorPos(out var point)) return;
+            // Native mouse messages require SCREEN coordinates, including negative monitor coordinates.
+            // A zero lParam incorrectly treats the initial press as screen (0,0).
+            nint coordinates = unchecked((nint)((point.X & 0xffff) | ((point.Y & 0xffff) << 16)));
+            StartupLog.Write($"[WindowGeometry] begin hit={hitTest} cursor={point.X},{point.Y} form={Bounds} client={ClientRectangle} web={_web.Geometry}");
             NativeReleaseCapture();
-            NativeSendMessage(Handle, 0x112, (nint)(0xF000 | border), 0); // SC_SIZE
+            NativeSendMessage(Handle, 0xA1, (nint)hitTest, coordinates); // WM_NCLBUTTONDOWN
+            DispatcherQueue.TryEnqueue(SynchronizeWindowGeometry);
+        }
+        private void SynchronizeWindowGeometry()
+        {
+            if (_closed || IsDisposed) return;
+            PerformLayout();
+            _web.Bounds = ClientRectangle;
+            _web.ParentWindowPositionChanged();
+            SendWindowState();
+            StartupLog.Write($"[WindowGeometry] settled maximized={WindowState} form={Bounds} client={ClientRectangle} web={_web.Geometry}");
+        }
+        protected override void OnResizeEnd(EventArgs e)
+        {
+            base.OnResizeEnd(e);
+            DispatcherQueue.TryEnqueue(SynchronizeWindowGeometry);
         }
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
 
