@@ -447,6 +447,96 @@
     setInterval(() => { const now=performance.now(); const delta=(now-lastTick)/1000; lastTick=now; if(!state.playing||document.hidden||seeking)return; state.position=Math.min(state.duration,state.position+delta); if(state.position>=state.duration){if(state.repeat)state.position=0;else if(state.shuffle){const choices=previewQueue.filter(index=>index!==state.index);chooseTrack(choices.length?choices[Math.floor(Math.random()*choices.length)]:state.index)}else stepTrack(1)} render(); },250);
     document.addEventListener('visibilitychange',()=>lastTick=performance.now());
   }
+  // ==== 键盘与滚轮快捷键（2026-11-02）====
+  // 这几条原本挂在旧原生界面的事件上，界面换成网页后一直没生效。重新在网页层实现：
+  //   Space = 播放/暂停 · ← / → = 快退/快进 5 秒 · 滚轮 = 调音量（只在没有可滚动区域的位置）
+  // 三条守卫都不许省：输入框里不拦、弹层/菜单开着不拦、按钮上的空格交给按钮自己。
+  const HOTKEY_SEEK_SECONDS = 5, HOTKEY_VOLUME_STEP = 2, WHEEL_NOTCH = 100;
+  let wheelAccumulator = 0;
+
+  const isTypingTarget = target => target instanceof Element
+    && target.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]') !== null;
+
+  const anyPopupOpen = () => document.querySelector('.ui-popup') !== null;
+
+  // 滚轮的处理原则：**列表还能滚就让它滚，滚到头了再滚才调音量**。
+  // 完全不劫持会让"滚轮调音量"只在底栏一条窄缝里有效；一律劫持又会把页面滚动抢走。
+  // 所以按方向判断：这一下滚轮如果还能让下面的容器动，就放行；动不了才当音量键。
+  function scrollableInDirection(element, deltaY) {
+    let node = element instanceof Element ? element : null;
+    while (node && node !== document.body && node !== document.documentElement) {
+      const overflowY = getComputedStyle(node).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') {
+        const max = node.scrollHeight - node.clientHeight;
+        if (max > 2) {
+          if (deltaY > 0 && node.scrollTop < max - 1) return true;
+          if (deltaY < 0 && node.scrollTop > 1) return true;
+          return false; // 这一层已经滚到头了，交给音量
+        }
+      }
+      node = node.parentElement;
+    }
+    return false;
+  }
+
+  function nudgeVolume(delta) {
+    if (state.volumeEnabled === false) { notify('独占 / ASIO 请用设备硬件音量'); return; }
+    const current = Number(state.volume) || 0;
+    const next = Math.max(0, Math.min(100, Math.round(current + delta)));
+    if (next === current) return;
+    state = { ...state, volume: next };
+    const slider = $('volume');
+    if (slider) { slider.value = String(next); fill(slider); }
+    render();
+    if (live) send('setVolume', { volume: next });
+  }
+
+  function seekBySeconds(seconds) {
+    const duration = Number(state.duration) || 0;
+    if (!duration) return;
+    const next = Math.max(0, Math.min(duration, (Number(state.position) || 0) + seconds));
+    state = { ...state, position: next };
+    render();
+    if (live) send('seek', { seconds: next });
+  }
+
+  document.addEventListener('keydown', event => {
+    // 内层已经处理过的（比如 EQ 曲线图里的方向键）让给它自己
+    if (event.defaultPrevented || event.isComposing) return;
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (isTypingTarget(event.target)) return;
+    if (anyPopupOpen()) return;
+
+    if (event.key === ' ' || event.code === 'Space') {
+      // 焦点在按钮/链接上时空格是它们的激活键，不能抢
+      if (event.target instanceof Element && event.target.closest('button, a, summary, [role="button"]')) return;
+      event.preventDefault();
+      togglePlay();
+      return;
+    }
+
+    if (event.key === 'ArrowLeft') { event.preventDefault(); seekBySeconds(-HOTKEY_SEEK_SECONDS); return; }
+    if (event.key === 'ArrowRight') { event.preventDefault(); seekBySeconds(HOTKEY_SEEK_SECONDS); }
+  });
+
+  document.addEventListener('wheel', event => {
+    if (event.ctrlKey || event.altKey || event.metaKey) return;   // 缩放与系统手势不抢
+    if (isTypingTarget(event.target)) return;
+    if (anyPopupOpen()) return;
+    let delta = event.deltaY;
+    if (event.deltaMode === 1) delta *= 16;        // 按行滚
+    else if (event.deltaMode === 2) delta *= 400;  // 按页滚
+    if (!delta) return;
+    if (scrollableInDirection(event.target, delta)) return;
+
+    event.preventDefault();
+    wheelAccumulator += delta;
+    if (Math.abs(wheelAccumulator) < WHEEL_NOTCH) return;  // 触控板的小步长先攒够一档
+    const steps = Math.trunc(wheelAccumulator / WHEEL_NOTCH);
+    wheelAccumulator -= steps * WHEEL_NOTCH;
+    nudgeVolume(steps > 0 ? -HOTKEY_VOLUME_STEP : HOTKEY_VOLUME_STEP);  // 往下滚 = 音量减
+  }, { passive: false });
+
   window.CelesteShell=Object.freeze({send,notify,navigate,setPath,goBack,goForward,getPage:()=>currentPage,getNavStacks:()=>({back:[...backStack],forward:[...fwdStack],trail:pathActions.map(i=>i.label)}),getState:()=>({...state}),getLibrary:()=>live?libraryTracks.filter(inSource):samples,getAlbums:()=>libraryAlbums.filter(album=>album.trackIds.some(id=>libraryTracks.some(t=>t.id===id&&inSource(t)))),playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
   navigate('overview',false); setOrbit(true); render();
 })();
