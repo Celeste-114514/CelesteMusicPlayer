@@ -84,6 +84,20 @@ internal static class Program
             await Task.Delay(160);
             if (host.FormBorderStyle != FormBorderStyle.None) throw new Exception(step + ": managed border model must be None");
             if ((GetWindowLongPtrW(host.Handle,-16).ToInt64() & 0x00c00000) != 0) throw new Exception(step + ": native caption still present");
+            nint region = CreateRectRgn(0, 0, 0, 0);
+            try
+            {
+                int shape = GetWindowRgn(host.Handle, region);
+                if (host.WindowState == FormWindowState.Maximized)
+                {
+                    if (shape != 0) throw new Exception(step + ": maximized window still has a corner mask");
+                }
+                else if (shape != 3 || !PtInRegion(region, host.Width / 2, 0) ||
+                    PtInRegion(region, 0, 0) || PtInRegion(region, host.Width - 1, 0) ||
+                    PtInRegion(region, 0, host.Height - 1) || PtInRegion(region, host.Width - 1, host.Height - 1))
+                    throw new Exception(step + ": incorrect window corner mask");
+            }
+            finally { DeleteObject(region); }
             var expected = host.RectangleToScreen(host.ClientRectangle);
             var actual = host.Web.RectangleToScreen(host.Web.ClientRectangle);
             if (host.Web.Bounds != host.ClientRectangle || expected != actual) throw new Exception(step + ": panel mismatch " + host.Web.Geometry + " expected=" + expected);
@@ -206,6 +220,10 @@ internal static class Program
     {
         return SendMessageTimeoutW(window, 0x84, 0, PackPoint(x, y), 2, 200, out nint result) == 0 ? 0 : (int)result;
     }
+    [DllImport("user32.dll")] static extern int GetWindowRgn(nint window, nint region);
+    [DllImport("gdi32.dll")] static extern nint CreateRectRgn(int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] static extern bool PtInRegion(nint region, int x, int y);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(nint handle);
     static nint PackPoint(int x, int y) => unchecked((int)((uint)(ushort)x | ((uint)(ushort)y << 16)));
     [DllImport("user32.dll")] static extern nint SendMessageTimeoutW(nint window,uint message,nint wParam,nint lParam,uint flags,uint timeout,out nint result);
     [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left,Top,Right,Bottom; }

@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 namespace CelesteMusicPlayer;
@@ -25,6 +26,20 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     {
         if ((uint)message.Msg == TaskbarCreatedMessage) { TaskbarPreview?.Enable(); TaskbarRecreated?.Invoke(); }
         if (TaskbarPreview?.Handle((uint)message.Msg, message.LParam) == true) { message.Result = 0; return; }
+        if (ClientOnlyChrome && message.Msg == 0x0085) // WM_NCPAINT
+        {
+            PaintResizeFrame(message.HWnd);
+            message.Result = 0;
+            return;
+        }
+        if (ClientOnlyChrome && message.Msg == 0x0086) // WM_NCACTIVATE
+        {
+            // Update activation state without asking Windows to repaint the accent frame.
+            message.LParam = -1;
+            base.WndProc(ref message);
+            PaintResizeFrame(message.HWnd);
+            return;
+        }
         // Fit the maximized client to the current monitor work area.
         if (message.Msg == 0x0024)   // WM_GETMINMAXINFO
         {
@@ -121,6 +136,95 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         AppWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.Interop.GetWindowIdFromWindow(Handle));
         FormClosed += (_,_) => { Microsoft.UI.Input.InputNonClientPointerSource.Forget(Handle); Closed?.Invoke(this,EventArgs.Empty); };
     }
+    private (int Width, int Height, int Diameter)? _cornerMask;
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        if (!ClientOnlyChrome) return;
+        int disabled = 1; // DWMWA_NCRENDERING_POLICY / DWMNCRP_DISABLED
+        DwmSetWindowAttribute(Handle, 2, ref disabled, sizeof(int));
+        _cornerMask = null;
+        UpdateCornerMask();
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        UpdateCornerMask();
+    }
+
+    protected override void OnDpiChanged(System.Windows.Forms.DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        UpdateCornerMask();
+    }
+
+    protected override void OnBackColorChanged(EventArgs e)
+    {
+        base.OnBackColorChanged(e);
+        if (ClientOnlyChrome && IsHandleCreated) PaintResizeFrame(Handle);
+    }
+
+    protected void UpdateCornerMask()
+    {
+        if (!ClientOnlyChrome || !IsHandleCreated || WindowState == System.Windows.Forms.FormWindowState.Minimized) return;
+        if (WindowState == System.Windows.Forms.FormWindowState.Maximized ||
+            AppWindow?.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+        {
+            if (_cornerMask != null && SetWindowRgn(Handle, 0, true) != 0) _cornerMask = null;
+            return;
+        }
+        // DWM offers preset sizes only. Clip the opaque top-level window at 14 DIPs.
+        int diameter = (int)Math.Round(28 * GetDpiForWindow(Handle) / 96.0);
+        var mask = (Width, Height, diameter);
+        if (_cornerMask == mask || Width < diameter || Height < diameter) return;
+        nint region = CreateRoundRectRgn(0, 0, Width, Height, diameter, diameter);
+        if (region == 0) return;
+        if (SetWindowRgn(Handle, region, true) != 0) _cornerMask = mask; // HWND now owns the region.
+        else DeleteObject(region);
+    }
+
+    private void PaintResizeFrame(nint hwnd)
+    {
+        // Paint only the non-client strip. Keep the native frame geometry and
+        // hit testing that Windows uses for resizing and Snap.
+        var origin = new NPoint();
+        if (!GetWindowRect(hwnd, out var window) ||
+            !GetClientRect(hwnd, out var client) ||
+            !ClientToScreen(hwnd, ref origin)) return;
+        nint dc = GetWindowDC(hwnd);
+        if (dc == 0) return;
+        nint brush = 0;
+        try
+        {
+            int x = origin.X - window.Left;
+            int y = origin.Y - window.Top;
+            if (ExcludeClipRect(dc, x, y, x + client.Right, y + client.Bottom) <= 1) return;
+            var color = BackColor;
+            brush = CreateSolidBrush((uint)(color.R | color.G << 8 | color.B << 16));
+            var bounds = new NRect { Right = window.Right - window.Left, Bottom = window.Bottom - window.Top };
+            if (brush != 0) FillRect(dc, ref bounds, brush);
+        }
+        finally
+        {
+            if (brush != 0) DeleteObject(brush);
+            ReleaseDC(hwnd, dc);
+        }
+    }
+
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out NRect rect);
+    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out NRect rect);
+    [DllImport("user32.dll")] private static extern bool ClientToScreen(nint hwnd, ref NPoint point);
+    [DllImport("user32.dll")] private static extern nint GetWindowDC(nint hwnd);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(nint hwnd, nint dc);
+    [DllImport("user32.dll")] private static extern int SetWindowRgn(nint hwnd, nint region, bool redraw);
+    [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref NRect rect, nint brush);
+    [DllImport("gdi32.dll")] private static extern int ExcludeClipRect(nint dc, int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint color);
+    [DllImport("gdi32.dll")] private static extern nint CreateRoundRectRgn(int left, int top, int right, int bottom, int width, int height);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint handle);
+
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint hwnd,int attribute,ref int value,int size);
     internal static void SetMaterial(nint hwnd,int backdrop,int dark) { DwmSetWindowAttribute(hwnd,38,ref backdrop,4); DwmSetWindowAttribute(hwnd,20,ref dark,4); }
     // 网页自绘 chrome 的窗口收尾：去掉系统那圈 1px 边线，并保留 Win11 圆角。

@@ -137,7 +137,7 @@ namespace CelesteMusicPlayer
             // Position changes during a drag do not alter visibility or fullscreen state.
             // Avoid two WebView messages and DOM updates for every native move.
             if (args.DidVisibilityChange || args.DidPresenterChange) { SendVisibility(); SyncStereoSampling(); }
-            if (args.DidPresenterChange) SendWindowState();
+            if (args.DidPresenterChange) { UpdateCornerMask(); SendWindowState(); }
         }
 
         private void SendWindowState() => Post(new { kind = "celeste.window", version = 1, fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen, maximized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized } });

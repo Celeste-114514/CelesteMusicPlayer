@@ -110,14 +110,14 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 
 **2026-10-27 用户决定：网页壳是正式且唯一的产品主界面。** 原 WinUI 界面源码保留，MainWindow 暂作为隐藏的既有播放/控件后端；正常启动、托盘恢复和文件激活不再展示原主界面，也不提供返回旧界面入口。后续功能都以网页 UI 为落点。
 
-当前交付目录为 `dist/bugfix-20261104-opaque-snap/`。用户日常验证统一双击仓库根目录 `打开当前播放器.lnk`，直接启动 EXE，避免批处理黑窗；由 `tools/NewCurrentPlayerShortcut.ps1` 重建。`tools/OpenCeleste.cmd` 保留为工具兼容入口，指向同一目录。旧 dist 目录保留回退，不表示当前运行版本；`dist/web-ui-current/` 当前是普通目录，不是最新版链接。
+当前交付目录为 `dist/bugfix-20261104-rounded-frame/`。用户日常验证统一双击仓库根目录 `打开当前播放器.lnk`，直接启动 EXE，避免批处理黑窗；由 `tools/NewCurrentPlayerShortcut.ps1` 重建。`tools/OpenCeleste.cmd` 保留为工具兼容入口，指向同一目录。旧 dist 目录保留回退，不表示当前运行版本；`dist/web-ui-current/` 当前是普通目录，不是最新版链接。
 
 **交付必须面向不懂代码的用户**：默认同步上述固定运行目录；结论明确“已同步/尚未同步”、是否需重启和回退位置。提交号只是源码回退点，不能当程序入口。若必须更换验证目录，同步更新根目录快捷方式、生成脚本、工具入口和 `先看这里-仓库与验证入口.md`，不要再让用户在多个产物目录找 EXE。
 
 **★ 网页源码唯一真身：`outputs/webview2-shell/`。**
 `dist/*/WebShell/` 是**构建产物**（`CelesteMusicPlayer.csproj:90` 用 `<Content Include="..\outputs\webview2-shell\*...">` 拷过去的），
 **在 dist 下改会被下次构建覆盖，等于白改。** 改完 src 之后要手动 `cp` 同步到正在实跑的那个 dist 目录
-（当前是 `dist/bugfix-20261104-opaque-snap/WebShell/`）才能立刻看到效果。
+（当前是 `dist/bugfix-20261104-rounded-frame/WebShell/`）才能立刻看到效果。
 
 文件：`index.html`、`shell.js`、`shell.css`（主壳）、`navigation.css`、`library.css`、`collections.css`、
 `songs.css`、`corner.css`、`transport*.css|js`、`albums.js`、`artists.js`、`browse.js`、`sort-menus.js`、`waveform.js`。
@@ -211,6 +211,8 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
    - ⚠ **`_webcheck/dsp.png` 那批截图是 10-09/10-10 的，过期**（`EqDsp.cs` 10-17 才改过），
      拿它对版式会把已经改掉的东西又"修"回去。要外观一律读代码。
 
-2026-11-04：主窗口改用 WebView2 原生 CSS 拖动区域和 Windows 尺寸边框。桌面“CelesteMusicPlayer 最新测试版”和根目录快捷方式指向 dist/bugfix-20261104-opaque-snap。隔离桌面已验证原生标题栏双击、控件命中、四边缩放命中、最大化/还原的客户区对齐和标题栏绘制。系统实际拖到屏幕边缘的吸附提示需要在交互桌面确认。旧构建保留在各自的 dist 目录。
+2026-11-04：主窗口改用 WebView2 原生 CSS 拖动区域和 Windows 尺寸边框。桌面“CelesteMusicPlayer 最新测试版”和根目录快捷方式指向 dist/bugfix-20261104-rounded-frame。隔离桌面已验证原生标题栏双击、控件命中、四边缩放命中、最大化/还原的客户区对齐和标题栏绘制。系统实际拖到屏幕边缘的吸附提示需要在交互桌面确认。旧构建保留在各自的 dist 目录。
 
 2026-11-04 后续：用户明确故障为贴边拖回后的不规则色带，并非吸附不触发。opaque-snap 关闭主窗 DWM 亚克力与 WebView 透明底色，materialActive=false；保留网页内部材质。前述原生透明材质恢复不再适用。真实桌面贴边回拖仍待用户验收。
+
+2026-11-04 外观跟进：用户已确认不透明构建修好贴边拖回色带。新构建给普通主窗口加 14 DIP 圆角，以主题底色绘制缩放边框，保留不透明合成。主窗口亚克力与 Windows 毛玻璃列入 11-02 待办 B12。前版 dist/bugfix-20261104-opaque-snap 保留。
