@@ -60,7 +60,7 @@ internal static class Program
     {
         Directory.CreateDirectory(artifacts);
         await host.Web.EnsureCoreWebView2Async();
-        host.Web.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
+        host.Web.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255,32,32,32);
         host.Web.CoreWebView2.Settings.IsNonClientRegionSupportEnabled = true;
         var loaded = new TaskCompletionSource();
         host.Web.CoreWebView2.NavigationCompleted += (_,_) => loaded.TrySetResult();
@@ -180,7 +180,7 @@ internal static class Program
         internal ProbeWindow() : base(DispatcherQueue.GetForCurrentThread())
         {
             Controls.Add(Web); BackColor=Color.FromArgb(32,32,32);
-            SetFrameless(Handle); SetMaterial(Handle,3,1);
+            SetFrameless(Handle); SetMaterial(Handle,1,1);
         }
     }
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct StartupInfo { public int Size;public string? Reserved,Desktop,Title;public int X,Y,Width,Height,CharsX,CharsY,Fill,Flags;public short Show,ReservedSize;public nint ReservedPointer,Input,Output,Error; }

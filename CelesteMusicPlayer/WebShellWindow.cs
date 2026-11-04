@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -265,14 +265,17 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                int style = values.TryGetValue("material-style", out var raw) && int.TryParse(raw, out var parsed) ? parsed : 0;
-                bool transparent = !values.TryGetValue("material-transparency", out var enabled) || enabled != "0";
-                bool highContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
-                bool glass = style > 0 && transparent && !highContrast;
-                int backdrop = glass ? 3 : 1; int dark = mode == "dark" ? 1 : 0;
-                NativeMainWebWindow.SetMaterial(Handle, backdrop, dark);
-                _web.DefaultBackgroundColor = glass ? Microsoft.UI.Colors.Transparent : mode == "dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
-                return glass;
+                // Keep the top-level DWM surface and browser surface opaque together.
+                // Transparent WebView + acrylic retained resize surfaces can leave bands
+                // after Snap restore; HTML-only blur still works over the page background.
+                bool dark = mode == "dark";
+                var background = dark ? System.Drawing.Color.FromArgb(32, 32, 32)
+                                      : System.Drawing.Color.FromArgb(245, 245, 245);
+                NativeMainWebWindow.SetMaterial(Handle, 1, dark ? 1 : 0);
+                BackColor = background;
+                _web.BackColor = background;
+                _web.DefaultBackgroundColor = Windows.UI.Color.FromArgb(255, background.R, background.G, background.B);
+                return false;
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.Material", ex); return false; }
         }
