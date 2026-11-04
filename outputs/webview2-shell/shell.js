@@ -373,7 +373,6 @@
   function setPanel(next) { panel=next; $('side-panel').hidden=!panel; $('queue').setAttribute('aria-expanded',String(panel==='queue')); if(panel)renderPanel(); }
   $('panel-close').addEventListener('click',()=>setPanel(null));
   document.querySelectorAll('[data-window]').forEach(button=>button.addEventListener('click',()=>live?send('window',{ action:button.dataset.window }):notify('窗口操作将在 WebView2 桌面外壳中启用')));
-  // Native caption hit testing is configured by window-drag.js.
   if (live) {
     $('native-view').hidden=true;
     $('library-note').textContent='本机音频引擎 · 原输出与 DSP 配置';

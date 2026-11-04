@@ -38,7 +38,10 @@
 :root .shell,:root[data-material] .shell{border:0;border-radius:0;box-shadow:none}
 :root .main,:root[data-material] .main{margin:0;border-radius:0}
 :root .now-playing-page,:root[data-material] .now-playing-page{border:0;border-radius:0}
-/* Host cursor tracking owns dragging. Keep all CSS non-client regions disabled to avoid competing moves. */
+/* WebView2 treats these CSS regions as the native title bar. */
 .titlebar,.np-head{app-region:no-drag;-webkit-app-region:no-drag;user-select:none}
-button,input,select,textarea,a,label,.header-tools,.header-actions,.np-head-actions,.window-actions{app-region:no-drag;-webkit-app-region:no-drag}
-.is-fullscreen .titlebar,.is-fullscreen .np-head{app-region:no-drag;-webkit-app-region:no-drag}
+body:not(.is-fullscreen):not(.now-playing-open) .titlebar,
+body:not(.is-fullscreen).now-playing-open .np-head{app-region:drag;-webkit-app-region:drag}
+button,input,select,textarea,a,label,[role="button"],[contenteditable],
+.header-tools,.header-actions,.np-head-actions,.window-actions,
+dialog,[role="dialog"],[role="menu"],.ui-popup,.ui-listbox{app-region:no-drag;-webkit-app-region:no-drag}

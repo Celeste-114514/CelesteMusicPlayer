@@ -11,6 +11,6 @@ dotnet build tools/NativeChromeRegression/NativeChromeRegression.csproj -c Relea
 & tools/NativeChromeRegression/bin/x64/Release/net10.0-windows10.0.19041.0/win-x64/NativeChromeRegression.exe C:\path\to\test-artifacts
 ```
 
-The checks cover native caption styles, the managed border model, client and browser HWND rectangles, maximized work-area bounds, restored/top-left resized bounds, and the actual negative child translation observed during the reported bug. Each stage captures a fixture page and checks the left/center/right header pixels.
+The checks cover the managed border model, native resize hits on all four sides, the WebView2 caption region and its button exclusion, client and browser HWND rectangles, maximized work-area bounds, restored/top-left resized bounds, and the negative child translation observed during the reported bug. The test sends a double-click message directly to the isolated fixture’s caption HWND and verifies that the top-level window maximizes. Each stage captures a fixture page and checks the left/center/right header pixels.
 
 Limit: this isolates native geometry and browser painting; it does not validate active-desktop DWM animations or physical drag-to-edge behavior. Those still need a later interactive check. A test timeout terminates only its own child process.

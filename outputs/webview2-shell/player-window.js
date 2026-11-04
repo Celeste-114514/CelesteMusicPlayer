@@ -22,7 +22,9 @@
   }
   buttons.forEach(button => button.addEventListener('click', () => set(!fullscreen)));
   document.addEventListener('celeste:message', event => {
-    if (event.detail.kind === 'celeste.window') render(event.detail.fullscreen);
+    if (event.detail.kind !== 'celeste.window') return;
+    document.body.classList.toggle('is-maximized', !!event.detail.maximized);
+    render(event.detail.fullscreen);
   });
   document.addEventListener('fullscreenchange', () => { if (!live) render(!!document.fullscreenElement); });
   document.addEventListener('keydown', event => {

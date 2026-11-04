@@ -55,9 +55,6 @@ namespace CelesteMusicPlayer
         private bool _startupNoticeQueued;
         /// <summary>自测开关只触发一次。</summary>
         private bool _crashDemoFired;
-        // Drag sampling must not share the UI dispatcher with library/theme refreshes.
-        private const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
-        private int _dragGeneration;
         private int _revision;
         private int _themeRevision = -1;
         private CancellationTokenSource? _waveformCancellation;
@@ -70,17 +67,14 @@ namespace CelesteMusicPlayer
             owner.BindNativeTaskbar(Handle);
             TaskbarRecreated += () => owner.BindNativeTaskbar(Handle);
             Title = "Celeste";
-            if (Array.Exists(Environment.GetCommandLineArgs(), a => a == "--window-geometry-test"))
-                Title = "Celeste · 窗口坐标测试";
             _statusLayer.Controls.Add(_status);
             _statusLayer.Controls.Add(_reload);
             _reload.Click += (_, _) => ReloadShell();
             Controls.Add(_web); Controls.Add(_statusLayer); _statusLayer.BringToFront();
             // The base Form and its CreateParams share a borderless client model.
             // Native thick-frame/min/max styles retain resizing and Aero Snap, without WS_CAPTION.
-            SetFrameless(Handle, clientOnly: true);
+            SetFrameless(Handle);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
-            if (Array.Exists(Environment.GetCommandLineArgs(), a => a == "--window-geometry-test")) Location = System.Drawing.Point.Empty;
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += (_, _) => { if (_ready) { TaskbarPreview?.Update(); SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
             _library = (INotifyCollectionChanged)owner.LibraryTracks;
@@ -98,7 +92,6 @@ namespace CelesteMusicPlayer
             Closed += (_, _) =>
             {
                 _closed = true; _ready = false; _timer.Stop();
-                StopWindowDrag(); // 拖动轮询必须随窗口一起停，否则关窗后定时器还在跑
                 // 关窗必须把立体声采样退订掉，否则引擎那边还留着采集抽头
                 _owner.SetStereoSampling("web.nowPlaying", false);
                 _library.CollectionChanged -= LibraryChanged;
@@ -225,7 +218,7 @@ namespace CelesteMusicPlayer
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
-                core.Settings.IsNonClientRegionSupportEnabled = false; // JS forwards one native move loop; Chromium must not also capture CSS drag regions.
+                core.Settings.IsNonClientRegionSupportEnabled = true;
                 core.NavigationStarting += (_, args) => { if (!IsTrusted(args.Uri)) args.Cancel = true; };
                 // 网页里的外链一律由宿主代开：只放行 https 官方站点（ExternalLink 里判），
                 // 剩下的一律吞掉，避免导航把整个外壳页面顶掉。
@@ -595,36 +588,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (action == "caption-regions")
-            {
-                var regions = new List<Windows.Graphics.RectInt32>();
-                if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen)
-                    foreach (var rect in msg.GetProperty("rects").EnumerateArray().Take(64))
-                        regions.Add(new Windows.Graphics.RectInt32(
-                            (int)Finite(rect, "x"), (int)Finite(rect, "y"),
-                            Math.Max(0, (int)Finite(rect, "width")), Math.Max(0, (int)Finite(rect, "height"))));
-                Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
-                    .SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, regions.ToArray());
-                return;
-            }
-            // 原生可调大小边框已经去掉（见构造函数），改大小由网页侧发边名、宿主轮询实现。
-            if (action == "resize-start")
-            {
-                string edge = msg.TryGetProperty("edge", out JsonElement raw) && raw.ValueKind == JsonValueKind.String
-                    ? raw.GetString() ?? "" : "";
-                DispatcherQueue.TryEnqueue(() => StartWindowResize(edge));
-                return;
-            }
             bool value = msg.TryGetProperty("value", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
             WindowCommand(action, value);
         }
 
         private void WindowCommand(string? action, bool value)
         {
-            // 拖动命令要走在这里前述检查之前：全屏时 presenter 不是 OverlappedPresenter，
-            // 此时仍要能收到 drag-end 把轮询停掉。
-            if (action == "drag-start") { DispatcherQueue.TryEnqueue(StartWindowDrag); return; }
-            if (action == "drag-end") { StopWindowDrag(); return; }
             if (action == "close") { Close(); return; }
             if (action == "fullscreen")
             {
@@ -649,68 +618,6 @@ namespace CelesteMusicPlayer
             else if (action == "maximize") { if (presenter.State == OverlappedPresenterState.Maximized) presenter.Restore(); else presenter.Maximize(); }
         }
 
-        /// <summary>Transfer the custom titlebar mouse gesture to the native Windows move loop.</summary>
-        private void StartWindowDrag()
-        {
-            if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
-                !IsLeftButtonDown()) return;
-            // 原生 HTCAPTION 已经接管这次拖动时不要再起轮询线程，两套一起移窗口会抖。
-            if (SystemDragActive) return;
-            if (presenter.State == OverlappedPresenterState.Maximized &&
-                NativeMethods.GetCursorPos(out var cursor) && NativeMethods.GetWindowRect(Handle, out var maximized))
-            {
-                double ratio = Math.Clamp((cursor.X - maximized.Left) / (double)Math.Max(1,maximized.Right-maximized.Left),0,1);
-                presenter.Restore();
-                if (NativeMethods.GetWindowRect(Handle, out var restored))
-                    NativeMethods.SetWindowPos(Handle, IntPtr.Zero,
-                        cursor.X-(int)((restored.Right-restored.Left)*ratio), cursor.Y-(int)(24*DeviceDpi/96.0),
-                        0,0,SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-            StartNativeMouseOperation(2); // HTCAPTION
-        }
-        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="ReleaseCapture")]
-        private static extern bool NativeReleaseCapture();
-        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint="SendMessageW")]
-        private static extern nint NativeSendMessage(nint hwnd, uint message, nint wParam, nint lParam);
-
-        private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
-        private void StopWindowDrag() => Interlocked.Increment(ref _dragGeneration);
-
-        /// <summary>Use the Windows sizing loop so acrylic and WebView bounds follow the same UI-thread resize lifecycle.</summary>
-        private void StartWindowResize(string edge)
-        {
-            if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
-                presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown() || SystemDragActive) return;
-            int border = edge switch { "w" => 1, "e" => 2, "n" => 3, "nw" => 4, "ne" => 5, "s" => 6, "sw" => 7, "se" => 8, _ => 0 };
-            if (border == 0) return;
-            StopWindowDrag();
-            StartNativeMouseOperation(border + 9); // HTLEFT ... HTBOTTOMRIGHT
-        }
-        private void StartNativeMouseOperation(int hitTest)
-        {
-            if (!NativeMethods.GetCursorPos(out var point)) return;
-            // Native mouse messages require SCREEN coordinates, including negative monitor coordinates.
-            // A zero lParam incorrectly treats the initial press as screen (0,0).
-            nint coordinates = unchecked((nint)((point.X & 0xffff) | ((point.Y & 0xffff) << 16)));
-            StartupLog.Write($"[WindowGeometry] begin hit={hitTest} cursor={point.X},{point.Y} form={Bounds} client={ClientRectangle} web={_web.Geometry}");
-            NativeReleaseCapture();
-            NativeSendMessage(Handle, 0xA1, (nint)hitTest, coordinates); // WM_NCLBUTTONDOWN
-            DispatcherQueue.TryEnqueue(SynchronizeWindowGeometry);
-        }
-        private void SynchronizeWindowGeometry()
-        {
-            if (_closed || IsDisposed) return;
-            PerformLayout();
-            _web.Bounds = ClientRectangle;
-            _web.ParentWindowPositionChanged();
-            SendWindowState();
-            StartupLog.Write($"[WindowGeometry] settled maximized={WindowState} form={Bounds} client={ClientRectangle} web={_web.Geometry}");
-        }
-        protected override void OnResizeEnd(EventArgs e)
-        {
-            base.OnResizeEnd(e);
-            DispatcherQueue.TryEnqueue(SynchronizeWindowGeometry);
-        }
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
 
         /// <summary>
@@ -916,49 +823,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.Cover", ex); if (!_closed) args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); }
             finally { if (entered) _coverGate.Release(); deferral.Complete(); }
-        }
-
-        /// <summary>拖动要用到的两个 Win32 调用。指针被 WebView2 吃掉，只能直接问系统光标位置。</summary>
-        private static class NativeMethods
-        {
-            internal const int VK_LBUTTON = 0x01;
-
-            [StructLayout(LayoutKind.Sequential)]
-            internal struct POINT { public int X; public int Y; }
-            [StructLayout(LayoutKind.Sequential)]
-            internal struct RECT { public int Left, Top, Right, Bottom; }
-            [DllImport("user32.dll")]
-            [return: MarshalAs(UnmanagedType.Bool)]
-            internal static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
-            [DllImport("winmm.dll")]
-            internal static extern uint timeBeginPeriod(uint period);
-            [DllImport("winmm.dll")]
-            internal static extern uint timeEndPeriod(uint period);
-
-            [DllImport("user32.dll")]
-            [return: MarshalAs(UnmanagedType.Bool)]
-            internal static extern bool GetCursorPos(out POINT lpPoint);
-
-            [DllImport("user32.dll")]
-            internal static extern short GetAsyncKeyState(int vKey);
-
-            [DllImport("user32.dll")]
-            [return: MarshalAs(UnmanagedType.Bool)]
-            internal static extern bool ReleaseCapture();
-
-            [DllImport("user32.dll")]
-            [return: MarshalAs(UnmanagedType.Bool)]
-            internal static extern bool PostMessage(IntPtr hWnd, int msg, int wParam, IntPtr lParam);
-
-            [DllImport("user32.dll")]
-            internal static extern IntPtr GetCapture();
-
-            [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-            internal static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, IntPtr lParam);
-
-            [DllImport("user32.dll")]
-            [return: MarshalAs(UnmanagedType.Bool)]
-            internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
         }
     }
 }
