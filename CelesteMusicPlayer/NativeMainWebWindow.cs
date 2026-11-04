@@ -26,19 +26,16 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     {
         if ((uint)message.Msg == TaskbarCreatedMessage) { TaskbarPreview?.Enable(); TaskbarRecreated?.Invoke(); }
         if (TaskbarPreview?.Handle((uint)message.Msg, message.LParam) == true) { message.Result = 0; return; }
-        if (ClientOnlyChrome && message.Msg == 0x0085) // WM_NCPAINT
+        if (ClientOnlyChrome)
         {
-            PaintResizeFrame(message.HWnd);
-            message.Result = 0;
-            return;
-        }
-        if (ClientOnlyChrome && message.Msg == 0x0086) // WM_NCACTIVATE
-        {
-            // Update activation state without asking Windows to repaint the accent frame.
-            message.LParam = -1;
-            base.WndProc(ref message);
-            PaintResizeFrame(message.HWnd);
-            return;
+            if (message.Msg == 0x0083) // WM_NCCALCSIZE
+            {
+                // The web surface covers the full HWND, including the resize hit area.
+                message.Result = message.WParam != 0 ? 0x0300 : 0; // WVR_REDRAW
+                return;
+            }
+            if (message.Msg == 0x0085) { message.Result = 0; return; } // WM_NCPAINT
+            if (message.Msg == 0x0086) message.LParam = -1; // WM_NCACTIVATE: skip frame painting.
         }
         // Fit the maximized client to the current monitor work area.
         if (message.Msg == 0x0024)   // WM_GETMINMAXINFO
@@ -62,7 +59,6 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, int flags);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMonitorInfoW(nint monitor, ref NMonitorInfo info);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint hwnd);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool AdjustWindowRectExForDpi(ref NRect rect, uint style, bool hasMenu, uint exStyle, uint dpi);
     private void ClampMaximizeToWorkArea(nint hwnd, nint lParam)
     {
         nint monitor = MonitorFromWindow(hwnd, 2);   // MONITOR_DEFAULTTONEAREST
@@ -71,13 +67,6 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         if (!GetMonitorInfoW(monitor, ref info)) return;
         var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<NMinMaxInfo>(lParam);
         var outer = info.Work;
-        if (ClientOnlyChrome)
-        {
-            // The native sizing frame sits outside the work-area-sized client.
-            uint style = unchecked((uint)NativeMethods.GetWindowLong(hwnd, -16).ToInt64());
-            uint exStyle = unchecked((uint)NativeMethods.GetWindowLong(hwnd, -20).ToInt64());
-            AdjustWindowRectExForDpi(ref outer, style, false, exStyle, GetDpiForWindow(hwnd));
-        }
         mmi.MaxPosition.X = outer.Left - info.Monitor.Left;
         mmi.MaxPosition.Y = outer.Top - info.Monitor.Top;
         mmi.MaxSize.X = outer.Right - outer.Left;
@@ -160,12 +149,6 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         UpdateCornerMask();
     }
 
-    protected override void OnBackColorChanged(EventArgs e)
-    {
-        base.OnBackColorChanged(e);
-        if (ClientOnlyChrome && IsHandleCreated) PaintResizeFrame(Handle);
-    }
-
     protected void UpdateCornerMask()
     {
         if (!ClientOnlyChrome || !IsHandleCreated || WindowState == System.Windows.Forms.FormWindowState.Minimized) return;
@@ -185,43 +168,7 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
         else DeleteObject(region);
     }
 
-    private void PaintResizeFrame(nint hwnd)
-    {
-        // Paint only the non-client strip. Keep the native frame geometry and
-        // hit testing that Windows uses for resizing and Snap.
-        var origin = new NPoint();
-        if (!GetWindowRect(hwnd, out var window) ||
-            !GetClientRect(hwnd, out var client) ||
-            !ClientToScreen(hwnd, ref origin)) return;
-        nint dc = GetWindowDC(hwnd);
-        if (dc == 0) return;
-        nint brush = 0;
-        try
-        {
-            int x = origin.X - window.Left;
-            int y = origin.Y - window.Top;
-            if (ExcludeClipRect(dc, x, y, x + client.Right, y + client.Bottom) <= 1) return;
-            var color = BackColor;
-            brush = CreateSolidBrush((uint)(color.R | color.G << 8 | color.B << 16));
-            var bounds = new NRect { Right = window.Right - window.Left, Bottom = window.Bottom - window.Top };
-            if (brush != 0) FillRect(dc, ref bounds, brush);
-        }
-        finally
-        {
-            if (brush != 0) DeleteObject(brush);
-            ReleaseDC(hwnd, dc);
-        }
-    }
-
-    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out NRect rect);
-    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out NRect rect);
-    [DllImport("user32.dll")] private static extern bool ClientToScreen(nint hwnd, ref NPoint point);
-    [DllImport("user32.dll")] private static extern nint GetWindowDC(nint hwnd);
-    [DllImport("user32.dll")] private static extern int ReleaseDC(nint hwnd, nint dc);
     [DllImport("user32.dll")] private static extern int SetWindowRgn(nint hwnd, nint region, bool redraw);
-    [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref NRect rect, nint brush);
-    [DllImport("gdi32.dll")] private static extern int ExcludeClipRect(nint dc, int left, int top, int right, int bottom);
-    [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint color);
     [DllImport("gdi32.dll")] private static extern nint CreateRoundRectRgn(int left, int top, int right, int bottom, int width, int height);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint handle);
 

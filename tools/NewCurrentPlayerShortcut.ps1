@@ -1,7 +1,7 @@
-﻿# Recreate the local shortcut after moving/cloning this repository. Does not launch the app.
+# Recreate the local shortcut after moving/cloning this repository. Does not launch the app.
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path $PSScriptRoot -Parent
-$delivery = Join-Path $repository 'dist/bugfix-20261104-rounded-frame'
+$delivery = Join-Path $repository 'dist/bugfix-20261104-borderless'
 $executable = Join-Path $delivery 'CelesteMusicPlayer.exe'
 if (!(Test-Path -LiteralPath $executable)) { throw "Current delivery is missing: $executable" }
 $shortcutPath = Join-Path $repository '打开当前播放器.lnk'

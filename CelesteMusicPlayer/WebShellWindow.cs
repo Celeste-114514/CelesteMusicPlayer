@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -591,9 +591,34 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            if (action == "resize")
+            {
+                if (msg.TryGetProperty("edge", out var edge) && edge.TryGetInt32(out int hit))
+                    BeginInvoke(() => BeginEdgeResize(hit));
+                return;
+            }
+
             bool value = msg.TryGetProperty("value", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
             WindowCommand(action, value);
         }
+
+        private void BeginEdgeResize(int hit)
+        {
+            if (_closed || hit is < 10 or > 17 ||
+                AppWindow.Presenter is not OverlappedPresenter { IsResizable: true, State: OverlappedPresenterState.Restored } ||
+                GetAsyncKeyState(GetSystemMetrics(23) != 0 ? 2 : 1) >= 0 ||
+                !GetCursorPos(out var point)) return;
+
+            // WebView owns pointer hit testing. Windows owns the resize gesture.
+            ReleaseCapture();
+            nint coordinates = unchecked((int)((uint)(ushort)point.X | (uint)(ushort)point.Y << 16));
+            NativeMethods.SendMessage(Handle, 0x00A1, hit, coordinates); // WM_NCLBUTTONDOWN
+        }
+
+        [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int virtualKey);
+        [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out System.Drawing.Point point);
+        [DllImport("user32.dll")] private static extern bool ReleaseCapture();
 
         private void WindowCommand(string? action, bool value)
         {

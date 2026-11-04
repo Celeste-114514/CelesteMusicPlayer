@@ -45,3 +45,28 @@ body:not(.is-fullscreen).now-playing-open .np-head{app-region:drag;-webkit-app-r
 button,input,select,textarea,a,label,[role="button"],[contenteditable],
 .header-tools,.header-actions,.np-head-actions,.window-actions,
 dialog,[role="dialog"],[role="menu"],.ui-popup,.ui-listbox{app-region:no-drag;-webkit-app-region:no-drag}
+
+/* Resize hit areas are inside the window without taking up layout space. */
+.window-resize-grips {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  grid-template: 6px 1fr 6px / 6px 1fr 6px;
+  pointer-events: none;
+}
+.window-resize-grips > div {
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+body:is(.is-maximized,.is-fullscreen) .window-resize-grips { display: none; }
+[data-resize-edge="13"],[data-resize-edge="17"] { cursor: nwse-resize; }
+[data-resize-edge="14"],[data-resize-edge="16"] { cursor: nesw-resize; }
+[data-resize-edge="12"],[data-resize-edge="15"] { cursor: ns-resize; }
+[data-resize-edge="10"],[data-resize-edge="11"] { cursor: ew-resize; }
+[data-resize-edge="10"] { grid-area: 2 / 1; }
+[data-resize-edge="11"] { grid-area: 2 / 3; }
+[data-resize-edge="16"] { grid-area: 3 / 1; }
+[data-resize-edge="15"] { grid-area: 3 / 2; }
+[data-resize-edge="17"] { grid-area: 3 / 3; }

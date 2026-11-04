@@ -99,18 +99,11 @@ internal static class Program
             }
             finally { DeleteObject(region); }
             var expected = host.RectangleToScreen(host.ClientRectangle);
+            GetWindowRect(host.Handle, out var outer);
+            if (expected != Rectangle.FromLTRB(outer.Left, outer.Top, outer.Right, outer.Bottom))
+                throw new Exception(step + ": non-client strip is still present");
             var actual = host.Web.RectangleToScreen(host.Web.ClientRectangle);
             if (host.Web.Bounds != host.ClientRectangle || expected != actual) throw new Exception(step + ": panel mismatch " + host.Web.Geometry + " expected=" + expected);
-            if (host.WindowState == FormWindowState.Normal)
-            {
-                int midX = expected.Left + expected.Width / 2;
-                int midY = expected.Top + expected.Height / 2;
-                if (HitTest(host.Handle, expected.Left - 1, midY) != 10 ||
-                    HitTest(host.Handle, expected.Right, midY) != 11 ||
-                    HitTest(host.Handle, midX, expected.Top - 1) != 12 ||
-                    HitTest(host.Handle, midX, expected.Bottom) != 15)
-                    throw new Exception(step + ": native sizing frame no longer hit-tests on all four sides");
-            }
             int chrome = 0;
             var captionRects = new List<Rectangle>();
             var failures = new List<string>();

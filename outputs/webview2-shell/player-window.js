@@ -33,5 +33,23 @@
       set(event.key === 'Escape' ? false : !fullscreen);
     }
   }, true);
-  if (live) shell.send('window', { action: 'state' });
+  if (live) {
+    const grips = document.createElement('div');
+    grips.className = 'window-resize-grips';
+    grips.setAttribute('aria-hidden', 'true');
+    // Grid order, skipping the center. Codes are Win32 non-client hit targets.
+    for (const edge of [13, 12, 14, 10, 11, 16, 15, 17]) {
+      const grip = document.createElement('div');
+      grip.dataset.resizeEdge = String(edge);
+      grip.addEventListener('pointerdown', event => {
+        if (event.button !== 0 || event.pointerType !== 'mouse') return;
+        event.preventDefault();
+        event.stopPropagation();
+        shell.send('window', { action: 'resize', edge });
+      });
+      grips.append(grip);
+    }
+    document.body.append(grips);
+    shell.send('window', { action: 'state' });
+  }
 })();
