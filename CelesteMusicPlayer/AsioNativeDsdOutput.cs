@@ -57,6 +57,7 @@ namespace CelesteMusicPlayer
         private long _bytesConsumed;
         private long _underruns;
         private int _drained;
+        private volatile bool _paused;      // 软暂停：驱动保持 Start，只喂合法 DSD 静音码
         private bool _started;
         private bool _disposed;
 
@@ -115,7 +116,14 @@ namespace CelesteMusicPlayer
             // ② 先切 IoFormat（ASIO SDK 注释：必须在 prepared 状态之前，即 CreateBuffers 之前）
             SetIoFormat(FmtDsd);
 
-            // ③ 再设 DSD 位时钟
+            // ③ 再设 DSD 位时钟。先问驱动支不支持，别硬发：别的设备能到 DSD512/1024，
+            //    KA13 只到 DSD256；这里不支持就抛，由会话自动回退 DoP / PCM。
+            if (!_ext.IsSampleRateSupported(_nativeRateHz))
+            {
+                throw new NotSupportedException(
+                    $"ASIO 驱动不支持 DSD 位时钟 {_nativeRateHz:0} Hz（本机 DAC 可能只到 DSD256），已自动回退。");
+            }
+
             _ext.SetSampleRate(_nativeRateHz);
 
             // ④ 复查驱动真的进了 DSD 模式，并记下它要求的位序
@@ -197,9 +205,33 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>ASIO 驱动回调：只做内存搬运，不碰磁盘、不等锁、不分配。</summary>
+        /// <summary>
+        /// 软暂停 / 恢复：驱动一直保持 Start 与 DSD 格式，暂停时只喂 0x69/0x96 静音码。
+        /// 比 ASIO Stop/Start 稳（不用赌驱动能不能二次 Start），也不打断 DAC 的 DSD 锁。
+        /// </summary>
+        public void SetPaused(bool value) => _paused = value;
+
         private void OnFillBuffers(IntPtr[] inputChannels, IntPtr[] outputChannels)
         {
             if (_disposed || _interleaved == null || _channelScratch == null) return;
+
+            if (_paused)
+            {
+                // 不读源、不累加进度、不判播完；每通道写满合法 DSD 静音码。
+                byte[] scratch = _channelScratch;
+                for (int f = 0; f < _bytesPerChannel; f++)
+                {
+                    scratch[f] = ((f & 1) == 0) ? (byte)0x69 : (byte)0x96;
+                }
+                for (int c = 0; c < _channels && c < outputChannels.Length; c++)
+                {
+                    if (outputChannels[c] != IntPtr.Zero)
+                    {
+                        Marshal.Copy(scratch, 0, outputChannels[c], _bytesPerChannel);
+                    }
+                }
+                return;
+            }
 
             int need = _bytesPerChannel * _channels;
             int got;

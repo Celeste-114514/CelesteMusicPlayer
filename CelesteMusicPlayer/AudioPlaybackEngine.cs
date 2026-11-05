@@ -150,7 +150,15 @@ namespace CelesteMusicPlayer
         /// 共享/独占/ASIO 全覆盖。激活期间上层会自动跳过无缝预载（循环里不切下一首）。
         /// </summary>
         public void SetAbLoop(double startSec, double endSec, bool active)
-            => _hifiOut?.SetAbLoop(startSec, endSec, active);
+        {
+            if (_nativeDsd != null)
+            {
+                _nativeDsd.SetAbLoop(startSec, endSec, active);
+                return;
+            }
+
+            _hifiOut?.SetAbLoop(startSec, endSec, active);
+        }
 
         /// <summary>AB 循环是否激活。</summary>
         public bool IsAbLoopActive => _hifiOut?.IsAbLoopActive == true;
@@ -308,12 +316,12 @@ namespace CelesteMusicPlayer
             // ── 原生 DSD（ASIO 2.3 DSD 扩展）──────────────────────────────
             // 走完全独立的播放会话：DSF 1-bit 码流不装箱、不经 DSP，直接送 ASIO 驱动。
             // 守卫不满足或驱动不支持就在这里安静回退到下面的 DoP / PCM 链路，日志写明原因，绝不静默。
-            // 分轨（startSeconds > 0）需 seek，首期不支持，直接回退。
+            // 分轨（CUE）也走原生路径：会话起播时 seek 到 startSeconds，按 lengthSeconds 结束。
             var dsdSettings = AppSettingsStore.Load();
             bool preferNative = string.Equals(dsdSettings.DsdOutputMode, "Native", StringComparison.OrdinalIgnoreCase);
-            if (preferNative && startSeconds <= 0 && IsDsdFile(path))
+            if (preferNative && IsDsdFile(path))
             {
-                if (TryStartNativeDsd(path, status)) return true;
+                if (TryStartNativeDsd(path, status, startSeconds, lengthSeconds)) return true;
                 StartupLog.Write("[DSD原生] 已回退到 DoP / PCM，原因=" + (_lastNativeDsdError ?? "未知"));
                 status?.Invoke("原生 DSD 不可用，已自动回退…");
             }
@@ -738,7 +746,7 @@ namespace CelesteMusicPlayer
         /// 尝试开一条 ASIO 原生 DSD 播放会话。失败一律返回 false 并把原因写进日志，
         /// 由调用方回退到 DoP / PCM；绝不半途留下占着设备的驱动。
         /// </summary>
-        private bool TryStartNativeDsd(string path, Action<string>? status)
+        private bool TryStartNativeDsd(string path, Action<string>? status, double startSeconds = 0, double lengthSeconds = 0)
         {
             if (_outputMode != HiFiOutputBackend.OutputMode.Asio)
             {
@@ -759,6 +767,31 @@ namespace CelesteMusicPlayer
                 ?? drivers.FirstOrDefault(n => n.IndexOf("FiiO", StringComparison.OrdinalIgnoreCase) >= 0)
                 ?? drivers[0];
 
+            // 同格式无缝：已有会话且新曲目的容器 / 倍率 / 声道 / 位序一致时直接换源，
+            // ring 存货不清、驱动不重开，字节流首尾相接。不同倍率必须重开 ASIO，必然有间隙。
+            if (_nativeDsd != null && !_disposed)
+            {
+                try
+                {
+                    var header = DsdNativeReader.Peek(path);
+                    if (_nativeDsd.CanAcceptSeamless(header)
+                        && _nativeDsd.ReplaceSource(path, startSeconds, lengthSeconds))
+                    {
+                        Duration = _nativeDsd.Duration;
+                        Position = TimeSpan.Zero;
+                        _isPlaying = true;
+                        _nativeChainFormat.SourceFileDescription = _nativeDsd.FormatDescription;
+                        SeamlessTrackChanged?.Invoke();
+                        StartupLog.Write("[DSD原生] 同格式无缝续接（驱动未重开）: " + Path.GetFileName(path));
+                        return true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    StartupLog.Write("[DSD原生] 无缝判定失败，改走重建会话：" + ex.Message);
+                }
+            }
+
             // ASIO 驱动是独占的：必须先把现有 HiFi 输出整个释放，否则 native Open 会失败。
             // 退订事件，避免 Dispose 过程中的 PlaybackStopped 被误当成「播完」触发自动切歌。
             StopNativeDsd();
@@ -776,7 +809,7 @@ namespace CelesteMusicPlayer
             var session = new DsdNativePlaybackSession();
             session.PositionChanged += pos => { Position = pos; PositionChanged?.Invoke(pos); };
             session.PlaybackEnded += () => { _isPlaying = false; Position = Duration; PlaybackEnded?.Invoke(); };
-            if (!session.Start(path, driver))
+            if (!session.Start(path, driver, startSeconds, lengthSeconds))
             {
                 _lastNativeDsdError = session.LastError ?? "未知原因";
                 session.Dispose();
@@ -855,8 +888,8 @@ namespace CelesteMusicPlayer
         {
             if (_nativeDsd != null)
             {
-                // 原生 DSD 是顺序读的 1-bit 码流，首期不做 seek（分轨已在起播前回退到 PCM）。
-                StartupLog.Write("[DSD原生] 当前为原生 DSD 直出，暂不支持拖动进度");
+                _nativeDsd.Seek(position);
+                Position = position;
                 return;
             }
 

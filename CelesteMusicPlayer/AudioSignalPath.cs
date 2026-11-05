@@ -282,7 +282,10 @@ namespace CelesteMusicPlayer
         {
             uint rate = dsd.NativeRateHz;
             string level = dsd.DsdLevelName;
-            string sourceText = $"{level} · {rate:0} Hz · 1-bit · {dsd.OutputChannels} 声道";
+            string sourceText = $"{dsd.ContainerName} · {level} · {rate:0} Hz · 1-bit"
+                + (dsd.SourceChannels > 2
+                    ? $" · {dsd.SourceChannels}ch 取前两声道"
+                    : $" · {dsd.SourceChannels}ch");
             string outputText = $"Native DSD · {rate:0} Hz · 1-bit（ASIO IoFormat=DSD）";
             string typeName = dsd.ChannelSampleTypeName;
             var dsdFormat = new AudioFormat((int)rate, 1, dsd.OutputChannels, false);
@@ -292,7 +295,7 @@ namespace CelesteMusicPlayer
             {
                 new SignalNode
                 {
-                    Id = "dsf", Title = $"DSF 文件（{level} 1-bit 码流）", State = SignalNodeState.Active,
+                    Id = "dsf", Title = $"{dsd.ContainerName} 文件（{level} 1-bit 码流）", State = SignalNodeState.Active,
                     InFormat = dsdFormat, OutFormat = dsdFormat, Note = sourceText
                 },
                 new SignalNode
@@ -328,6 +331,9 @@ namespace CelesteMusicPlayer
             {
                 new ChainField { Label = "输出设备", Value = dsd.DriverName },
                 new ChainField { Label = "输出模式", Value = "ASIO 独占（原生 DSD）" },
+                new ChainField { Label = "容器 / 倍率", Value = $"{dsd.ContainerName} · {level}" },
+                new ChainField { Label = "源声道", Value = dsd.SourceChannels > 2
+                    ? $"{dsd.SourceChannels}ch（取前两声道）" : $"{dsd.SourceChannels}ch" },
                 new ChainField { Label = "源格式", Value = sourceText },
                 new ChainField { Label = "实际输出", Value = outputText },
                 new ChainField { Label = "驱动采样类型", Value = typeName }
@@ -353,10 +359,13 @@ namespace CelesteMusicPlayer
                 new ChainTechTag { Text = "bit-perfect", Tone = ChainTagTone.Ok },
                 new ChainTechTag { Text = "DSP / EQ / 重采样全旁路", Tone = ChainTagTone.Ok },
                 new ChainTechTag { Text = "软件音量禁用", Tone = ChainTagTone.Ok },
-                new ChainTechTag { Text = level, Tone = ChainTagTone.Accent }
+                new ChainTechTag { Text = level, Tone = ChainTagTone.Accent },
+                new ChainTechTag { Text = dsd.ContainerName, Tone = ChainTagTone.Neutral }
             };
 
-            string limit = "只支持 DSF（DSD64/128/256、1–2 声道）；暂不支持拖动进度、分轨与无缝切歌；1-bit 码流不做 PCM 电平测量。";
+            string limit = "变速 / EQ / DSP / 软件音量 / 重采样在 1-bit 码流上不可用（会变噪声）；"
+                + "不同倍率之间切歌需重开 ASIO，必然有间隙；DST 压缩 DFF 与 SACD ISO 需专用解码器，暂不支持。"
+                + "1-bit 码流不做 PCM 电平测量。";
             var stabilityFields = new List<ChainField>
             {
                 new ChainField { Label = "请求模式", Value = "ASIO 原生 DSD" },
@@ -389,7 +398,7 @@ namespace CelesteMusicPlayer
                 DacDeviceName = dsd.DriverName,
                 DacFields = dacFields,
                 StabilityTitle = "当前输出链路已确认",
-                StabilityNote = "1-bit 码流不装箱、不转 PCM、不经 DSP；设备端以 ASIO DSD 格式接收。",
+                StabilityNote = "1-bit 码流不装箱、不转 PCM、不经 DSP；支持拖进度 / 分轨 / A-B 循环 / 同格式无缝续接。",
                 StabilityFields = stabilityFields,
                 Nodes = nodes,
                 SummaryLine = $"源 {level} 1-bit / {rate:0} Hz → ASIO 原生 DSD → {dsd.DriverName}",

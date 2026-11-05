@@ -40,7 +40,7 @@ namespace CelesteMusicPlayer
         private const int ResetPrefillMaxMs = 250;         // seek 后预填等待上限（不能卡 UI）
         private const int IdlePollMs = 40;                 // feeder 空闲轮询（事件以外的保险丝）
 
-        private readonly IWaveProvider _source;
+        private IWaveProvider _source;
         private readonly byte[] _ring;
         private readonly int _capacity;                    // ring 字节数（blockAlign 整数倍）
         private readonly int _targetBytes;                  // 目标水位（blockAlign 整数倍）
@@ -254,6 +254,27 @@ namespace CelesteMusicPlayer
                 if (ready) break;
                 Thread.Sleep(4);
             }
+        }
+
+        /// <summary>
+        /// 同格式无缝换源：保留 ring 里已有的存货，只把上游换成新的字节源。
+        /// 与 <see cref="Reset"/> 的区别是**不清 ring** —— 旧曲尾部继续播完，feeder 接着从新曲开头灌，
+        /// 字节流首尾相接，驱动全程不重开（ASIO 换位时钟必然有间隙，调用方须先判同倍率）。
+        /// </summary>
+        public void ReplaceSource(IWaveProvider newSource, TimeSpan newBaseline)
+        {
+            if (newSource == null) throw new ArgumentNullException(nameof(newSource));
+            StopFeeder();                       // 等 feeder 退出，避免读源过程中换引用
+            lock (_gate)
+            {
+                _source = newSource;
+                _upstreamEnded = false;
+                _consumed = 0;
+                _baseline = newBaseline;
+                _needData.Set();
+            }
+
+            StartFeeder();                      // ring 存货不动，接着播
         }
 
         public void Dispose()
