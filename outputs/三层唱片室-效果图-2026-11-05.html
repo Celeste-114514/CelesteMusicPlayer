@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>三层唱片室 · 静态效果图（待确认）</title>
+<style>
+  :root{
+    --page:#111318; --card:#191c22; --line:#2c313b; --ink:#eef0f4;
+    --muted:#98a0ae; --amber:#e0a860; --amber-soft:#f2c98d;
+    --glass:#c9d2dc; --metal:#d8d5cc;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);
+       font:14px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1280px;margin:0 auto;padding:36px 28px 72px}
+  header h1{font-size:26px;font-weight:600;margin:0 0 8px}
+  header p{color:var(--muted);margin:0 0 4px}
+  .badge{display:inline-block;margin-top:12px;padding:5px 12px;border:1px solid #5a4830;
+         border-radius:999px;color:var(--amber-soft);background:#2a2118;font-size:12px}
+  section{margin-top:40px}
+  .cap{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+  .cap b{font-size:18px;font-weight:600}
+  .cap span{color:var(--muted);font-size:13px}
+  .shot{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .shot svg{display:block;width:100%;height:auto}
+  .notes{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .note{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:#161920}
+  .note h3{margin:0 0 6px;font-size:14px;font-weight:600;color:var(--amber-soft)}
+  .note p{margin:0;color:var(--muted);font-size:13px}
+  .ask{margin-top:36px;border:1px solid #4a3c28;background:#211c15;border-radius:12px;padding:20px 22px}
+  .ask h2{margin:0 0 10px;font-size:17px;font-weight:600;color:var(--amber-soft)}
+  .ask ol{margin:0;padding-left:20px;color:#d7d2c8}
+  .ask li{margin-bottom:7px}
+  footer{margin-top:34px;color:#6f7785;font-size:12px;line-height:1.8}
+  svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>三层唱片室 · 静态效果图</h1>
+    <p>依据 <code>collab/RESULT-20261028-三层唱片室实施方案.md</code> 画的视觉稿，用来确认方向，不是可交互程序，也不是 WebGL 截图。</p>
+    <p>三层是<b>同一个空间里的三个阶段</b>：柜子里的那个抽屉，就是第二层展开的那叠专辑；第二层选中的那张，就是进 CD 机播放的那张。</p>
+    <div class="badge">待你点头后才动代码 · 2026-11-05</div>
+  </header>
+
+  <!-- ============ 屏 1：第一层 ============ -->
+  <section>
+    <div class="cap"><b>屏 1 · 第一层：艺术家抽屉柜</b><span>只看铭牌与唱片侧脊，不显示封面；CD 机在右侧低调停放</span></div>
+    <div class="shot">
+    <svg viewBox="0 0 1200 675" role="img" aria-label="第一层艺术家抽屉柜效果图">
+      <defs>
+        <radialGradient id="bg1" cx="50%" cy="42%" r="72%">
+          <stop offset="0%" stop-color="#2b2e35"/><stop offset="100%" stop-color="#14161b"/>
+        </radialGradient>
+        <linearGradient id="cab" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e4e1d8"/><stop offset="55%" stop-color="#cbc7bc"/><stop offset="100%" stop-color="#a9a59b"/>
+        </linearGradient>
+        <linearGradient id="cabSide" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#8e8a80"/><stop offset="100%" stop-color="#6f6c64"/>
+        </linearGradient>
+        <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#dbe6ef" stop-opacity=".42"/>
+          <stop offset="100%" stop-color="#8fa3b5" stop-opacity=".16"/>
+        </linearGradient>
+        <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#3b4049"/><stop offset="100%" stop-color="#252a32"/>
+        </linearGradient>
+        <linearGradient id="amberBar" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#e0a860"/><stop offset="100%" stop-color="#f4d7a6"/>
+        </linearGradient>
+        <filter id="soft"><feGaussianBlur stdDeviation="9"/></filter>
+      </defs>
+
+      <rect width="1200" height="675" fill="url(#bg1)"/>
+      <ellipse cx="600" cy="618" rx="330" ry="28" fill="#000" opacity=".45" filter="url(#soft)"/>
+
+      <!-- 顶栏 -->
+      <g fill="#cfd4dc" font-size="14">
+        <path d="M40 44 l12 -10 l0 20 z" fill="#cfd4dc"/>
+        <text x="64" y="49" font-size="17" font-weight="600" fill="#f2f3f6">唱片室</text>
+        <text x="142" y="49" fill="#8d95a2">选择艺术家</text>
+        <text x="1120" y="49" text-anchor="end" fill="#b7bec9">退出唱片室</text>
+        <circle cx="1150" cy="43" r="10" fill="none" stroke="#b7bec9" stroke-width="1.4"/>
+        <path d="M1146 39 l8 8 M1154 39 l-8 8" stroke="#b7bec9" stroke-width="1.4"/>
+      </g>
+      <line x1="40" y1="66" x2="1160" y2="66" stroke="#3a4049" stroke-width="1"/>
+
+      <!-- 左侧索引 / 搜索 -->
+      <g>
+        <rect x="42" y="112" width="188" height="36" rx="7" fill="#22262e" stroke="#3a414c"/>
+        <circle cx="62" cy="130" r="6" fill="none" stroke="#8d95a2" stroke-width="1.5"/>
+        <path d="M66 134 l6 6" stroke="#8d95a2" stroke-width="1.5"/>
+        <text x="80" y="135" fill="#78818f" font-size="13">搜索艺术家</text>
+        <g fill="#8d95a2" font-size="12" text-anchor="middle">
+          <text x="60" y="190">A</text><text x="60" y="222">B</text><text x="60" y="254">C</text>
+          <text x="60" y="286" fill="#e0a860" font-weight="600">D</text>
+          <text x="60" y="318">E</text><text x="60" y="350">F</text><text x="60" y="382">G</text>
+          <text x="60" y="414">H</text><text x="60" y="446">I</text><text x="60" y="478">J</text>
+          <text x="60" y="510">K</text><text x="60" y="542">L</text><text x="60" y="574">M</text>
+        </g>
+        <text x="42" y="612" fill="#69717e" font-size="12">共 248 位专辑艺术家</text>
+      </g>
+
+      <!-- 柜体：右侧面 + 顶面 -->
+      <path d="M846 104 l44 -26 l0 470 l-44 26 z" fill="url(#cabSide)" opacity=".9"/>
+      <path d="M282 104 l44 -26 l564 0 l-44 26 z" fill="#eeeae0"/>
+      <rect x="282" y="104" width="564" height="470" rx="4" fill="url(#cab)" stroke="#8e8a80" stroke-width="1.5"/>
+
+      <!-- 横梁 / 导轨 -->
+      <rect x="282" y="104" width="564" height="30" fill="#c3bfb4"/>
+      <rect x="282" y="544" width="564" height="30" fill="#b8b4a9"/>
+      <rect x="266" y="574" width="600" height="18" rx="3" fill="#8f8b81"/>
+      <rect x="274" y="592" width="584" height="8" rx="2" fill="#6e6b63"/>
+
+      <!-- 5 个抽屉 -->
+      <g id="drawers">
+        <!-- 1 -->
+        <g>
+          <rect x="300" y="146" width="528" height="70" rx="3" fill="#b4b0a5" stroke="#8f8b81"/>
+          <rect x="316" y="152" width="496" height="58" rx="2" fill="url(#glass)"/>
+          <g stroke="#6c7681" stroke-width="2" opacity=".55">
+            <path d="M520 156 v50"/><path d="M526 156 v50"/><path d="M533 156 v50"/><path d="M541 156 v50"/>
+            <path d="M550 156 v50"/><path d="M558 156 v50"/><path d="M567 156 v50"/><path d="M577 156 v50"/>
+            <path d="M588 156 v50"/><path d="M598 156 v50"/><path d="M609 156 v50"/><path d="M620 156 v50"/>
+          </g>
+          <rect x="300" y="146" width="204" height="70" rx="3" fill="url(#plate)"/>
+          <text x="318" y="176" fill="#f0f1f4" font-size="16" font-weight="600">Aimer</text>
+          <text x="318" y="197" fill="#9aa3b0" font-size="12">12 张专辑</text>
+          <text x="486" y="196" text-anchor="end" fill="#69717e" font-size="11">001</text>
+        </g>
+        <!-- 2 -->
+        <g>
+          <rect x="300" y="226" width="528" height="70" rx="3" fill="#b4b0a5" stroke="#8f8b81"/>
+          <rect x="316" y="232" width="496" height="58" rx="2" fill="url(#glass)"/>
+          <g stroke="#6c7681" stroke-width="2" opacity=".55">
+            <path d="M520 236 v50"/><path d="M528 236 v50"/><path d="M536 236 v50"/><path d="M545 236 v50"/>
+            <path d="M555 236 v50"/><path d="M565 236 v50"/><path d="M576 236 v50"/><path d="M588 236 v50"/>
+            <path d="M600 236 v50"/><path d="M612 236 v50"/><path d="M624 236 v50"/>
+          </g>
+          <rect x="300" y="226" width="204" height="70" rx="3" fill="url(#plate)"/>
+          <text x="318" y="256" fill="#f0f1f4" font-size="16" font-weight="600">Beethoven</text>
+          <text x="318" y="277" fill="#9aa3b0" font-size="12">34 张专辑</text>
+          <text x="486" y="276" text-anchor="end" fill="#69717e" font-size="11">002</text>
+        </g>
+        <!-- 3 · 聚焦，前探 + 暖色指示光 -->
+        <g transform="translate(10,-3)">
+          <rect x="300" y="306" width="528" height="74" rx="3" fill="#c9c5ba" stroke="#e0a860" stroke-width="2"/>
+          <rect x="316" y="312" width="496" height="62" rx="2" fill="url(#glass)"/>
+          <g stroke="#7b8693" stroke-width="2.4" opacity=".72">
+            <path d="M520 316 v54"/><path d="M528 316 v54"/><path d="M536 316 v54"/><path d="M545 316 v54"/>
+            <path d="M555 316 v54"/><path d="M565 316 v54"/><path d="M576 316 v54"/><path d="M588 316 v54"/>
+            <path d="M600 316 v54"/><path d="M612 316 v54"/><path d="M624 316 v54"/><path d="M636 316 v54"/>
+          </g>
+          <rect x="300" y="306" width="204" height="74" rx="3" fill="url(#plate)" stroke="#e0a860" stroke-width="1"/>
+          <text x="318" y="338" fill="#fff" font-size="17" font-weight="600">David Bowie</text>
+          <text x="318" y="359" fill="#e0a860" font-size="12">27 张专辑</text>
+          <text x="486" y="359" text-anchor="end" fill="#b08a58" font-size="11">003</text>
+          <rect x="300" y="377" width="528" height="3" fill="url(#amberBar)"/>
+        </g>
+        <!-- 4 -->
+        <g>
+          <rect x="300" y="390" width="528" height="70" rx="3" fill="#b4b0a5" stroke="#8f8b81"/>
+          <rect x="316" y="396" width="496" height="58" rx="2" fill="url(#glass)"/>
+          <g stroke="#6c7681" stroke-width="2" opacity=".45">
+            <path d="M520 400 v50"/><path d="M529 400 v50"/><path d="M539 400 v50"/><path d="M550 400 v50"/>
+            <path d="M562 400 v50"/><path d="M575 400 v50"/><path d="M589 400 v50"/>
+          </g>
+          <rect x="300" y="390" width="204" height="70" rx="3" fill="url(#plate)"/>
+          <text x="318" y="420" fill="#f0f1f4" font-size="16" font-weight="600">Enya</text>
+          <text x="318" y="441" fill="#9aa3b0" font-size="12">8 张专辑</text>
+          <text x="486" y="440" text-anchor="end" fill="#69717e" font-size="11">004</text>
+        </g>
+        <!-- 5 -->
+        <g>
+          <rect x="300" y="470" width="528" height="70" rx="3" fill="#b4b0a5" stroke="#8f8b81"/>
+          <rect x="316" y="476" width="496" height="58" rx="2" fill="url(#glass)"/>
+          <g stroke="#6c7681" stroke-width="2" opacity=".45">
+            <path d="M520 480 v50"/><path d="M530 480 v50"/><path d="M541 480 v50"/><path d="M553 480 v50"/>
+            <path d="M566 480 v50"/><path d="M580 480 v50"/><path d="M595 480 v50"/><path d="M611 480 v50"/>
+          </g>
+          <rect x="300" y="470" width="204" height="70" rx="3" fill="url(#plate)"/>
+          <text x="318" y="500" fill="#f0f1f4" font-size="16" font-weight="600">Fleetwood Mac</text>
+          <text x="318" y="521" fill="#9aa3b0" font-size="12">16 张专辑</text>
+          <text x="486" y="520" text-anchor="end" fill="#69717e" font-size="11">005</text>
+        </g>
+      </g>
+
+      <!-- 右侧低调停放的 CD 机 -->
+      <g opacity=".42">
+        <path d="M940 292 l150 -34 l0 190 l-150 34 z" fill="#9aa3ad"/>
+        <path d="M940 292 l150 -34 l0 22 l-150 34 z" fill="#c2cad3"/>
+        <ellipse cx="1015" cy="382" rx="54" ry="40" fill="#4b535e"/>
+        <ellipse cx="1015" cy="382" rx="54" ry="40" fill="none" stroke="#dbe2e9" stroke-width="3"/>
+        <circle cx="1015" cy="382" r="7" fill="#cbd3dc"/>
+      </g>
+
+      <text x="600" y="646" text-anchor="middle" fill="#8d95a2" font-size="13">单击抽屉 → 该抽屉被抽出，整叠专辑进入第二层　·　悬停只轻微前探，不自动进入</text>
+    </svg>
+    </div>
+  </section>
+
+  <!-- ============ 屏 2：第二层 ============ -->
+  <section>
+    <div class="cap"><b>屏 2 · 第二层：抽屉抽出，专辑展开</b><span>左侧约 62% 唱片区，右侧约 38% CD 机；选中 ≠ 播放</span></div>
+    <div class="shot">
+    <svg viewBox="0 0 1200 675" role="img" aria-label="第二层专辑展开与 CD 机效果图">
+      <defs>
+        <radialGradient id="bg2" cx="54%" cy="40%" r="75%">
+          <stop offset="0%" stop-color="#2c2f37"/><stop offset="100%" stop-color="#13151a"/>
+        </radialGradient>
+        <linearGradient id="caseA" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#5d6b86"/><stop offset="100%" stop-color="#2c3547"/></linearGradient>
+        <linearGradient id="caseB" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#8a5f52"/><stop offset="100%" stop-color="#402d2a"/></linearGradient>
+        <linearGradient id="caseC" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#c39a52"/><stop offset="100%" stop-color="#6b5228"/></linearGradient>
+        <linearGradient id="caseD" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#4e7168"/><stop offset="100%" stop-color="#253c37"/></linearGradient>
+        <linearGradient id="caseE" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#6a5a7d"/><stop offset="100%" stop-color="#322b3d"/></linearGradient>
+        <linearGradient id="caseF" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#7b8288"/><stop offset="100%" stop-color="#383d42"/></linearGradient>
+        <linearGradient id="deck" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#e6e3da"/><stop offset="60%" stop-color="#c2bfb5"/><stop offset="100%" stop-color="#94918a"/>
+        </linearGradient>
+        <linearGradient id="lid" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#dbe8f2" stop-opacity=".55"/>
+          <stop offset="100%" stop-color="#7f95a8" stop-opacity=".18"/></linearGradient>
+        <radialGradient id="disc" cx="38%" cy="32%" r="70%">
+          <stop offset="0%" stop-color="#e8eef4"/><stop offset="42%" stop-color="#a9bacb"/>
+          <stop offset="72%" stop-color="#7d8fa2"/><stop offset="100%" stop-color="#cdd8e2"/></radialGradient>
+        <filter id="soft2"><feGaussianBlur stdDeviation="12"/></filter>
+      </defs>
+
+      <rect width="1200" height="675" fill="url(#bg2)"/>
+      <ellipse cx="430" cy="600" rx="330" ry="26" fill="#000" opacity=".42" filter="url(#soft2)"/>
+      <ellipse cx="965" cy="588" rx="180" ry="22" fill="#000" opacity=".4" filter="url(#soft2)"/>
+
+      <!-- 顶栏 -->
+      <g>
+        <path d="M40 44 l12 -10 l0 20 z" fill="#cfd4dc"/>
+        <text x="64" y="49" fill="#9aa3b0" font-size="14">艺术家</text>
+        <text x="130" y="49" fill="#f2f3f6" font-size="17" font-weight="600">David Bowie</text>
+        <rect x="510" y="28" width="146" height="31" rx="6" fill="#22262e" stroke="#3a414c"/>
+        <text x="526" y="49" fill="#c8cfd8" font-size="12">排序：发行年份 ↑</text>
+        <path d="M642 40 l6 6 l-6 6" fill="none" stroke="#c8cfd8" stroke-width="1.4"/>
+        <text x="1120" y="49" text-anchor="end" fill="#b7bec9" font-size="13">27 张专辑</text>
+      </g>
+      <line x1="40" y1="66" x2="1160" y2="66" stroke="#3a4049" stroke-width="1"/>
+
+      <!-- 来源提示：抽屉外框退到后方 -->
+      <g opacity=".35">
+        <rect x="50" y="132" width="640" height="430" rx="5" fill="none" stroke="#9fa6af" stroke-width="2"/>
+        <rect x="50" y="132" width="200" height="430" fill="#4a5059" opacity=".5"/>
+        <text x="66" y="164" fill="#c9cfd7" font-size="13">David Bowie</text>
+      </g>
+
+      <!-- 唱片叠：非选中项侧转，选中项前探转正 -->
+      <!-- 各盒 = 封面平行四边形 + 右侧厚度书脊 -->
+      <g id="stack">
+        <g transform="translate(78,182)">
+          <path d="M0 0 l104 -22 l0 300 l-104 22 z" fill="url(#caseA)" stroke="#8b95a3" stroke-width="1"/>
+          <path d="M104 -22 l16 8 l0 300 l-16 -8 z" fill="#2b3240"/>
+          <text x="14" y="272" fill="#e7ecf2" font-size="12" transform="rotate(-12 14 272)">Space Oddity</text>
+        </g>
+        <g transform="translate(196,166)">
+          <path d="M0 0 l110 -18 l0 306 l-110 18 z" fill="url(#caseB)" stroke="#8b95a3" stroke-width="1"/>
+          <path d="M110 -18 l17 8 l0 306 l-17 -8 z" fill="#3c2b27"/>
+          <text x="14" y="278" fill="#f0e7e2" font-size="12" transform="rotate(-9 14 278)">Hunky Dory</text>
+        </g>
+        <g transform="translate(320,150)">
+          <path d="M0 0 l118 -14 l0 312 l-118 14 z" fill="url(#caseC)" stroke="#8b95a3" stroke-width="1"/>
+          <path d="M118 -14 l18 7 l0 312 l-18 -7 z" fill="#5b4522"/>
+          <text x="14" y="284" fill="#fff4dd" font-size="12" transform="rotate(-7 14 284)">Ziggy Stardust</text>
+        </g>
+        <!-- 选中项：更大、更正、前探，带暖色边框 -->
+        <g transform="translate(452,118)">
+          <rect x="-8" y="-8" width="196" height="372" rx="6" fill="none" stroke="#e0a860" stroke-width="2"/>
+          <path d="M0 0 l176 -8 l0 348 l-176 8 z" fill="url(#caseD)" stroke="#c8d2d9" stroke-width="1.5"/>
+          <path d="M176 -8 l14 6 l0 348 l-14 -6 z" fill="#1f3832"/>
+          <circle cx="88" cy="150" r="52" fill="#0d1a17" opacity=".55"/>
+          <path d="M62 168 q26 -54 52 -6" fill="none" stroke="#d9c58a" stroke-width="3" opacity=".8"/>
+          <text x="18" y="278" fill="#f2f5f6" font-size="17" font-weight="600">Low</text>
+          <text x="18" y="302" fill="#b9c6c2" font-size="12">1977 · 11 首</text>
+          <text x="18" y="326" fill="#e0a860" font-size="11">已选中</text>
+        </g>
+        <g transform="translate(646,152)">
+          <path d="M0 0 l112 14 l0 306 l-112 -14 z" fill="url(#caseE)" stroke="#8b95a3" stroke-width="1"/>
+          <path d="M0 0 l-16 8 l0 306 l16 -8 z" fill="#2c2536"/>
+          <text x="20" y="278" fill="#eae4f2" font-size="12" transform="rotate(7 20 278)">Heroes</text>
+        </g>
+        <g transform="translate(766,178)">
+          <path d="M0 0 l100 20 l0 288 l-100 -20 z" fill="url(#caseF)" stroke="#8b95a3" stroke-width="1"/>
+          <path d="M0 0 l-15 8 l0 288 l15 -8 z" fill="#2b3035"/>
+        </g>
+      </g>
+
+      <!-- 右侧 CD 机 -->
+      <g id="cdplayer">
+        <!-- 机壳透视 -->
+        <path d="M856 250 l282 -46 l0 318 l-282 46 z" fill="url(#deck)" stroke="#8e8b81" stroke-width="1.5"/>
+        <path d="M856 250 l282 -46 l0 26 l-282 46 z" fill="#eeebe2"/>
+        <path d="M1138 204 l0 318 l24 -14 l0 -318 z" fill="#8d8a81"/>
+        <!-- 玻璃盖 -->
+        <path d="M884 274 l234 -38 l0 232 l-234 38 z" fill="url(#lid)" stroke="#dbe5ee" stroke-width="2" opacity=".9"/>
+        <path d="M884 274 l234 -38 l0 16 l-234 38 z" fill="#eef4f8" opacity=".35"/>
+        <!-- 机芯圆盘 -->
+        <ellipse cx="1000" cy="382" rx="92" ry="78" fill="#3e454e"/>
+        <ellipse cx="1000" cy="374" rx="86" ry="72" fill="url(#disc)"/>
+        <ellipse cx="1000" cy="374" rx="86" ry="72" fill="none" stroke="#e8eef4" stroke-width="1.6" opacity=".8"/>
+        <ellipse cx="1000" cy="374" rx="60" ry="50" fill="none" stroke="#9fb0c0" stroke-width="1" opacity=".55"/>
+        <ellipse cx="1000" cy="374" rx="34" ry="28" fill="none" stroke="#9fb0c0" stroke-width="1" opacity=".45"/>
+        <path d="M1000 374 l70 -34 a78 60 0 0 1 -2 44 z" fill="#ffffff" opacity=".18"/>
+        <circle cx="1000" cy="374" r="11" fill="#4b535d"/>
+        <circle cx="1000" cy="374" r="5" fill="#d7dee6"/>
+        <!-- 前面板按钮 / 状态灯 -->
+        <rect x="884" y="486" width="234" height="42" rx="4" fill="#a8a59c" opacity=".9"/>
+        <circle cx="906" cy="507" r="7" fill="#e0a860"/>
+        <circle cx="930" cy="507" r="7" fill="#5a626c"/>
+        <circle cx="954" cy="507" r="7" fill="#5a626c"/>
+        <rect x="984" y="500" width="112" height="14" rx="7" fill="#6c7178"/>
+        <rect x="984" y="500" width="112" height="14" rx="7" fill="none" stroke="#8d939a"/>
+        <!-- 脚垫 -->
+        <rect x="872" y="566" width="26" height="12" rx="3" fill="#6f6c64"/>
+        <rect x="1098" y="530" width="26" height="12" rx="3" fill="#6f6c64"/>
+        <!-- 停靠的唱片盒 -->
+        <path d="M822 402 l52 -10 l0 92 l-52 10 z" fill="#445b54" stroke="#b7c4c0"/>
+        <text x="828" y="452" fill="#e4eeeb" font-size="10" transform="rotate(-11 828 452)">Low</text>
+      </g>
+
+      <!-- 底部操作 -->
+      <g>
+        <rect x="452" y="596" width="196" height="44" rx="8" fill="#e0a860"/>
+        <text x="550" y="624" text-anchor="middle" fill="#241c12" font-size="15" font-weight="600">放入 CD 机</text>
+        <text x="668" y="624" fill="#8d95a2" font-size="12">或按 Enter · 单击专辑只选中，不会立刻播放</text>
+        <text x="40" y="624" fill="#8d95a2" font-size="12">滚轮一次推进一张 · Esc 返回艺术家柜</text>
+      </g>
+    </svg>
+    </div>
+  </section>
+
+  <div class="notes">
+    <div class="note"><h3>同一个空间，不弹新窗口</h3><p>柜子 → 抽屉 → CD 机是镜头与物体的连续动作，三层共用一套材质和光照。抽屉外框退到后方作为「来源提示」，不遮住唱片。</p></div>
+    <div class="note"><h3>封面只在第二层出现</h3><p>第一层只看铭牌与侧脊；第二层非选中项侧转约 55–65° 露出部分封面，选中项前探转正露出完整封面与专辑名 / 年份 / 曲数。</p></div>
+    <div class="note"><h3>选中与播放是两件事</h3><p>浏览别的专辑时 CD 机仍放原来那张。要换歌必须按「放入 CD 机」，装载动画结束后才发一次播放命令。</p></div>
+    <div class="note"><h3>第三层（未画屏）</h3><p>镜头推近 CD 机：盒子停靠 → 盘片沿路径进入机芯 → 盖板闭合 → 盘片旋转、指示灯亮。场景内自带播放 / 暂停、上下曲、真实进度与音量，因为底部播放条会被覆盖。</p></div>
+  </div>
+
+  <div class="ask">
+    <h2>想请你先拍板这四件事</h2>
+    <ol>
+      <li>整体气质：<b>暖白金属 / 陶瓷柜体 + 磨砂玻璃抽屉 + 细窄琥珀指示光</b>，放在深色空间里。要不要换成更冷、更暗的方向？</li>
+      <li>第一层<b>不显示专辑封面</b>、只看铭牌和侧脊——这是方案里的明确要求，确认保留吗？</li>
+      <li>第二层右侧 <b>CD 机常驻可见</b>（约 38% 宽度），第一层只低调停在背景。可以吗？</li>
+      <li>默认排序按<b>发行年份升序</b>，缺年份靠后；第二层可切换排序并带重排动画。有没有更习惯的默认（例如按专辑名）？</li>
+    </ol>
+  </div>
+
+  <footer>
+    静态效果图，仅用于确认视觉方向；最终实现是 WebGL 实时三维场景（真实几何、真实拾取、真实专辑数据），不会拿这张图当交互模型。<br>
+    点头后按方案分阶段推进：灰模验证比例 → 精细材质 → 接真实音乐库与播放桥 → 实机录屏与交付；每阶段独立提交、可回退。
+  </footer>
+</div>
+</body>
+</html>
