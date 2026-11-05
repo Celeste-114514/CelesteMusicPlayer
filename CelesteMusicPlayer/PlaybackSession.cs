@@ -181,13 +181,11 @@ namespace CelesteMusicPlayer
             _lastPreloadTick = preloadNow;
             _lastPreloadPath = current.FilePath;
 
-            // DSD 播完自动切歌优先：DSD 源不参与无缝预加载（走原 Stop→PlayNext，避免无缝与 DSD 时长修正冲突）
+            // 原生 DSD 也参与无缝预载，但走专用通道：不转 PCM WAV，直接把下一首 DSD
+            // 交给会话预打开，由会话在播完瞬间同会话换源（驱动不重开、字节级连续）。
+            // 不是原生 DSD 会话（例如转 PCM 播放）时仍走下面的 WAV 预载。
             string curExt = System.IO.Path.GetExtension(current.FilePath).ToLowerInvariant();
-            if (curExt is ".dsf" or ".dff")
-            {
-                _preloadedItem = null;
-                return;
-            }
+            bool nativeDsd = (curExt is ".dsf" or ".dff") && engine.IsNativeDsdActive;
 
             // 变速激活时不参与无缝预加载（2026-10-15）：SpeedStretch 的 FIFO 里往往还压着
             // 上一曲尾部，无缝续接会把两曲的信号搅在同一段分析窗里（拖腔/回声）。
@@ -226,12 +224,16 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                string? wav = await engine.EnsureCachedWavAsync(next.FilePath).ConfigureAwait(true);
-                if (string.IsNullOrWhiteSpace(wav))
+                string? wav = null;
+                if (!nativeDsd)
                 {
-                    StartupLog.Write("预加载: 转码失败 无WAV next=" + next.Title);
-                    _preloadedItem = null;
-                    return;
+                    wav = await engine.EnsureCachedWavAsync(next.FilePath).ConfigureAwait(true);
+                    if (string.IsNullOrWhiteSpace(wav))
+                    {
+                        StartupLog.Write("预加载: 转码失败 无WAV next=" + next.Title);
+                        _preloadedItem = null;
+                        return;
+                    }
                 }
 
                 // ⚠ 预载是异步的：这一路 await（读源/转码）期间用户可能已经切歌。
@@ -243,8 +245,16 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                bool ok = await engine.PrepareNextSeamless(wav).ConfigureAwait(true);
-                StartupLog.Write("预加载: \"" + current.Title + "\" → \"" + next.Title + "\" wav=" + System.IO.Path.GetFileName(wav) + " 采纳无缝=" + ok);
+                // 原生 DSD：不转码，直接把原始 DSF / DFF 路径交给会话预打开。
+                // 格式不同（下一首不是 DSD 或倍率不同）时 PrepareNextDsdAsync 返回 false，
+                // _preloadedItem 置空，后续照旧走常规 Stop→PlayNext。
+                bool ok = nativeDsd
+                    ? await engine.PrepareNextDsdAsync(next.FilePath, next.StartTimeSeconds).ConfigureAwait(true)
+                    : await engine.PrepareNextSeamless(wav!).ConfigureAwait(true);
+                StartupLog.Write("预加载: \"" + current.Title + "\" → \"" + next.Title + "\" "
+                    + (nativeDsd ? "原生DSD预载=" + System.IO.Path.GetFileName(next.FilePath)
+                                 : "wav=" + System.IO.Path.GetFileName(wav!))
+                    + " 采纳无缝=" + ok);
                 _preloadedItem = ok ? next : null;   // 格式不同等：无缝不启用，后续走重建
             }
             catch (Exception ex)

@@ -72,6 +72,9 @@ namespace CelesteMusicPlayer
         /// <summary>上游读尽（播完）。上层轮询此标志决定何时停。</summary>
         public bool Drained => Volatile.Read(ref _drained) != 0;
 
+        /// <summary>换源时显式复位播完标志（不等下一个回调）。</summary>
+        public void ResetDrained() => Interlocked.Exchange(ref _drained, 0);
+
         /// <summary>驱动给的缓冲大小。⚠ DSD 模式下单位是「1-bit 采样数」，不是字节。</summary>
         public int BufferFrames => _bufferFrames;
 
@@ -245,11 +248,10 @@ namespace CelesteMusicPlayer
                 got = 0;
             }
 
-            if (got <= 0)
-            {
-                Interlocked.Exchange(ref _drained, 1);
-            }
-            else if (got > need)
+            // 播完标志是「边沿」不是「锁存」：换源后一旦重新供数就必须复位，
+            // 否则监控线程会把新曲第一帧误判成又播完了。
+            Interlocked.Exchange(ref _drained, got > 0 ? 0 : 1);
+            if (got > need)
             {
                 got = need;
             }

@@ -103,10 +103,13 @@ namespace CelesteMusicPlayer
         public int OutputBufferMs => _hifiOut?.OutputBufferMs ?? 0;
 
         /// <summary>当前实际输出模式（共享 / WASAPI 独占 / ASIO）。null = 还没开过播。</summary>
-        public HiFiOutputBackend.OutputMode? CurrentOutputMode => _hifiOut?.CurrentMode;
+        // 原生 DSD 会话会 Dispose 掉 _hifiOut，音频设置面板读这两个属性就会得到空值
+        // 而显示「尚未建立输出链路」。原生会话也必须如实报出实际模式与驱动名。
+        public HiFiOutputBackend.OutputMode? CurrentOutputMode
+            => _nativeDsd != null ? HiFiOutputBackend.OutputMode.Asio : _hifiOut?.CurrentMode;
 
         /// <summary>当前输出设备描述（声卡名 / ASIO 驱动名）。null = 未知或系统默认。</summary>
-        public string? OutputDeviceName => _hifiOut?.OutputDeviceName;
+        public string? OutputDeviceName => _nativeDsd?.DriverName ?? _hifiOut?.OutputDeviceName;
 
         // 注：链路结构化状态 `ChainFormat` 本类已有（文件上方），极客顶栏读数直接复用它。
 
@@ -781,8 +784,7 @@ namespace CelesteMusicPlayer
                         Position = TimeSpan.Zero;
                         _isPlaying = true;
                         _nativeChainFormat.SourceFileDescription = _nativeDsd.FormatDescription;
-                        SeamlessTrackChanged?.Invoke();
-                        StartupLog.Write("[DSD原生] 同格式无缝续接（驱动未重开）: " + Path.GetFileName(path));
+                        StartupLog.Write("[DSD原生] 同格式续接（驱动未重开）: " + Path.GetFileName(path));
                         return true;
                     }
                 }
@@ -809,6 +811,16 @@ namespace CelesteMusicPlayer
             var session = new DsdNativePlaybackSession();
             session.PositionChanged += pos => { Position = pos; PositionChanged?.Invoke(pos); };
             session.PlaybackEnded += () => { _isPlaying = false; Position = Duration; PlaybackEnded?.Invoke(); };
+            session.TrackChanged += () =>
+            {
+                // 会话内部完成字节级换源（预载的下一首），驱动没重开。
+                // 这里推进曲目状态，交给 PlaybackSession 消费 _preloadedItem 去更新界面。
+                Duration = session.Duration;
+                Position = TimeSpan.Zero;
+                _isPlaying = true;
+                _nativeChainFormat.SourceFileDescription = session.FormatDescription;
+                SeamlessTrackChanged?.Invoke();
+            };
             if (!session.Start(path, driver, startSeconds, lengthSeconds))
             {
                 _lastNativeDsdError = session.LastError ?? "未知原因";
@@ -899,7 +911,12 @@ namespace CelesteMusicPlayer
 
         public void Stop()
         {
-            StopNativeDsd();
+            // 播完正在等同格式续接时别销毁会话：上层「播完 → 切下一首」常会先走一次 Stop，
+            // 一销毁就只剩重建，DAC 会在 DSD→PCM→DSD 之间切换并发出异响。
+            if (_nativeDsd == null || !_nativeDsd.IsAwaitingNext)
+            {
+                StopNativeDsd();
+            }
             _hifiOut?.Stop();
             _isPlaying = false;
             Position = TimeSpan.Zero;
@@ -942,6 +959,12 @@ namespace CelesteMusicPlayer
         /// <summary>预加载下一首到无缝源（HiFi 独占/ASIO/共享，同格式字节级续接）。返回是否采纳为无缝预加载。</summary>
         public Task<bool> PrepareNextSeamless(string nextWavPath)
             => Task.FromResult(_hifiOut?.PrepareNextSeamless(nextWavPath) ?? false);
+
+        /// <summary>原生 DSD 专用无缝预载：不转 PCM WAV，直接把下一首 DSD 交给会话预打开。</summary>
+        public bool IsNativeDsdActive => _nativeDsd != null;
+
+        public Task<bool> PrepareNextDsdAsync(string path, double startSeconds = 0, double lengthSeconds = 0)
+            => Task.FromResult(_nativeDsd?.PrepareNext(path, startSeconds, lengthSeconds) ?? false);
 
         /// <summary>用 ffmpeg 探测源文件真实音轨时长（秒）。失败返回 0。
         /// 用于 DSD 转 PCM 时长可能被转码 WAV 尾部 padding 拉长的可靠源时长。</summary>
