@@ -63,7 +63,7 @@ namespace CelesteMusicPlayer
         /// 不反解析 <see cref="SourceFormatDescription"/> / <see cref="ActualOutputFormat"/> 描述串。
         /// 未播放时 HasSession=false、各段为 null。
         /// </summary>
-        public ChainFormatState? ChainFormat => _hifiOut?.ChainFormat;
+        public ChainFormatState? ChainFormat => _nativeDsd != null ? _nativeChainFormat : _hifiOut?.ChainFormat;
 
         /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
         /// （未播放或 DSD 直出时为 false）。UI 线程调用。</summary>
@@ -206,6 +206,10 @@ namespace CelesteMusicPlayer
         // 原生 DSD（ASIO 2.3）专用会话：与 _hifiOut 的 PCM/DoP 链路互斥，同一时刻只可能有一个在播。
         private DsdNativePlaybackSession? _nativeDsd;
         private string? _lastNativeDsdError;
+        // 原生 DSD 会话的结构化链路状态：给极客读数等「只看 ChainFormat」的旧调用方用，
+        // 网页链路面板另走 AudioSignalPath.CaptureNativeDsd 的专用快照。
+        private readonly ChainFormatState _nativeChainFormat = new();
+        internal DsdNativePlaybackSession? NativeDsdSession => _nativeDsd;
 
         // 播放请求串行闸：连点播放/快速切歌时排队执行，杜绝两个并发播放链互相
         // StopCore + 抢 fallback.wav（2026-09-23 15:50 失败风暴+进度回跳事故）。
@@ -781,6 +785,16 @@ namespace CelesteMusicPlayer
 
             _nativeDsd = session;
             _lastNativeDsdError = null;
+            _nativeChainFormat.Reset();
+            _nativeChainFormat.HasSession = true;
+            _nativeChainFormat.IsDsdPath = true;
+            _nativeChainFormat.SharedMode = false;
+            _nativeChainFormat.TempoShifted = false;
+            _nativeChainFormat.DspChainActive = false;
+            _nativeChainFormat.Outcome = TranscodeOutcome.SameFormat;
+            _nativeChainFormat.Device = DevicePath.Lossless;
+            _nativeChainFormat.SourceFileDescription = session.FormatDescription;
+            _nativeChainFormat.DeviceEndpointName = driver;
             Duration = session.Duration;
             Position = TimeSpan.Zero;
             _isPlaying = true;
@@ -791,6 +805,7 @@ namespace CelesteMusicPlayer
         {
             var session = _nativeDsd;
             _nativeDsd = null;
+            _nativeChainFormat.Reset();
             if (session == null) return;
             try { session.Stop(); session.Dispose(); }
             catch (Exception ex) { StartupLog.Write("[DSD原生] 清理会话失败：" + ex.Message); }

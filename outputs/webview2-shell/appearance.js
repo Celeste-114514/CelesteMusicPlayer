@@ -187,6 +187,9 @@
   }
 
   function currentPresetName() {
+    // 顶部「应用」按钮可能在外观工作区从未 mount 时被点到，此时宿主快照 data 仍是 null。
+    // 报错 Cannot read properties of null (reading 'presets') 就出在这里，先兜住。
+    if (!data) return '未选择';
     const preset = (data.presets || []).find(item => item.id === data.presetId);
     return preset ? preset.name : '未选择';
   }
@@ -793,6 +796,11 @@
     host = host || mountedHost || $('settings-scroll');
     mountedHost = host;
     if (!host) return;
+    if (!data) {
+      // 没进过外观页就点了「应用」：先补拉一份宿主快照再渲染，别对 null 读 presets。
+      reload().then(() => render(host)).catch(error => status('外观数据加载失败：' + error.message, 'err'));
+      return;
+    }
     const scrollTop = host.scrollTop;
     host.replaceChildren();
 

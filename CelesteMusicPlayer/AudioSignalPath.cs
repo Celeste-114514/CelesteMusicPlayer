@@ -272,8 +272,148 @@ namespace CelesteMusicPlayer
         /// <param name="engine">播放引擎（null=程序刚起未建引擎，全部节点待命）。</param>
         /// <param name="globalBypass">DSP 总旁路开关状态（设置侧没有此开关的持久化，
         /// 由调用方把 UI toggle 现状传进来——这是参数不是"问 UI"）。</param>
+        /// <summary>
+        /// 原生 DSD（ASIO 2.3 IoFormat）专用链路快照。
+        /// 这条路径根本不产生 PCM：没有 ffmpeg 转码、没有 PCM 缓存、没有 DSP / 重采样 / 降混。
+        /// 用通用 PCM 模板去套会显示一堆「—」，还会错误地标成「解码 ffmpeg → PCM」。
+        /// 所以这里按真实链路单独装配节点与字段；拿不到的值仍然留空，不编。
+        /// </summary>
+        private static AudioSignalPath CaptureNativeDsd(DsdNativePlaybackSession dsd, AudioPlaybackEngine? engine)
+        {
+            uint rate = dsd.NativeRateHz;
+            string level = dsd.DsdLevelName;
+            string sourceText = $"{level} · {rate:0} Hz · 1-bit · {dsd.OutputChannels} 声道";
+            string outputText = $"Native DSD · {rate:0} Hz · 1-bit（ASIO IoFormat=DSD）";
+            string typeName = dsd.ChannelSampleTypeName;
+            var dsdFormat = new AudioFormat((int)rate, 1, dsd.OutputChannels, false);
+            bool needReverse = dsd.SourceLsbFirst && dsd.DriverDsdType == 33;
+
+            var nodes = new List<SignalNode>
+            {
+                new SignalNode
+                {
+                    Id = "dsf", Title = $"DSF 文件（{level} 1-bit 码流）", State = SignalNodeState.Active,
+                    InFormat = dsdFormat, OutFormat = dsdFormat, Note = sourceText
+                },
+                new SignalNode
+                {
+                    Id = "bitorder", Title = "位序归一化", State = SignalNodeState.Active,
+                    InFormat = dsdFormat, OutFormat = dsdFormat,
+                    Note = needReverse
+                        ? "DSF LSB-first → 驱动 MSB-first（逐字节反转）"
+                        : "源与驱动位序一致，原样直通"
+                },
+                new SignalNode
+                {
+                    Id = "feeder", Title = "后台喂料（环形缓冲）", State = SignalNodeState.Active,
+                    InFormat = dsdFormat, OutFormat = dsdFormat,
+                    Note = dsd.BytesPerChannel > 0
+                        ? $"{dsd.BytesPerChannel} 字节/通道；驱动回调只拷贝，欠载补 0x69/0x96 合法静音码"
+                        : "驱动回调只拷贝"
+                },
+                new SignalNode
+                {
+                    Id = "asio", Title = "ASIO 驱动（IoFormat = DSD）", State = SignalNodeState.Active,
+                    InFormat = dsdFormat, OutFormat = dsdFormat,
+                    Note = $"{typeName}；位时钟 {rate:0} Hz"
+                },
+                new SignalNode
+                {
+                    Id = "output", Title = "DAC（原生 DSD）", State = SignalNodeState.Active,
+                    InFormat = dsdFormat, OutFormat = dsdFormat, Note = dsd.DriverName
+                }
+            };
+
+            var fields = new List<ChainField>
+            {
+                new ChainField { Label = "输出设备", Value = dsd.DriverName },
+                new ChainField { Label = "输出模式", Value = "ASIO 独占（原生 DSD）" },
+                new ChainField { Label = "源格式", Value = sourceText },
+                new ChainField { Label = "实际输出", Value = outputText },
+                new ChainField { Label = "驱动采样类型", Value = typeName }
+            };
+            if (dsd.BytesPerChannel > 0)
+            {
+                fields.Add(new ChainField { Label = "驱动缓冲", Value = $"{dsd.BytesPerChannel} 字节/通道" });
+            }
+
+            int bufferMs = engine?.OutputBufferMs ?? 0;
+            if (bufferMs > 0)
+            {
+                fields.Add(new ChainField
+                {
+                    Label = "输出缓冲设置", Value = $"{bufferMs} ms",
+                    Note = "PCM 链路设置值；原生 DSD 的实际缓冲由 ASIO 驱动决定"
+                });
+            }
+
+            var tags = new List<ChainTechTag>
+            {
+                new ChainTechTag { Text = "原生 DSD 直出", Tone = ChainTagTone.Ok },
+                new ChainTechTag { Text = "bit-perfect", Tone = ChainTagTone.Ok },
+                new ChainTechTag { Text = "DSP / EQ / 重采样全旁路", Tone = ChainTagTone.Ok },
+                new ChainTechTag { Text = "软件音量禁用", Tone = ChainTagTone.Ok },
+                new ChainTechTag { Text = level, Tone = ChainTagTone.Accent }
+            };
+
+            string limit = "只支持 DSF（DSD64/128/256、1–2 声道）；暂不支持拖动进度、分轨与无缝切歌；1-bit 码流不做 PCM 电平测量。";
+            var stabilityFields = new List<ChainField>
+            {
+                new ChainField { Label = "请求模式", Value = "ASIO 原生 DSD" },
+                new ChainField { Label = "实际确认路径", Value = "1-bit 原生直通（bit-perfect）", Note = outputText },
+                new ChainField { Label = "是否回退", Value = "否" },
+                new ChainField { Label = "DSP 状态", Value = "强制旁路（DSD 不能线性处理）" },
+                new ChainField { Label = "限制说明", Value = limit }
+            };
+
+            var dacFields = new List<ChainField>
+            {
+                new ChainField { Label = "本次协商格式", Value = outputText },
+                new ChainField { Label = "设备路径判定", Value = DescribeDevicePath(DevicePath.Lossless) }
+            };
+
+            return new AudioSignalPath
+            {
+                StageTitle = "原生播放",
+                StageNote = "ASIO 原生 DSD 直出，不经过 PCM 链路",
+                LayerCount = nodes.Count,
+                SourceValue = sourceText,
+                SourceNote = dsd.FormatDescription,
+                ProcessValue = "直接路径",
+                ProcessNote = "1-bit 码流原样送达 DAC",
+                Fields = fields,
+                DspHeadroomValue = "不适用",
+                DspHeadroomNote = "原生 DSD 不经过 DSP，也没有 PCM 电平可测",
+                TechTags = tags,
+                Diagnostics = Array.Empty<ChainDiagnostic>(),
+                DacDeviceName = dsd.DriverName,
+                DacFields = dacFields,
+                StabilityTitle = "当前输出链路已确认",
+                StabilityNote = "1-bit 码流不装箱、不转 PCM、不经 DSP；设备端以 ASIO DSD 格式接收。",
+                StabilityFields = stabilityFields,
+                Nodes = nodes,
+                SummaryLine = $"源 {level} 1-bit / {rate:0} Hz → ASIO 原生 DSD → {dsd.DriverName}",
+                BitPerfect = true,
+                VerdictReason = string.Empty,
+                BitPerfectConfirmed = true,
+                PeakLevels = Array.Empty<float>(),
+                RmsLevels = Array.Empty<float>(),
+                LevelChannels = 0,
+                DeviceId = engine?.OutputDeviceId,
+                OutputBufferMs = bufferMs,
+                ConvolutionLatencyFrames = 0
+            };
+        }
+
         public static AudioSignalPath Capture(AudioPlaybackEngine? engine, bool globalBypass)
         {
+            // 原生 DSD 会话存在时直接走专用快照，绝不套 PCM 模板。
+            var native = engine?.NativeDsdSession;
+            if (native != null)
+            {
+                return CaptureNativeDsd(native, engine);
+            }
+
             var chain = engine?.ChainFormat;
             bool session = chain != null && chain.HasSession;
 

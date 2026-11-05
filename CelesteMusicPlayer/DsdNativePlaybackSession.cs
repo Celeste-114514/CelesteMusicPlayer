@@ -56,6 +56,23 @@ namespace CelesteMusicPlayer
         public string FormatDescription { get; private set; } = "Native DSD";
         public bool IsPlaying => !_ended && _output != null;
 
+        // 供音频链路面板读的真实参数（不猜、不编）
+        public uint NativeRateHz { get; private set; }
+        public int OutputChannels { get; private set; } = 2;
+        public bool SourceLsbFirst { get; private set; }
+        public string DriverName { get; private set; } = string.Empty;
+        public int DriverDsdType { get; private set; }
+        public int BytesPerChannel { get; private set; }
+        public string DsdLevelName { get; private set; } = string.Empty;
+
+        public string ChannelSampleTypeName => DriverDsdType switch
+        {
+            32 => "32 · DSDInt8LSB1（LSB-first）",
+            33 => "33 · DSDInt8MSB1（MSB-first）",
+            40 => "40 · DSDInt8NER8",
+            _ => "未知（" + DriverDsdType + "）",
+        };
+
         private DsdBitstream? _stream;
         private AsioFeederProvider? _feeder;
         private AsioNativeDsdOutput? _output;
@@ -96,6 +113,17 @@ namespace CelesteMusicPlayer
                 _bytesPerSecond = rate / 8.0 * outChannels;
                 Duration = TimeSpan.FromSeconds(_stream.TotalSamples / (double)rate);
                 FormatDescription = $"Native DSD {rate:0} Hz / 1-bit / {outChannels}ch（ASIO 原生）";
+                NativeRateHz = rate;
+                OutputChannels = outChannels;
+                SourceLsbFirst = _stream.LsbFirst;
+                DriverName = driverName;
+                DsdLevelName = rate switch
+                {
+                    2822400 => "DSD64",
+                    5644800 => "DSD128",
+                    11289600 => "DSD256",
+                    _ => rate.ToString(),
+                };
 
                 var source = new DsdNativeByteSource(_stream);
                 _feeder = new AsioFeederProvider(source, dsdSilence: true);
@@ -104,6 +132,8 @@ namespace CelesteMusicPlayer
                 _output = new AsioNativeDsdOutput(driverName, rate, outChannels, _stream.LsbFirst,
                     (buf, need) => _feeder!.Read(buf, 0, need), s => StartupLog.Write(s));
                 _output.Open();
+                DriverDsdType = _output.DriverDsdType;
+                BytesPerChannel = _output.BytesPerChannel;
                 _output.Start();
 
                 StartupLog.Write($"[DSD原生] 起播 {Path.GetFileName(dsfPath)} | {FormatDescription} | 时长={Duration} | 驱动={driverName}");
