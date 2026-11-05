@@ -104,8 +104,10 @@ namespace CelesteMusicPlayer
                     "切换设备请到底栏「音频设置」面板操作 —— 那里和这里是同一套后端，不清成两份。"),
                 Bool("HiFiSoftwareVolume", "HiFi 软件音量", "独占 / ASIO 下用 DSP 做数字衰减；音量不等于 100% 时不再 bit-perfect。DSD/DoP 直出时无效。"),
                 Slider("OutputBufferMs", "输出缓冲", 20, 500, 10, "ms", "越小越跟手，越大越抗卡顿。下一首歌或重新起播后生效。", advanced: true),
-                Sel("DsdOutputMode", "DSD 输出方式", "Pcm|转成 PCM;Dop|DoP 直出",
-                    "DoP 直出要求：DSF、DSD64–256、1–2 声道、独占或 ASIO、DSP 全关；不满足会自动回退 PCM。", advanced: true),
+                Sel("DsdOutputMode", "DSD 输出方式", "Pcm|转成 PCM;Dop|DoP 直出;Native|原生 DSD（ASIO）",
+                    "DoP 直出要求：DSF、DSD64–256、1–2 声道、独占或 ASIO、DSP 全关；不满足会自动回退 PCM。"
+                    + " 原生 DSD 只走 ASIO，要求 DAC 驱动支持 ASIO 2.3 DSD（本机 FiiO KA13 已实测支持 DSD64/128/256）；"
+                    + "播放时软件音量、EQ、重采样强制关闭；驱动不支持会自动回退 DoP 或 PCM。", advanced: true),
                 Sel("DopContainerMode", "DoP 容器摆位", "Packed24|24 位紧凑;Container32|32 位标准集装箱",
                     "仅在真正走 DoP 直出时起作用；预生成的缓存文件固定是 24 位紧凑。", scope: "app", advanced: true),
                 Bool("DsdPreloadEnabled", "DSD 整轨预载", "第一次播放会先花一点时间生成缓存，之后再播同一首是顺序读文件。", advanced: true),
@@ -385,7 +387,7 @@ namespace CelesteMusicPlayer
             ["OutputMode"] = (s, v) => s.OutputMode = One(v, "Shared", "WasapiExclusive", "Asio"),
             ["HiFiSoftwareVolume"] = (s, v) => s.HiFiSoftwareVolume = Bool(v),
             ["OutputBufferMs"] = (s, v) => s.OutputBufferMs = Int(v, 20, 500),
-            ["DsdOutputMode"] = (s, v) => s.DsdOutputMode = One(v, "Pcm", "Dop"),
+            ["DsdOutputMode"] = (s, v) => s.DsdOutputMode = One(v, "Pcm", "Dop", "Native"),
             ["DopContainerMode"] = (s, v) => s.DopContainerMode = One(v, "Packed24", "Container32"),
             ["DsdPreloadEnabled"] = (s, v) => s.DsdPreloadEnabled = Bool(v),
             ["AsioFeederEnabled"] = (s, v) => s.AsioFeederEnabled = Bool(v),

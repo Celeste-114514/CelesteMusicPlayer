@@ -22,7 +22,7 @@ namespace CelesteMusicPlayer
         public string? OutputDeviceId { get; private set; }
 
         /// <summary>HiFi 输出时实际协商的输出格式（WASAPI 设备端），否则 null。</summary>
-        public string? ActualOutputFormat => _hifiOut?.ActualOutputFormat;
+        public string? ActualOutputFormat => _nativeDsd?.FormatDescription ?? _hifiOut?.ActualOutputFormat;
 
         /// <summary>输出安全监控：本次会话输出峰值（dBFS；无数据为负无穷）。</summary>
         public float OutputPeakDbfs => _hifiOut?.OutputPeakDbfs ?? float.NegativeInfinity;
@@ -46,7 +46,7 @@ namespace CelesteMusicPlayer
         public string? SourceFormatDescription => _hifiOut?.SourceFormatDescription;
 
         /// <summary>当前是否正处于 DSD/DoP 直出（结构化标志位，守卫拒绝回退 PCM 时为 false）。</summary>
-        public bool IsDsdDirectOut => _hifiOut?.IsDsdDirectOut ?? false;
+        public bool IsDsdDirectOut => _nativeDsd != null || (_hifiOut?.IsDsdDirectOut ?? false);
 
         /// <summary>
         /// 转码前探测到的「源文件原始格式」（如 "44100hz / 24bit / 2声道"），即未经任何转码的源本身规格。
@@ -203,6 +203,9 @@ namespace CelesteMusicPlayer
         public string? LastError { get; private set; }
 
         private string? _lastTempWav;
+        // 原生 DSD（ASIO 2.3）专用会话：与 _hifiOut 的 PCM/DoP 链路互斥，同一时刻只可能有一个在播。
+        private DsdNativePlaybackSession? _nativeDsd;
+        private string? _lastNativeDsdError;
 
         // 播放请求串行闸：连点播放/快速切歌时排队执行，杜绝两个并发播放链互相
         // StopCore + 抢 fallback.wav（2026-09-23 15:50 失败风暴+进度回跳事故）。
@@ -298,7 +301,20 @@ namespace CelesteMusicPlayer
             //     · 共享模式：16bit/44100Hz（系统可播，可听优先）；
             //     · WASAPI 独占 / ASIO：高质量 pcm_s32le @ 352800Hz。
 
-            bool preferDop = string.Equals(AppSettingsStore.Load().DsdOutputMode, "Dop", StringComparison.OrdinalIgnoreCase);
+            // ── 原生 DSD（ASIO 2.3 DSD 扩展）──────────────────────────────
+            // 走完全独立的播放会话：DSF 1-bit 码流不装箱、不经 DSP，直接送 ASIO 驱动。
+            // 守卫不满足或驱动不支持就在这里安静回退到下面的 DoP / PCM 链路，日志写明原因，绝不静默。
+            // 分轨（startSeconds > 0）需 seek，首期不支持，直接回退。
+            var dsdSettings = AppSettingsStore.Load();
+            bool preferNative = string.Equals(dsdSettings.DsdOutputMode, "Native", StringComparison.OrdinalIgnoreCase);
+            if (preferNative && startSeconds <= 0 && IsDsdFile(path))
+            {
+                if (TryStartNativeDsd(path, status)) return true;
+                StartupLog.Write("[DSD原生] 已回退到 DoP / PCM，原因=" + (_lastNativeDsdError ?? "未知"));
+                status?.Invoke("原生 DSD 不可用，已自动回退…");
+            }
+
+            bool preferDop = string.Equals(dsdSettings.DsdOutputMode, "Dop", StringComparison.OrdinalIgnoreCase);
 
             // ── DSD「整轨 DoP WAV 直读」（2026-09-24 FiiO KA13 实测定案）──────────────────────
             // 旧链路是"边播边装箱"（DsdBitstream 读源 → 装箱线程 → 32MB 环 → 渲染线程），在固定位置卡顿；
@@ -714,6 +730,72 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 尝试开一条 ASIO 原生 DSD 播放会话。失败一律返回 false 并把原因写进日志，
+        /// 由调用方回退到 DoP / PCM；绝不半途留下占着设备的驱动。
+        /// </summary>
+        private bool TryStartNativeDsd(string path, Action<string>? status)
+        {
+            if (_outputMode != HiFiOutputBackend.OutputMode.Asio)
+            {
+                _lastNativeDsdError = "原生 DSD 只支持 ASIO 输出（请到音频设置把输出模式切到 ASIO）";
+                return false;
+            }
+
+            string[] drivers;
+            try { drivers = NAudio.Wave.Asio.AsioDriver.GetAsioDriverNames(); }
+            catch (Exception ex) { _lastNativeDsdError = "枚举 ASIO 驱动失败：" + ex.Message; return false; }
+            if (drivers.Length == 0)
+            {
+                _lastNativeDsdError = "本机没有注册 ASIO 驱动（请安装 DAC 厂商的 USB 驱动）";
+                return false;
+            }
+
+            string driver = drivers.FirstOrDefault(n => string.Equals(n, _devicePreference, StringComparison.OrdinalIgnoreCase))
+                ?? drivers.FirstOrDefault(n => n.IndexOf("FiiO", StringComparison.OrdinalIgnoreCase) >= 0)
+                ?? drivers[0];
+
+            // ASIO 驱动是独占的：必须先把现有 HiFi 输出整个释放，否则 native Open 会失败。
+            // 退订事件，避免 Dispose 过程中的 PlaybackStopped 被误当成「播完」触发自动切歌。
+            StopNativeDsd();
+            StopCore();
+            if (_hifiOut != null)
+            {
+                _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
+                _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
+                _hifiOut.PositionChanged -= Hifi_PositionChanged;
+                _hifiOut.Dispose();
+                _hifiOut = null;
+            }
+
+            status?.Invoke("正在以 ASIO 原生 DSD 输出…");
+            var session = new DsdNativePlaybackSession();
+            session.PositionChanged += pos => { Position = pos; PositionChanged?.Invoke(pos); };
+            session.PlaybackEnded += () => { _isPlaying = false; Position = Duration; PlaybackEnded?.Invoke(); };
+            if (!session.Start(path, driver))
+            {
+                _lastNativeDsdError = session.LastError ?? "未知原因";
+                session.Dispose();
+                return false;
+            }
+
+            _nativeDsd = session;
+            _lastNativeDsdError = null;
+            Duration = session.Duration;
+            Position = TimeSpan.Zero;
+            _isPlaying = true;
+            return true;
+        }
+
+        private void StopNativeDsd()
+        {
+            var session = _nativeDsd;
+            _nativeDsd = null;
+            if (session == null) return;
+            try { session.Stop(); session.Dispose(); }
+            catch (Exception ex) { StartupLog.Write("[DSD原生] 清理会话失败：" + ex.Message); }
+        }
+
         private void CleanupTempWav()
         {
             if (_lastTempWav != null)
@@ -730,24 +812,46 @@ namespace CelesteMusicPlayer
 
         public void Pause()
         {
+            if (_nativeDsd != null)
+            {
+                _nativeDsd.Pause();
+                _isPlaying = false;
+                return;
+            }
+
             _hifiOut?.Pause();
             _isPlaying = false;
         }
 
         public void Resume()
         {
+            if (_nativeDsd != null)
+            {
+                _nativeDsd.Resume();
+                _isPlaying = _nativeDsd.IsPlaying;
+                return;
+            }
+
             _hifiOut?.Resume();
             _isPlaying = _hifiOut?.IsPlaying == true;
         }
 
         public void Seek(TimeSpan position)
         {
+            if (_nativeDsd != null)
+            {
+                // 原生 DSD 是顺序读的 1-bit 码流，首期不做 seek（分轨已在起播前回退到 PCM）。
+                StartupLog.Write("[DSD原生] 当前为原生 DSD 直出，暂不支持拖动进度");
+                return;
+            }
+
             _hifiOut?.Seek(position);
             Position = position;
         }
 
         public void Stop()
         {
+            StopNativeDsd();
             _hifiOut?.Stop();
             _isPlaying = false;
             Position = TimeSpan.Zero;
@@ -759,6 +863,13 @@ namespace CelesteMusicPlayer
         public void SetVolume(double volume)
         {
             _userVolume = Math.Clamp(volume, 0.0, 1.0);
+            if (_nativeDsd != null)
+            {
+                // DSD 是 1-bit 码流，线性缩放等于破坏编码 → 满耳噪声。原生路径强制旁路软件音量。
+                StartupLog.Write("[DSD原生] 软件音量在原生 DSD 下不可用，请调 DAC / 系统音量");
+                return;
+            }
+
             _hifiOut?.SetVolume((float)_userVolume);
         }
 
@@ -858,6 +969,7 @@ namespace CelesteMusicPlayer
 
         private void StopCore()
         {
+            StopNativeDsd();
             _isPlaying = false;
             Position = TimeSpan.Zero;
             Duration = TimeSpan.Zero;

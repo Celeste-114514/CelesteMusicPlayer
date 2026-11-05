@@ -49,6 +49,7 @@ namespace CelesteMusicPlayer
         private readonly object _gate = new object();      // 只做指针/计数更新，不做 IO
         private readonly ManualResetEventSlim _needData = new ManualResetEventSlim(false);
         private readonly bool _dopSilence;                  // 欠载兜底补 DoP 静音帧（而非静音零）
+        private readonly bool _dsdSilence;                  // 欠载兜底补原生 1-bit DSD 静音码（0x69/0x96）
         private readonly Func<object?>? _identity;          // 无缝切换观察：reader 引用变了=切歌
 
         private int _readPos;
@@ -86,13 +87,16 @@ namespace CelesteMusicPlayer
         /// <param name="targetSeconds">目标水位秒数（默认 1）。</param>
         /// <param name="dopSilence">欠载兜底补 DoP 合法静音帧（DSD/DoP 路径用；PCM 路径补零）。</param>
         /// <param name="identity">无缝切换观察器：返回当前 reader 引用，变化即把进度线归零。PCM 路径传入。</param>
+        /// <param name="dsdSilence">欠载兜底补原生 1-bit DSD 合法静音码（Native DSD 路径用，优先于 dopSilence）。</param>
         public AsioFeederProvider(IWaveProvider source, int ringSeconds = RingDefaultSeconds,
-            int targetSeconds = TargetDefaultSeconds, bool dopSilence = false, Func<object?>? identity = null)
+            int targetSeconds = TargetDefaultSeconds, bool dopSilence = false, Func<object?>? identity = null,
+            bool dsdSilence = false)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
             WaveFormat = source.WaveFormat;
             _blockAlign = Math.Max(1, WaveFormat.BlockAlign);
             _dopSilence = dopSilence;
+            _dsdSilence = dsdSilence;
             _identity = identity;
 
             long bps = WaveFormat.AverageBytesPerSecond;
@@ -424,6 +428,18 @@ namespace CelesteMusicPlayer
         /// 与 AsioDoPProvider 尾部补静音同配方——保住 DoP 锁， DAC 不会当杂音）。</summary>
         private void FillSilence(byte[] buf, int offset, int bytes)
         {
+            if (_dsdSilence)
+            {
+                // 原生 DSD：一个字节 = 8 个 1-bit 采样，合法静音码型 0x69 / 0x96 交替。
+                // 和 DoP 的 24/32bit 容器帧完全不同，绝不能套用下面那套 0x05/0xFA marker，
+                // 更不能填 0（DAC 会失锁甚至咔哒）。
+                for (int i = 0; i < bytes; i++)
+                {
+                    buf[offset + i] = ((i & 1) == 0) ? (byte)0x69 : (byte)0x96;
+                }
+                return;
+            }
+
             if (!_dopSilence)
             {
                 Array.Clear(buf, offset, bytes);

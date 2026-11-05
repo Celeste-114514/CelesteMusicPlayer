@@ -107,7 +107,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>DSD 输出模式（用户可选择）："Pcm"=用 ffmpeg 转成高采样 PCM 输出（默认，保留现有独占/ASIO 的 PCM 方案）；
         /// "Dop"=DoP 直出（ECHO 方案：仅 DSF/DSD64-256/1-2 声道/独占或 ASIO/DSP 全关，
-        /// 把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect；其余情形自动回退 PCM 并写日志）。</summary>
+        /// 把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect；其余情形自动回退 PCM 并写日志）；
+        /// "Native"=ASIO 原生 DSD 直出（ASIO 2.3 IoFormat 扩展，1-bit 码流不装箱直接送 DAC，
+        /// 仅 DSF/DSD64-256/1-2 声道/ASIO 输出；不支持时自动回退，播放期间强制旁路音量与 DSP）。</summary>
         public string DsdOutputMode { get; set; } = "Pcm";
 
         /// <summary>DoP 容器摆位（仅 DsdOutputMode="Dop" 时生效）："Packed24"=24bit 紧凑，标记在每采样
