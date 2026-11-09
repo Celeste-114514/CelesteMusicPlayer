@@ -5,7 +5,7 @@
 
 ## 项目
 
-CelesteMusicPlayer — WinUI 3 + C# 的 Windows HiFi 音乐播放器（.NET 9 / win-x64）。
+CelesteMusicPlayer 是使用 C# 和 .NET 10 的 Windows HiFi 音乐播放器。正式界面使用原生 Windows 窗口、WinForms 宿主和 WebView2。网页源码在 `outputs/webview2-shell/`。
 
 ## 三条硬规矩（违反会造成实际损失）
 
@@ -31,5 +31,4 @@ CelesteMusicPlayer — WinUI 3 + C# 的 Windows HiFi 音乐播放器（.NET 9 / 
 查看 git status 和相关任务单
 （有任务单就读 collab/TASK-*.md，没有就等用户派）
 ```
-不要 `ls -R`，不要全仓 grep，不要通读 MainWindow.xaml（8941 行）。
-这些信息 Project Brief 里都已经替你读过了。
+按 Project Brief 的文件地图限定搜索范围。查现行界面从网页源码和对应的原生宿主入手，旧 XAML 文件仅供查阅迁移历史。

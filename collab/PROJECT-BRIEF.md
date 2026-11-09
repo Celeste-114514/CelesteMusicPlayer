@@ -1,6 +1,6 @@
 # PROJECT-BRIEF — CelesteMusicPlayer 给 Codex 的压缩包
 
-> 维护方：WorkBuddy（本地）。最后更新：2026-10-26。
+> 维护方 WorkBuddy 与 Codex（本地）。当前架构核对日期为 2026-11-09。
 > 有新会话时**只读这一个文件**，不要自己去 `ls -R` / 全仓 grep 探索项目结构 —— 下面都有了。
 > 本文件可能滞后于代码。**有矛盾以代码为准，并且请你在结论里指出本文件哪句过时了**，我会更新它。
 
@@ -8,11 +8,8 @@
 
 ## 1. 这是什么
 
-Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows10.0.19041.0`）/ `win-x64`。
-目标机器是用户本人的 MSI 笔记本，不是给别人用的商业软件 —— 这意味着可以偏向"他机器上能跑"，
-但代价是踩过的坑高度本地化。
-
-规模（2026-10-26 实测）：**971 个 .cs / 约 34.6 万行 C# / 161 个 .xaml**。这是个大仓库。
+Windows 桌面 HiFi 音乐播放器。C# / .NET 10（`net10.0-windows10.0.19041.0`），日常验证发布为 `win-x64`。
+正式界面由原生 Windows 窗口、WinForms 宿主和 WebView2 组成。窗口、托盘、任务栏和媒体控制由 C# 对接 Windows。网页处理布局和交互，播放、解码、曲库与 DSP 由宿主服务管理。
 
 ## 2. 搜索地盘（先读这一节）
 
@@ -29,7 +26,7 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 | `native/build/**` | C++ 内核的构建产物 |
 | `dist/**`、`run-latest/**` | 发布产物 |
 
-**推荐搜索范围**：`CelesteMusicPlayer/**`（不含 obj/bin）+ 根目录少数几个 `.md`。
+**推荐搜索范围**为 `CelesteMusicPlayer/` 的正式源码、`outputs/webview2-shell/`、相关的 `tools/` 子目录与任务文档。
 拿不准一个路径是不是垃圾，就先问我（WorkBuddy），一次 `ls` 比一次全仓搜索便宜得多。
 
 已知的大坑 heuristics：
@@ -38,38 +35,32 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 
 ## 3. 文件地图（改代码前先看这里）
 
-入口 & 主窗口（partial class 拆了一堆）：
-| 文件 | 行数 | 职责 |
-|---|---|---|
-| `CelesteMusicPlayer/MainWindow.xaml` | 8941 | 主窗口 XAML，**最大文件，别整份读** |
-| `MainWindow.xaml.cs` / `.Features.cs` / `.Misc.cs` / `.Library.cs` / `.UiTheme.cs` / `.Playback.cs` / `.Playback2.cs` / `.Playback3.cs` / `.AudioChain.cs` / `.MiniPlayer.cs` | 合计约 2 万行 | 主窗口逻辑，按域拆的 partial |
-| `CelesteMusicPlayer/TagPanelControl.xaml.cs` | 6196 | 标签编辑面板 |
-| `CelesteMusicPlayer/SettingsPanelControl.xaml.cs` | 4273 | 设置面板 |
-| `CelesteMusicPlayer/SettingsWindow.xaml.cs` | 3693 | 设置窗口 |
+下列 C# 文件位于 `CelesteMusicPlayer/`。网页文件位于 `outputs/webview2-shell/`。
 
-其他关键模块：
-- `HiFiOutputBackend.cs`（2660 行）— 独占模式音频输出后端
-- `ScatteredPlayWindow.*` — 自持引擎的独立小播放窗口（不走主播放逻辑）
-- `MiniPlayerWindow.*` + `MiniPlayerBridge` — 迷你播放器（单向数据流，窗内零播放逻辑）
-- `CoverArtService` — 封面分档缓存（Thumb 160 / Album 320 / Large 768）
-- `AppSettingsStore` — 设置持久化
-- `CelesteTheme.cs` / `CelesteTokenApplier.cs` — 主题 + 设计令牌
-- `celeste_dsp_core.dll` — 原生 DSP 内核（C++，`native/` 源码）
+| 文件 | 职责 |
+|---|---|
+| `Program.cs`、`App.xaml.cs` | 程序启动、文件激活、单实例和窗口生命周期。`App.xaml.cs` 是沿用的 C# 文件名 |
+| `NativeMainWebWindow.cs`、`NativeAppWindow.cs`、`WebShellWindow.cs` | 原生窗口与 WebView2 宿主、网页消息、封面资源和窗口控制 |
+| `index.html`、`shell.js`、`now-playing.js` | 正式主界面、导航、曲库与播放详情页 |
+| `MainWindow.xaml.cs`、`MainWindow.Playback*.cs`、`IWebPlayerServices.cs` | 主播放和曲库服务。网页经服务接口读写状态 |
+| `AudioPlaybackEngine.cs`、`HiFiOutputBackend.cs`、`native/dsp-core/` | 播放引擎、输出设备、原生 DSP |
+| `WebMiniPlayerWindow.cs`、`MiniPlayerBridge.cs`、`mini-player.html` | 迷你播放器，读取主播放会话 |
+| `WebQuickPlayerWindow.cs`、`QuickPlaybackSession.cs`、`quick-player.html` | 零散播放器，拥有独立会话与临时队列 |
+| `settings.js`、`WebSettingsService.cs`、`WebSettingsSchema.cs`、`AppSettingsStore.cs` | 网页设置、设置契约和持久化 |
+| `tags.js`、`WebTagService.cs`、`TagEditorService.cs` | 网页标签编辑和文件元数据读写 |
+| `dsp.js`、`dsp-eq.js`、`MainWindow.WebDsp.cs` | 网页 DSP 和 EQ 面板与原生处理链的接口 |
+| `CoverSourceReader.cs`、`CoverCacheService.cs`、`CoverVariants.cs` | 提取封面和生成按物理像素选用的 240、480、1024 缩略档。大背景走专用路径 |
+
+项目文件使用 `UseWinUI=false`。正式窗口布局从网页源码找，旧 XAML 布局供迁移参考。
 
 ## 4. 已知铁律（踩过的坑，不要再踩）
 
 这些每一条都是真金白银换来的。违反的后果写在括号里。
 
-**WinUI 3 相关**
-- UserControl 里选文件**不能** `WindowNative.GetWindowHandle(this)`（InvalidCastException）→ 统一用 `MainWindow.PickerHostHandle()`。
-- XAML 里给元素写初值 + 在事件里访问后续声明的 `x:Name` → 秒崩 `0xC000027B`（NRE）。新面板的 `ValueChanged`/`Toggled` 一律加就绪守卫。
-- `Collapsed → Visible` 后**同一帧** Begin 动画会被静默吞 → 要 `DispatcherQueue.TryEnqueue` 延一帧 + 兜底复查。
-- XAML Storyboard 的 `TargetName` 有解析失败案例 → 用代码 `Storyboard.SetTarget` 锁死目标。
-- 别在运行时给第三方控件的 VisualState 动画属性链打补丁（COMException 崩）。
-- 新界面模式要改三处才生效：① 设置白名单 ② UI 的 ComboBoxItem Tag ③ `ApplyUiStyleMode` 分支。缺一处静默失效。
-- 取色只认 resolver 那套；判断主题要沿元素树找显式 Light/Dark 祖先，**禁读 `App.RequestedTheme`**。
-- 自定义 Slider 模板必须横竖两向都做部件。
-- 面板内图标只用 Segoe 字形 FontIcon，且**只取项目里已在用的字形**（E8BB 关 / E921 最小化 / E9D9 均衡器 / E713 处理 / E767 音量 / E768 播放 / EA37 队列 / E710 打开文件 …）。
+**原生宿主与网页**
+
+- 文件选择器和对话框以当前原生窗口为父窗口。WebView2 消息在宿主 UI 线程处理。
+- 主题走网页语义颜色变量，图标复用 `index.html` 的 SVG 定义。标题栏与拖动区由 `platform-materials.css` 声明。
 
 **P/Invoke**
 - `SetWindowRgn` 在 **user32**，`CreateRoundRectRgn`/`DeleteObject` 才在 **gdi32**。挂错 DLL 不崩（被 Safe 吞），但功能整个失效 —— 这类错误在日志里看不到，得肉眼查。
@@ -83,7 +74,6 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 - 冒烟判据不能只看错误行数 — 被 `Safe()` 吞掉的真错抓不到，必须肉眼过一遍新增 ERR 行。
 - 验证发布产物新鲜度**别信 exe**：exe 是跨构建字节不变的启动器外壳，真代码在 `CelesteMusicPlayer.dll` —— 对它做 md5 比对 + 搜方法名。
 - publish 前若 obj/bin 搬不动（WinError 5 拒绝访问）→ 先 `dotnet build-server shutdown`。
-- XamlCompiler 连续崩属于环境噪音，重试即可。
 
 ## 5. 交付约定
 
@@ -91,7 +81,8 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 - 构建通过之后才提交。
 - 用户**不懂编程**。结论要用大白话讲，给可验证的步骤，不要堆术语和营销腔。
 - 用户重视"能回滚"：重大改动前先备份 / 重命名，不要直接删。
-- 当前分支 `main`，本地领先远端较多且有约 770 个未跟踪文件（大多是上面第 2 节的垃圾缓存，没推过）。
+- 开工前用 `git status --short` 核对当前分支和已有改动，保留其他人的工作。
+- 当前任务清单见 `outputs/待办清单-2026-11-02.md`。验收与本地发布以实际提交和运行目录为准。
 
 ## 6. 你在被问到时，默认的产出形态
 
@@ -108,14 +99,14 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
 
 ## 7. 网页外壳（WebView2）— 2026-10-26 新增
 
-**2026-10-27 用户决定：网页壳是正式且唯一的产品主界面。** 原 WinUI 界面源码保留，MainWindow 暂作为隐藏的既有播放/控件后端；正常启动、托盘恢复和文件激活不再展示原主界面，也不提供返回旧界面入口。后续功能都以网页 UI 为落点。
+2026-10-27 确认网页壳为正式主界面。正常启动、托盘恢复和文件激活使用原生窗口与网页。C# 中的 `MainWindow` 负责主播放、曲库和设置等后台服务。
 
 当前交付目录为 `dist/bugfix-20261104-borderless/`。用户日常验证统一双击仓库根目录 `打开当前播放器.lnk`，直接启动 EXE，避免批处理黑窗；由 `tools/NewCurrentPlayerShortcut.ps1` 重建。`tools/OpenCeleste.cmd` 保留为工具兼容入口，指向同一目录。旧 dist 目录保留回退，不表示当前运行版本；`dist/web-ui-current/` 当前是普通目录，不是最新版链接。
 
 **交付必须面向不懂代码的用户**：默认同步上述固定运行目录；结论明确“已同步/尚未同步”、是否需重启和回退位置。提交号只是源码回退点，不能当程序入口。若必须更换验证目录，同步更新根目录快捷方式、生成脚本、工具入口和 `先看这里-仓库与验证入口.md`，不要再让用户在多个产物目录找 EXE。
 
 **★ 网页源码唯一真身：`outputs/webview2-shell/`。**
-`dist/*/WebShell/` 是**构建产物**（`CelesteMusicPlayer.csproj:90` 用 `<Content Include="..\outputs\webview2-shell\*...">` 拷过去的），
+`dist/*/WebShell/` 是**构建产物**（`CelesteMusicPlayer.csproj` 的 Content 条目负责拷贝），
 **在 dist 下改会被下次构建覆盖，等于白改。** 改完 src 之后要手动 `cp` 同步到正在实跑的那个 dist 目录
 （当前是 `dist/bugfix-20261104-borderless/WebShell/`）才能立刻看到效果。
 
@@ -130,8 +121,7 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows1
    - `navigation.css` 里 `width` + `aspect-ratio:600/290`
    只改 CSS 宽度是不够的 —— 2026-10-26 就因为只改了 CSS、没改 `shell.js`，导致容器和按钮
    缩了而两圈之间的**径向间距没跟着收**，视觉上变成两条散开的环带。当前尺寸 **300×145**
-   （`width:min(300px,42vw)`），对应外圈半径 ≈ 119px。`shell.js` 里环半径现在是 **168 / 238**
-   （内环原本 150，为压缩层间距拉到 168）。改尺寸时这三个文件必须一起算。
+   （`width:min(300px,42vw)`），对应外圈半径 ≈ 119px。`shell.js` 的图标环半径为 **150 / 238**，改尺寸时这三个文件必须一起算。
 
 2. **`.primary` 带着一个全局 `margin-top:21px`**（`shell.css`，本来是给首页 hero 卡片用的）。
    直接放进工具条会把按钮顶出队列。songs 页曾用 `.songs-actions .primary{margin:0;...}` 修过一次，
