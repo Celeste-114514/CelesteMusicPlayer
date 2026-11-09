@@ -200,6 +200,7 @@
   }
 
   function renderList() {
+    endDrag();
     const list = $('queue-list');
     list.replaceChildren();
     list.classList.toggle('is-filtered', !!filter);
@@ -297,19 +298,19 @@
     } catch (error) { shell.notify(error.message); load(); }
   }
 
-  async function move(from, to, trackId) {
-    if (moving || !queue) return;
+  async function move(from, to, trackId, revision = queue?.revision) {
+    if (moving || filter || !queue) return;
     if (to < 0 || to >= (queue.total || 0)) return;
     if (from === to) return;
     if (to >= queue.tracks.length) { $('queue-status').textContent = '请先点“加载更多”，再拖到更后面的位置。'; return; }
     moving = true;
     try {
-      await request({ operation: 'move', from, to, revision: queue.revision, trackId });
+      await request({ operation: 'move', from, to, revision, trackId });
       $('queue-status').textContent = '已调整队列顺序';
       await load();
     } catch (error) {
-      $('queue-status').textContent = error.message;
       await load();
+      shell.notify(error.message);
     } finally { moving = false; }
   }
 
@@ -319,27 +320,32 @@
      行内移动超过 4px 才算开始拖，双击播放和点选都不受影响。 */
 
   const DRAG_SLOP = 4;
+  const SCROLL_EDGE = 56;
+  const queueList = $('queue-list');
+  const queueScroller = queueList.closest('.main');
 
   function bindDrag(row, track) {
     row.addEventListener('pointerdown', event => {
-      if (!live || moving || filter || !queue) return;
+      if (!live || drag || moving || filter || !queue) return;
       if (event.button !== 0) return;
       // 触屏从行身开始拖会和"上下滑列表"打架，只认左侧握柄
       if (event.pointerType === 'touch' && !event.target.closest('.queue-grip')) return;
       drag = {
         row, from: track.index, trackId: track.id, revision: queue.revision,
-        x: event.clientX, y: event.clientY, active: false, target: null, ghost: null
+        pointerId: event.pointerId, x: event.clientX, y: event.clientY,
+        active: false, target: null, ghost: null, dropRow: null, frame: 0
       };
       window.addEventListener('pointermove', onDragMove);
       window.addEventListener('pointerup', onDragEnd);
-      window.addEventListener('pointercancel', onDragEnd);
+      window.addEventListener('pointercancel', onDragCancel);
+      window.addEventListener('blur', endDrag);
+      window.addEventListener('keydown', onDragKey, true);
     });
   }
 
   function onDragMove(event) {
-    if (!drag) return;
-    // 指针在窗口外松开时收不到 pointerup：只要下次移动时按键已全部松开，就当这一拖结束
-    if (drag.active && event.buttons === 0) { onDragEnd(); return; }
+    if (event.pointerId !== drag?.pointerId) return;
+    if (event.buttons === 0) { endDrag(); return; }
     if (!drag.active) {
       if (Math.abs(event.clientY - drag.y) < DRAG_SLOP && Math.abs(event.clientX - drag.x) < DRAG_SLOP) return;
       beginDrag();
@@ -348,13 +354,18 @@
     drag.x = event.clientX;
     drag.y = event.clientY;
     paintGhost();
-    paintTarget(event.clientY);
-    autoScroll(event.clientY);
+    paintTarget();
+    if (!drag.frame) {
+      drag.lastFrame = performance.now();
+      drag.frame = requestAnimationFrame(scrollDrag);
+    }
   }
 
   function beginDrag() {
     const row = drag.row, box = row.getBoundingClientRect();
     drag.active = true;
+    row.setPointerCapture(drag.pointerId);
+    row.addEventListener('lostpointercapture', onDragCancel);
     drag.height = box.height;
     document.body.classList.add('is-reordering');
     document.getSelection()?.removeAllRanges();
@@ -384,49 +395,88 @@
     drag.ghost.style.top = `${top}px`;
   }
 
-  /* 落点：指针压在谁的上半就是"插到它前面"，压在最后一行下半就是"插到队尾"。
-     拖动行自己不算落点 —— 否则在它自己身上晃也会高亮。 */
-  function paintTarget(y) {
-    const others = rows().filter(item => item !== drag.row);
-    let hit = null;
-    for (const item of others) {
-      const box = item.getBoundingClientRect();
-      if (y < box.top + box.height / 2) { hit = { row: item, after: false }; break; }
+  function paintTarget() {
+    drag.dropRow?.classList.remove('drop-before', 'drop-after');
+    drag.dropRow = drag.target = null;
+    const { x, y, from } = drag;
+    const hit = document.elementFromPoint(x, y);
+    // 列表行之间有 2px 的间隙，视为插在下一行前面。
+    const row = hit === queueList
+      ? document.elementFromPoint(x, y + 2)?.closest('.queue-row')
+      : hit?.closest('.queue-row');
+    if (row?.parentElement !== queueList || row === drag.row) return;
+    const box = row.getBoundingClientRect();
+    const after = y >= box.top + box.height / 2;
+    const insertion = Number(row.dataset.queueIndex) + Number(after);
+    const target = insertion - Number(from < insertion);
+    if (target === from) return;
+    row.classList.add(after ? 'drop-after' : 'drop-before');
+    drag.dropRow = row;
+    drag.target = target;
+  }
+
+  function scrollDrag(now) {
+    drag.frame = 0;
+    const { x, y } = drag;
+    const area = queueScroller.getBoundingClientRect();
+    const list = queueList.getBoundingClientRect();
+    if (x < list.left || x >= list.right || y < area.top || y >= area.bottom) return;
+
+    const up = Math.max(0, SCROLL_EDGE - (y - area.top));
+    const down = Math.max(0, SCROLL_EDGE - (area.bottom - y));
+    const pressure = (down - up) / SCROLL_EDGE;
+    if (!pressure) return;
+    const elapsed = Math.min(now - drag.lastFrame, 34);
+    const pixels = Math.max(1, Math.round(Math.abs(pressure) * elapsed * 0.8));
+    const before = queueScroller.scrollTop;
+    queueScroller.scrollTop += Math.sign(pressure) * pixels;
+    if (queueScroller.scrollTop === before) return;
+    paintTarget();
+    drag.lastFrame = now;
+    drag.frame = requestAnimationFrame(scrollDrag);
+  }
+
+  function onDragEnd(event) {
+    if (event.pointerId !== drag?.pointerId) return;
+    if (drag.active) {
+      drag.x = event.clientX;
+      drag.y = event.clientY;
+      paintTarget();
     }
-    if (!hit && others.length) hit = { row: others.at(-1), after: true };
-    rows().forEach(item => item.classList.remove('drop-before', 'drop-after'));
-    if (!hit) { drag.target = null; return; }
-    hit.row.classList.add(hit.after ? 'drop-after' : 'drop-before');
-    let to = Number(hit.row.dataset.queueIndex) + (hit.after ? 1 : 0);
-    if (drag.from < to) to -= 1;
-    drag.target = to;
-  }
-
-  function autoScroll(y) {
-    const main = document.querySelector('.main');
-    if (!main) return;
-    const area = main.getBoundingClientRect();
-    if (y < area.top + 56) main.scrollTop -= 16;
-    else if (y > area.bottom - 56) main.scrollTop += 16;
-  }
-
-  function onDragEnd() {
     const state = drag;
     endDrag();
-    // 只是点了一下（没越过阈值）或者没挪位置：什么都不发
-    if (!state?.active || state.target === null || state.target === state.from) return;
-    move(state.from, state.target, state.trackId);
+    if (state.target !== null) move(state.from, state.target, state.trackId, state.revision);
+  }
+
+  function onDragCancel(event) {
+    if (event.pointerId !== drag?.pointerId) return;
+    if (event.type === 'lostpointercapture' && event.target !== drag.row) return;
+    endDrag();
+  }
+
+  function onDragKey(event) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    endDrag();
   }
 
   function endDrag() {
-    drag?.ghost?.remove();
-    if (drag?.row) drag.row.classList.remove('is-dragging');
-    rows().forEach(row => row.classList.remove('drop-before', 'drop-after'));
+    if (!drag) return;
+    const { row, pointerId, ghost, dropRow, frame } = drag;
+    drag = null;
+    cancelAnimationFrame(frame);
+    row.removeEventListener('lostpointercapture', onDragCancel);
+    if (row.hasPointerCapture(pointerId)) row.releasePointerCapture(pointerId);
+    ghost?.remove();
+    row.classList.remove('is-dragging');
+    dropRow?.classList.remove('drop-before', 'drop-after');
     document.body.classList.remove('is-reordering');
     window.removeEventListener('pointermove', onDragMove);
     window.removeEventListener('pointerup', onDragEnd);
-    window.removeEventListener('pointercancel', onDragEnd);
-    drag = null;
+    window.removeEventListener('pointercancel', onDragCancel);
+    window.removeEventListener('blur', endDrag);
+    window.removeEventListener('keydown', onDragKey, true);
   }
 
   /* ── 定位当前 ───────────────────────────────────────────────── */
@@ -494,7 +544,7 @@
     if (live) shell.send('seek', { seconds });
   });
   document.addEventListener('celeste:navigate', event => {
-    if (event.detail !== 'queue') { token++; return; }
+    if (event.detail !== 'queue') { endDrag(); token++; return; }
     // 顶部全局搜索框的内容带进这一页，两个输入框保持一致（搜索只影响显示，不改队列）
     $('queue-search').value = $('search').value;
     filter = String($('search').value || '').trim();
@@ -513,7 +563,7 @@
     const current = token;
     try {
       const result = await request({ operation: 'get', offset: 0 });
-      if (current !== token || shell.getPage() !== 'queue') return;
+      if (current !== token || drag || moving || shell.getPage() !== 'queue') return;
       if (!queue || result.revision !== queue.revision) { queue = result; render(); }
       else { queue.currentIndex = result.currentIndex; queue.next = result.next; queue.previous = result.previous; queue.order = result.order; renderPrev(); renderNext(); markCurrent(); }
     } catch { }

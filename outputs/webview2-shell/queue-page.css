@@ -92,7 +92,7 @@
   transition:background calc(160ms * var(--motion-scale)) var(--motion-continuity)}
 .queue-row:hover{background:var(--hover)}
 .queue-row[aria-current=true]{background:var(--accent-soft);color:var(--accent)}
-.queue-grip{color:var(--muted);cursor:grab;display:grid;place-items:center;opacity:.55}
+.queue-grip{color:var(--muted);cursor:grab;display:grid;place-items:center;opacity:.55;touch-action:none}
 .queue-grip:active{cursor:grabbing}
 .queue-row:hover .queue-grip{opacity:1}
 .queue-index{font-size:calc(11px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}

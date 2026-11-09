@@ -29,6 +29,7 @@ function queuePayload(offset = 0) {
   const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } }), errors = [];
+    page.setDefaultTimeout(6000);
     page.on('pageerror', error => errors.push(error.message));
 
     // 宿主替身：记录网页发出的命令，队列 get 返回分页数据
@@ -46,9 +47,11 @@ function queuePayload(offset = 0) {
           tracks: list.slice(offset, offset + 200)
         };
       };
+      const handlers = [];
+      window.deliver = data => handlers.forEach(callback => callback({ data }));
       window.chrome ||= {};
       window.chrome.webview = {
-        addEventListener: (_, callback) => { window.deliver = data => callback({ data }); },
+        addEventListener: (type, callback) => { if (type === 'message') handlers.push(callback); },
         postMessage: message => {
           window.commands.push(message);
           if (!message.requestId) return;
@@ -65,6 +68,7 @@ function queuePayload(offset = 0) {
 
     await page.goto(pathToFileURL(path.join(__dirname, '../outputs/webview2-shell/index.html')).href);
     await page.evaluate(() => {
+      CelesteMotion.setMode('off');
       deliver({ kind: 'celeste.state', version: 1, state: {
         trackId: 't2', title: 'Seventh Wave', artist: 'Mono Lake', album: '专辑 2', duration: 301, position: 78.4,
         playing: true, favorite: true, playbackOrder: 'ListLoop', quality: 'FLAC · 24bit/44.1kHz · 1411kbps',
@@ -214,7 +218,76 @@ function queuePayload(offset = 0) {
     await page.waitForTimeout(120);
     assert.equal(await page.evaluate(() => window.commands.filter(m => m.command === 'previous').length), 0, '没有上一首时不该发 previous');
 
-    // ⑨ 空队列
+    // ⑨ 长队列：光标停在边缘也应连续滚动，松手按最后看到的落点提交。
+    await page.evaluate(() => {
+      const list = Array.from({ length: 64 }, (_, index) => ({
+        ...window.__queueTracks[index % window.__queueTracks.length], id: 'long' + index, index
+      }));
+      const before = window.queuePayload;
+      window.queuePayload = (offset = 0) => ({
+        ...before(offset), revision: 10, total: list.length, tracks: list.slice(offset, offset + 200)
+      });
+    });
+    await go('songs'); await go('queue');
+    const main = page.locator('.main');
+    const source = page.locator('.queue-row[data-queue-index="12"]');
+    const scroll = () => main.evaluate(node => node.scrollTop);
+    const dragToEdge = async (direction = 'down') => {
+      await source.evaluate(node => node.scrollIntoView({ block: 'center', behavior: 'instant' }));
+      const box = await source.boundingBox();
+      const area = await main.boundingBox();
+      const x = box.x + 120, y = area.y + (direction === 'down' ? area.height - 10 : 10);
+      await page.mouse.move(x, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(x, y);
+      return { x, y };
+    };
+    await page.evaluate(() => { window.moved = undefined; });
+    const edge = await dragToEdge();
+    const beforeScroll = await scroll();
+    await page.waitForTimeout(300);
+    assert.ok(await scroll() > beforeScroll + 50, '光标停住时应继续滚动');
+    const target = { x: edge.x, y: edge.y - 72 };
+    await page.mouse.move(target.x, target.y);
+    const drop = await page.evaluate(({ x, y }) => {
+      const row = document.elementFromPoint(x, y)?.closest('.queue-row');
+      if (!row) return null;
+      const box = row.getBoundingClientRect();
+      const index = Number(row.dataset.queueIndex);
+      const after = y >= box.top + box.height / 2;
+      return index + Number(after) - Number(12 < index + Number(after));
+    }, target);
+    assert.ok(drop > 12, '滚动后应命中源行之后的条目');
+    await page.mouse.up();
+    await page.waitForFunction(() => window.moved);
+    assert.deepEqual(await page.evaluate(() => {
+      const { from, to, trackId, revision } = window.moved;
+      return { from, to, trackId, revision };
+    }), { from: 12, to: drop, trackId: 'long12', revision: 10 });
+    await page.waitForFunction(() => document.getElementById('queue-status').textContent === '');
+
+    // 拖出列表后松手、按 Esc、指针被系统取消，都不应应用此前的落点。
+    await page.evaluate(() => { window.moved = undefined; });
+    await dragToEdge();
+    await page.mouse.move(5, 5);
+    await page.mouse.up();
+    await dragToEdge('up');
+    const beforeUp = await scroll();
+    await page.waitForTimeout(300);
+    assert.ok(await scroll() < beforeUp - 50, '光标停在顶部时也应继续滚动');
+    await page.keyboard.press('Escape');
+    await page.mouse.up();
+    await page.evaluate(() => {
+      window.addEventListener('pointerdown', event => { window.testDragPointer = event.pointerId; }, { once: true });
+    });
+    await dragToEdge();
+    await page.evaluate(() => window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: window.testDragPointer })));
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(() => window.moved), undefined, '取消或在列表外松手不能排序');
+    assert.equal(await page.locator('.queue-ghost, .queue-row.is-dragging, .queue-row.drop-before, .queue-row.drop-after').count(), 0);
+
+    // ⑩ 空队列
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => {
       window.queuePayload = () => ({ revision: 8, total: 0, offset: 0, currentIndex: -1, order: 'ListLoop', summary: { totalSeconds: 0, remainingSeconds: 0, hasCurrent: false }, next: { kind: 'unknown' }, tracks: [] });
@@ -228,6 +301,6 @@ function queuePayload(offset = 0) {
     assert.equal(await page.locator('#queue-next-card').isVisible(), false, '没在播时下一首整块收掉');
 
     assert.deepEqual(errors, []);
-    console.log('PASS: 队列独立页面、真实顺序与摘要、当前条目、上一首/下一首对称预览（上一首点击切歌、第一首时明确没有）、页内搜索（过滤时禁拖）、定位当前、指针拖动（浮层/落点线/单击不改序）带 revision 与身份、顺序按钮、窄窗不溢出、空队列。');
+    console.log('PASS: 队列顺序与摘要、当前条目、上一首/下一首、搜索、定位、拖动落点与身份、双向边缘滚动、拖出和取消、窄窗、空队列。');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
