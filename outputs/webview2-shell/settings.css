@@ -191,3 +191,10 @@
 @media(max-width:1150px){.settings-apply-bar{margin-left:16px;margin-right:16px}}
 
 .preset-group summary{cursor:pointer;padding:8px;font-weight:600}.preset-group[open] summary{margin-bottom:16px}
+
+.background-settings .set-row,.material-settings .set-row{align-items:center}
+.background-settings .set-control select{width:192px;max-width:100%;min-height:32px}
+.background-media-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px}
+.background-settings .set-control:has(.background-media-actions){max-width:62%;flex-shrink:1}
+.background-media-actions button{min-height:28px}
+#background-status:empty{display:none}

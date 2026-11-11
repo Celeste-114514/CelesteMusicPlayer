@@ -282,6 +282,7 @@
     const wrap = node('div', undefined, 'set-slider');
     const range = document.createElement('input');
     range.type = 'range';
+    range.setAttribute('aria-label', item.label);
     range.min = item.min; range.max = item.max; range.step = item.step;
     range.value = item.value;
     const readout = node('span', format(item), 'set-readout');
@@ -353,6 +354,7 @@
     const wrap = node('div', undefined, 'set-slider');
     const range = document.createElement('input');
     range.type = 'range';
+    range.setAttribute('aria-label', item.label);
     range.min = item.min; range.max = item.max; range.step = item.step;
     range.value = item.value;
     const show = value => Number(value).toFixed(2) + '×';
@@ -568,6 +570,18 @@
     return [geometry, items];
   }
 
+  function settingRow(label, control, note) {
+    const row = node('div', undefined, 'set-row');
+    const main = node('div', undefined, 'set-row-main');
+    main.append(node('div', label, 'set-label'));
+    if (note) main.append(node('p', note, 'set-note'));
+    const holder = node('div', undefined, 'set-control');
+    control.setAttribute('aria-label', label);
+    holder.append(control);
+    row.append(main, holder);
+    return row;
+  }
+
   // —— 背景 ——
   const BG_MODES = [
     ['solid', '纯色（跟随外壳色）'],
@@ -582,8 +596,7 @@
       note: '图片和视频保存在播放器的资源目录，原文件移动不影响使用。视频静音循环，窗口最小化或页面隐藏时暂停。改动需保存；取消选文件不会改变背景。' });
     const values = data[data.resolved === 'dark' ? 'dark' : 'light'].values;
     const currentMode = values['bg-mode'] || 'solid';
-    const row = node('div', undefined, 'set-row');
-    row.append(node('div', '背景类型', 'set-label'));
+    card.classList.add('background-settings');
     const modeSelect = node('select');
     modeSelect.id = 'background-mode';
     BG_MODES.forEach(([value, label]) => modeSelect.append(new Option(label, value)));
@@ -597,8 +610,8 @@
         render();
       } catch (error) { render(); status('改背景失败：' + error.message, 'err'); }
     });
-    row.append(modeSelect); card.append(row);
-    const actions = node('div', undefined, 'settings-actions');
+    card.append(settingRow('背景类型', modeSelect));
+    const actions = node('div', undefined, 'background-media-actions');
     async function pick(media) {
       await request('pickBackground', { media });
       render();
@@ -606,23 +619,20 @@
     actions.append(button('选择图片…', () => pick('image')), button('选择视频…', () => pick('video')),
       button('去掉背景', async () => { await request('clearBackground'); render(); }));
     if (currentMode === 'video') actions.append(button('播放视频背景', () => window.CelesteBackground?.resume()));
-    card.append(actions);
+    card.append(settingRow('背景文件', actions, '支持 JPG、PNG、BMP、WebP（40 MB）和 MP4、WebM、M4V（512 MB）。'));
     const feedback = node('p', window.CelesteBackground?.status || '', 'set-note');
     feedback.id = 'background-status'; feedback.setAttribute('role', 'status');
     card.append(feedback);
-    card.append(node('p', '图片：JPG / PNG / BMP / WebP，最大 40 MB。视频：MP4 / WebM / M4V，最大 512 MB；编码兼容性以当前 WebView2 为准。', 'set-note'));
     [['bg-fit', '适配方式', [['cover', '铺满（裁边）'], ['contain', '完整显示（留边）']]],
      ['bg-pos', '对齐位置', [['center', '居中'], ['top', '顶部对齐'], ['bottom', '底部对齐']]]]
       .forEach(([id, label, options]) => {
-        const row = node('div', undefined, 'set-row');
-        row.append(node('div', label, 'set-label'));
         const select = node('select');
         select.id = id;
         options.forEach(([value, text]) => select.append(new Option(text, value)));
         select.value = values[id] || options[0][0];
         select.addEventListener('change', () => request('background', { [id === 'bg-fit' ? 'fit' : 'pos']: select.value })
           .catch(error => status('改背景失败：' + error.message, 'err')));
-        row.append(select); card.append(row);
+        card.append(settingRow(label, select));
       });
     ['bg-grad-1', 'bg-grad-2', 'bg-grad-3'].forEach((id, index) => card.append(colorRow({ id, label: '渐变第 ' + (index + 1) + ' 色' })));
     (data.numbers || []).filter(item => /^bg-/.test(item.id || '')).forEach(item => card.append(numberRow(item)));
@@ -631,6 +641,50 @@
   document.addEventListener('celeste:background-status', event => {
     if ($('background-status')) $('background-status').textContent = event.detail.message;
   });
+
+  function materialCard() {
+    const values = data[data.resolved === 'dark' ? 'dark' : 'light'].values;
+    const style = String(values['material-style'] ?? '0');
+    if (style !== '1' && style !== '2') return null;
+    const card = section({ title: '材质与毛玻璃', note: style === '1'
+      ? '应用内亚克力柔化菜单和弹层后方的内容。关闭后，菜单和弹层使用实色。'
+      : '调整浮层的磨砂效果和底色。' });
+    card.classList.add('material-settings');
+    const label = '应用内毛玻璃';
+    const toggle = button('', async el => {
+      const previous = el.getAttribute('aria-checked') === 'true';
+      const next = previous ? '0' : '1';
+      el.disabled = true;
+      try {
+        await pushChange({ 'light:material-transparency': next, 'dark:material-transparency': next }, label);
+        const enabled = String(data[data.resolved === 'dark' ? 'dark' : 'light'].values['material-transparency'] ?? '1') !== '0';
+        el.setAttribute('aria-checked', String(enabled));
+        controls.hidden = !enabled;
+      } finally { el.disabled = false; }
+    }, 'set-switch');
+    toggle.setAttribute('role', 'switch');
+    const enabled = String(values['material-transparency'] ?? '1') !== '0';
+    toggle.setAttribute('aria-checked', String(enabled));
+    card.append(settingRow(label, toggle));
+    if (style === '1') {
+      const preview = node('div', undefined, 'material-preview');
+      const sample = node('div', '浮层材质预览', 'material-preview-sample');
+      preview.append(sample);
+      card.append(preview);
+    }
+    const controls = node('div', undefined, 'material-controls');
+    controls.hidden = !enabled;
+    const advanced = node('details', undefined, 'settings-details');
+    advanced.append(node('summary', '高级材质参数'));
+    for (const item of data.numbers || []) {
+      if (item.id === 'material-opacity') controls.append(numberRow({ ...item, label: '底色浓度' }));
+      else if (item.id === 'material-blur') controls.append(numberRow({ ...item, label: '模糊强度' }));
+      else if (['material-highlight', 'material-shadow'].includes(item.id)) advanced.append(numberRow(item));
+    }
+    if (advanced.childElementCount > 1) controls.append(advanced);
+    card.append(controls);
+    return card;
+  }
 
   // —— 字体与排版 ——
   // 字体作为个人偏好保留，但修改也参与草稿、撤销和保存；
@@ -888,6 +942,10 @@
       host.append(card);
     });
 
+    const material = materialCard();
+    if (material) host.append(material);
+    host.append(backgroundCard());
+
     // 元素细调
     const editor = section({
       title: '元素细调',
@@ -917,16 +975,6 @@
     (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item) && !isBgParam(item) && !/^material-/.test(item.id)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
 
-    const materialCard = section({title:'材质与毛玻璃',note:'Windows 与 Apple 风格保留页面内部磨砂，主窗口使用稳定实色底层，不透出桌面。关闭透明效果可获得更清晰的实色界面。'});
-    const materialToggle = node('label', undefined, 'set-row');
-    materialToggle.append(node('span', '透明与磨砂效果', 'set-label'));
-    const materialInput = document.createElement('input'); materialInput.type = 'checkbox';
-    materialInput.checked = String(data.light?.values?.['material-transparency'] ?? '1') !== '0';
-    materialInput.addEventListener('change', () => pushChange({'light:material-transparency':materialInput.checked?'1':'0','dark:material-transparency':materialInput.checked?'1':'0'}, '透明与磨砂效果'));
-    materialToggle.append(materialInput); materialCard.append(materialToggle);
-    (data.numbers || []).filter(item=>/^material-/.test(item.id)).forEach(item=>materialCard.append(numberRow(item)));
-    host.append(materialCard);
-    host.append(backgroundCard());
     navCards().forEach(card => host.append(card));
     stateCards().forEach(card => host.append(card));
     host.append(motionCard());
