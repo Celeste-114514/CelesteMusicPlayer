@@ -27,6 +27,7 @@
     art.title='使用曲库中的专辑封面';return art;
   }
   function browse(){
+    window.CelesteTrackMenu?.reset();
     const query=$('search').value.trim().toLocaleLowerCase(),sort=$('artists-sort').value;
     const visible=groups.filter(group=>!query||group.name.toLocaleLowerCase().includes(query)).sort((a,b)=>{
       if(sort==='year'&&(!a.yearTo||!b.yearTo)){if(!a.yearTo!==!b.yearTo)return a.yearTo?-1:1;}
@@ -56,6 +57,7 @@
   function play(group){if(live)shell.playTracks(group.tracks.map(track=>track.id));else shell.playDemo(Number(group.tracks[0].id));}
   function detailCompare(a,b){const key=$('artist-detail-sort').value;const value=['year','duration','track','trackCount'].includes(key)?Number(a[key]||0)-Number(b[key]||0):compare.compare(a[key]||a.title||'',b[key]||b.title||'');return (value||compare.compare(a.title||'',b.title||''))*(detailAscending?1:-1);}
   function detailOptions(next){
+    window.CelesteTrackMenu?.reset();
     detailPreferences[tab]={key:$('artist-detail-sort').value,ascending:detailAscending};tab=next;
     const options=tab==='songs'?[['title','名称'],['album','专辑'],['year','年份'],['duration','时长'],['track','音轨号']]:[['title','专辑名称'],['artist','艺术家'],['year','发行年份'],['duration','总时长'],['trackCount','曲目数']];
     $('artist-detail-sort').replaceChildren();options.forEach(([value,label])=>{const option=node('option',label);option.value=value;$('artist-detail-sort').append(option);});
@@ -71,10 +73,11 @@
       const start=()=>live?shell.playTrack(track.id):shell.playDemo(Number(track.id));row.addEventListener('dblclick',start);row.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();start();}});$('artist-songs').append(row);
     });
     const ids=new Set(opened.tracks.map(track=>track.id));$('artist-albums').replaceChildren();window.CelesteAlbums.getAlbums().filter(album=>album.trackIds.some(id=>ids.has(id))).sort(detailCompare).forEach(album=>{
-      const card=node('button',undefined,'album-open');card.append(window.CelesteAlbums.artwork(album),node('strong',album.title,'album-card-title'),node('small',album.trackCount+' 首歌曲','album-card-meta'));card.addEventListener('click',()=>{const saved=opened,category=kind;window.CelesteAlbums.openById(album.id,[{label:category==='artists'?'艺术家':'专辑艺人',action:()=>{opened=null;shell.navigate(category);show();}},{label:saved.name,action:()=>{shell.navigate(category);open(saved);}}]);});$('artist-albums').append(card);
-    });updatePlaying();
+      const card=node('button',undefined,'album-open');card.dataset.albumId=album.id;card.append(window.CelesteAlbums.artwork(album),node('strong',album.title,'album-card-title'),node('small',album.trackCount+' 首歌曲','album-card-meta'));card.addEventListener('click',()=>{const saved=opened,category=kind;window.CelesteAlbums.openById(album.id,[{label:category==='artists'?'艺术家':'专辑艺人',action:()=>{opened=null;shell.navigate(category);show();}},{label:saved.name,action:()=>{shell.navigate(category);open(saved);}}]);});$('artist-albums').append(card);
+    });updatePlaying();window.CelesteTrackMenu?.refresh();
   }
   function open(group){
+    window.CelesteTrackMenu?.reset();
     opened=group;$('artists-browser').hidden=true;$('artist-detail').hidden=false;$('artist-name').textContent=group.name;$('artist-kind').textContent=kind==='artists'?'ARTIST':'ALBUM ARTIST';$('artist-back').textContent=kind==='artists'?'‹ 所有艺术家':'‹ 所有专辑艺人';shell.setPath([{label:kind==='artists'?'艺术家':'专辑艺人',action:()=>{opened=null;show();}},{label:group.name,action:()=>open(group)}]);$('artist-portrait').replaceChildren(portrait(group));
     content();overview(kind,group.name,group.tracks,$('artist-stats'),$('artist-stats-note'),++generation);document.querySelector('.main').scrollTop=0;
   }

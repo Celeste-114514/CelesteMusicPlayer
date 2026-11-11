@@ -1,0 +1,114 @@
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+const { chromium } = require('playwright-core');
+(async () => {
+  const browser = await chromium.launch({ executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--enable-unsafe-swiftshader'] });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 960 } }), errors = [];
+    page.on('pageerror', e => { errors.push(e.message); console.error('PAGE:', e.message); });
+    await page.addInitScript(() => {
+      window.commands = []; window.chrome ||= {}; const listeners = [];
+      window.deliver = data => listeners.forEach(cb => cb({ data }));
+      window.chrome.webview = { addEventListener: (_, cb) => listeners.push(cb), postMessage: m => {
+        commands.push(m);
+        if (m.requestId) setTimeout(() => deliver({ kind: 'celeste.reply', version: 1, requestId: m.requestId, ok: true, data: m.command === 'collectionOverview' ? { songCount: 3, albumCount: 2, duration: 600, genres: [] } : { favorite: false, canDelete: true } }), 5);
+        if (['playAll', 'togglePlay', 'next', 'previous'].includes(m.command)) {
+          const old = window.CelesteShell.getState();
+          const state = { ...old, trackId: m.trackIds?.[0] || old.trackId, playing: m.command === 'togglePlay' ? !old.playing : true };
+          setTimeout(() => deliver({ kind: 'celeste.state', version: 1, state }), 5);
+        }
+      } };
+    });
+    await page.route('https://celeste-cover.internal/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#766a89"/><circle cx="128" cy="100" r="60" fill="#d7bca2"/><text x="30" y="220" fill="white" font-size="28">CELESTE</text></svg>' }));
+    const shellDir = process.env.CELESTE_SMOKE_SHELL || path.join(__dirname, '../outputs/webview2-shell');
+    await page.goto(pathToFileURL(path.resolve(shellDir, 'index.html')).href);
+    await page.evaluate(() => {
+      const tracks = Array.from({ length: 12 }, (_, i) => ({ id: 't' + i, title: 'Track ' + i, artist: i < 6 ? 'Alice' : 'Bob', albumArtist: i < 6 ? 'Alice' : 'Bob', album: 'Album ' + Math.floor(i / 2), duration: 180, year: 2020 + Math.floor(i / 2), chips: [] }));
+      const albums = Array.from({ length: 6 }, (_, i) => ({ id: 'a' + i, title: 'Album ' + i, artist: i < 3 ? 'Alice' : 'Bob', trackIds: ['t' + i * 2, 't' + (i * 2 + 1)], trackCount: 2, duration: 360, year: 2020 + i, coverUrl: 'https://celeste-cover.internal/cover/' + i }));
+      deliver({ kind: 'celeste.library', version: 1, phase: 'begin', revision: 1, total: tracks.length });
+      deliver({ kind: 'celeste.library', version: 1, phase: 'batch', revision: 1, tracks });
+      deliver({ kind: 'celeste.library', version: 1, phase: 'end', revision: 1, albums });
+      CelesteShell.navigate('albums');
+    });
+    const choose = async text => { await page.locator('#track-context-menu button').getByText(text, { exact: true }).click(); await page.waitForTimeout(70); };
+    assert.equal(await page.locator('#rhine-launch').count(), 0);
+    await page.locator('#albums-multiselect').click();
+    await page.locator('#albums-grid .album-open').nth(0).click();
+    await page.locator('#albums-grid .album-open').nth(2).click({ modifiers: ['Shift'] });
+    assert.equal(await page.locator('#albums-grid .context-selected').count(), 3);
+    assert.equal(await page.locator('#album-detail').isVisible(), false);
+    await page.locator('#albums-sort').selectOption('year');
+    assert.equal(await page.locator('#albums-grid .context-selected').count(), 3);
+    await page.getByRole('button', { name: '操作所选专辑', exact: true }).click();
+    await choose('添加至播放队列');
+    assert.deepEqual(await page.evaluate(() => commands.filter(m => m.command === 'trackAction' && m.operation === 'addQueue').at(-1).trackIds), ['t0', 't1', 't2', 't3', 't4', 't5']);
+    await page.getByRole('button', { name: '完成', exact: true }).click();
+    await page.locator('#albums-grid .album-open').first().click();
+    assert.equal(await page.locator('#album-detail').isVisible(), true);
+    await page.evaluate(() => CelesteShell.navigate('artists'));
+    await page.locator('.artist-card').first().click();
+    await page.locator('[data-artist-tab="albums"]').click();
+    await page.locator('#artist-albums .album-open').nth(0).click({ modifiers: ['Control'] });
+    await page.locator('#artist-albums .album-open').nth(1).click();
+    assert.equal(await page.locator('#artist-albums .context-selected').count(), 2);
+    await page.getByRole('button', { name: '操作所选专辑', exact: true }).click();
+    await choose('播放所选专辑');
+    assert.deepEqual(await page.evaluate(() => commands.filter(m => m.command === 'playAll').at(-1).trackIds), ['t0', 't1', 't2', 't3']);
+    await page.locator('[data-artist-tab="songs"]').click();
+    await page.waitForTimeout(250);
+    assert.equal(await page.locator('.track-selection-bar').isVisible(), false);
+    await page.evaluate(() => CelesteShell.navigate('overview'));
+    await page.locator('#open-music-room').click();
+    await page.waitForFunction(() => window.__rr?.S.layer === 1);
+    await page.waitForTimeout(2000);
+    const volumeCount = await page.evaluate(() => commands.filter(m => m.command === 'setVolume').length);
+    await page.mouse.move(800, 350); await page.mouse.wheel(0, 100); await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => commands.filter(m => m.command === 'setVolume').length), volumeCount, 'room wheel must not change player volume');
+    const shotDir = process.env.CELESTE_SMOKE_OUTPUT;
+    if (shotDir) await page.screenshot({ path: path.join(shotDir, 'room-layer1.png') });
+    const clickPoint = async p => page.mouse.click(p.x, p.y);
+    await clickPoint(await page.evaluate(() => __rr.proj(0)));
+    await page.waitForFunction(() => __rr.S.layer === 2);
+    await page.locator('.rr-action').click();
+    await page.waitForFunction(() => __rr.S.layer === 3);
+    await page.waitForTimeout(1800);
+    const playCount = () => page.evaluate(() => commands.filter(m => m.command === 'playAll').length);
+    const beforeNav = await playCount();
+    const side = async button => page.evaluate(button => { window.dispatchEvent(new MouseEvent('mousedown', { button, cancelable: true })); window.dispatchEvent(new MouseEvent('mouseup', { button, cancelable: true })); }, button);
+    await side(3); assert.equal(await page.evaluate(() => __rr.S.layer), 2);
+    await side(4); assert.equal(await page.evaluate(() => __rr.S.layer), 3);
+    assert.equal(await playCount(), beforeNav, 'forward navigation must not restart playback');
+    assert.equal(await page.evaluate(() => CelesteShell.getPage()), 'overview');
+    await page.waitForTimeout(1600);
+    if (shotDir) await page.screenshot({ path: path.join(shotDir, 'room-layer3.png') });
+    for (const command of ['togglePlay', 'previous', 'next']) {
+      const before = await page.evaluate(command => commands.filter(m => m.command === command).length, command);
+      await clickPoint(await page.evaluate(command => __rr.projControl(command), command));
+      await page.waitForTimeout(100);
+      assert.equal(await page.evaluate(command => commands.filter(m => m.command === command).length, command), before + 1, command + ' physical button');
+    }
+    await page.locator('.rr-stage canvas').click({ position: { x: 750, y: 300 } });
+    const spaceBefore = await page.evaluate(() => commands.filter(m => m.command === 'togglePlay').length);
+    await page.keyboard.press('Space'); await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(() => commands.filter(m => m.command === 'togglePlay').length), spaceBefore + 1, 'space sends exactly one transport command');
+    await page.locator('.rr-crumb [data-layer="1"]').click();
+    assert.equal(await page.evaluate(() => __rr.S.layer), 1);
+    await side(3); assert.equal(await page.evaluate(() => __rr.S.layer), 3);
+    await page.evaluate(() => { __rr.S.album = 20; __rr.toLayer1(); });
+    await page.keyboard.press('ArrowRight');
+    await page.locator('.rr-back').click();
+    assert.equal(await page.locator('.rr-root').count(), 0);
+    await page.evaluate(() => CelesteMusicRoom.open());
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => CelesteMusicRoom.close());
+    assert.equal(await page.locator('.rr-root').count(), 0);
+    await page.evaluate(() => CelesteMusicRoom.open());
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('.rr-root').count(), 1);
+    await side(3);
+    assert.equal(await page.locator('.rr-root').count(), 0);
+    assert.deepEqual(errors, []);
+    console.log('PASS: both album grids, range/toggle selection, batch IDs, sorting, normal opening, removed Rhine, room breadcrumbs/history, physical ray hits, real transport and Space, close/reopen.');
+  } finally { await browser.close(); }
+})().catch(e => { console.error(e); process.exitCode = 1; });

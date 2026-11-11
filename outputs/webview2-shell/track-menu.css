@@ -17,3 +17,8 @@
 
 .track-context-menu{max-height:calc(100vh - 16px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 .track-selection-bar{flex-wrap:wrap}
+
+/* 专辑多选沿用歌曲批量操作；选中标记不遮住封面与标题。 */
+#albums-grid .album-card.context-selected,#artist-albums .album-open.context-selected{outline:2px solid var(--accent);outline-offset:3px;border-radius:14px;background:var(--accent-soft)}
+#artist-albums .album-open{position:relative}
+#albums-grid .context-selected::after,#artist-albums .context-selected::after{content:"";position:absolute;top:12px;right:12px;width:14px;height:8px;border-left:3px solid var(--accent);border-bottom:3px solid var(--accent);transform:rotate(-45deg);pointer-events:none;filter:drop-shadow(0 1px 2px var(--surface))}

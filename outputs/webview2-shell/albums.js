@@ -41,10 +41,12 @@
       const play=document.createElement('button');play.className='album-quick-play';play.setAttribute('aria-label','播放专辑 '+album.title);play.title='播放这张专辑';
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),use=document.createElementNS(svg.namespaceURI,'use');use.setAttribute('href','#i-play');svg.append(use);play.append(svg);play.addEventListener('click',()=>playAlbum(album));card.append(open,play);$('albums-grid').append(card);
     });
+    window.CelesteTrackMenu?.refresh();
     const moved=window.CelesteMotion?.replayRows($('albums-grid'),cardPositions)||0;
     if(!moved)window.CelesteMotion?.fadeIn($('albums-grid'),'list');
   }
   function openAlbum(album){
+    window.CelesteTrackMenu?.reset();
     opened=album;$('albums-browser').hidden=true;$('album-detail').hidden=false;
     shell.setPath([...(parentTrail.length?parentTrail:[{label:'专辑',action:()=>{opened=null;show();}}]),{label:album.title,action:()=>openAlbum(album)}]);
     $('album-detail-cover').replaceChildren(artwork(album));$('album-detail-title').textContent=album.title;$('album-detail-artist').textContent=album.artist;

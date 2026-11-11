@@ -1,0 +1,7 @@
+{
+  "name": "celeste-record-room",
+  "private": true,
+  "scripts": { "build": "node build.cjs --shell" },
+  "dependencies": { "three": "0.183.0" },
+  "devDependencies": { "esbuild": "0.25.12" }
+}

@@ -2,7 +2,7 @@
   'use strict';
   const shell = window.CelesteShell, live = typeof window.chrome?.webview?.postMessage === 'function';
   const popup = window.CelestePopup, motion = window.CelesteMotion;
-  const selector = '.song-row,.album-track[data-track-id],.web-queue-row,.queue-row';
+  const selector = '.song-row,.album-track[data-track-id],.web-queue-row,.queue-row,#albums-grid [data-album-id],#artist-albums [data-album-id]';
   const MENU_ID = 'track-context-menu';
 
   // 多选栏：外壳负责居中，内层负责动画。
@@ -25,19 +25,21 @@
   menu.setAttribute('role', 'menu');
 
   let selected = new Set(), scope = null, anchor = null, multi = false, epoch = 0, returnFocus = null, busy = false, barVisible = false;
-  const key = row => row.dataset.queueIndex === undefined ? row.dataset.trackId || 'demo-' + row.dataset.index : 'q:' + row.dataset.queueRevision + ':' + row.dataset.queueIndex;
-  const container = row => row.parentElement.closest('#songs-list,#album-tracks,#artist-songs,#browse-tracks,#web-queue-list,#queue-list,#folder-songs') || row.parentElement;
+  const key = row => row.dataset.albumId !== undefined ? 'album:' + row.dataset.albumId : row.dataset.queueIndex === undefined ? row.dataset.trackId || 'demo-' + row.dataset.index : 'q:' + row.dataset.queueRevision + ':' + row.dataset.queueIndex;
+  const container = row => row.parentElement.closest('#songs-list,#album-tracks,#artist-songs,#browse-tracks,#web-queue-list,#queue-list,#folder-songs,#albums-grid,#artist-albums') || row.parentElement;
   const rows = () => scope ? [...scope.querySelectorAll(selector)] : [];
   const chosen = () => rows().filter(row => selected.has(key(row)));
 
+  const albumScope = () => ['albums-grid', 'artist-albums'].includes(scope?.id);
+  const focusRow = row => (row?.matches('button') ? row : row?.querySelector('button'))?.focus({ preventScroll: true });
   function paint() {
-    rows().forEach(row => { row.classList.toggle('context-selected', selected.has(key(row))); });
+    rows().forEach(row => { row.classList.toggle('context-selected', selected.has(key(row))); if (row.dataset.albumId !== undefined) { (row.matches('button') ? row : row.querySelector('.album-open'))?.setAttribute('aria-pressed', String(selected.has(key(row)))); } });
     bar.replaceChildren();
     if (!multi) { setBarVisible(false); return; }
     const label = document.createElement('span');
-    label.textContent = `已选择 ${chosen().length} 首`;
+    label.textContent = `已选择 ${chosen().length} ${albumScope() ? '张专辑' : '首'}`;
     const operate = document.createElement('button');
-    operate.textContent = '操作所选歌曲';
+    operate.textContent = albumScope() ? '操作所选专辑' : '操作所选歌曲';
     operate.disabled = !chosen().length || busy;
     operate.onclick = () => {
       const first = chosen()[0], box = operate.getBoundingClientRect();
@@ -47,7 +49,7 @@
     done.textContent = '完成';
     done.onclick = reset;
     const all = document.createElement('button'), none = document.createElement('button');
-    all.textContent = '全选'; all.onclick = () => { rows().forEach(row => selected.add(key(row))); paint(); };
+    all.textContent = albumScope() && !document.getElementById('albums-more').hidden && scope.id === 'albums-grid' ? '全选已加载' : '全选'; all.onclick = () => { rows().forEach(row => selected.add(key(row))); paint(); };
     none.textContent = '全不选'; none.onclick = () => { selected.clear(); paint(); };
     bar.append(label, all, none, operate, done);
     setBarVisible(true);
@@ -72,7 +74,7 @@
       if (!event.ctrlKey && !event.metaKey) selected.clear();
       list.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(item => selected.add(key(item)));
       multi = true;
-    } else if (event.ctrlKey || event.metaKey || multi) {
+    } else if (event.ctrlKey || event.metaKey || event.shiftKey || multi) {
       selected.has(id) ? selected.delete(id) : selected.add(id);
       multi = true; anchor = row;
     } else { selected.clear(); selected.add(id); anchor = row; }
@@ -154,7 +156,8 @@
   function payload(items) {
     const queue = items[0].dataset.queueIndex !== undefined;
     if (queue) return { queue: true, revision: Number(items[0].dataset.queueRevision), entries: items.map(row => ({ index: Number(row.dataset.queueIndex), trackId: row.dataset.trackId })) };
-    return { queue: false, trackIds: items.map(row => row.dataset.trackId) };
+    const albums = window.CelesteAlbums.getAlbums();
+    return { queue: false, trackIds: [...new Set(items.flatMap(row => row.dataset.albumId !== undefined ? (albums.find(album => album.id === row.dataset.albumId)?.trackIds || []) : [row.dataset.trackId]))] };
   }
 
   async function openTracks(row, x, y) {
@@ -189,11 +192,11 @@
     if (generation !== epoch) return;      // 期间被关掉了：不许把它复活
     element.replaceChildren();
 
-    button(element, '播放', () => invoke('play'), items.length !== 1);
+    button(element, albumScope() ? '播放所选专辑' : '播放', () => albumScope() ? (live ? shell.playTracks(snapshot.trackIds) : shell.playDemo(Number(snapshot.trackIds[0]))) : invoke('play'), !snapshot.trackIds?.length && !queue || (!albumScope() && items.length !== 1));
     button(element, '下一首播放', () => invoke('next'));
     if (queue) { button(element, '置顶', () => invoke('pin')); button(element, '从播放队列中删除', () => invoke('removeQueue')); }
     else { button(element, '添加至播放队列', () => invoke('addQueue')); button(element, '添加到播放列表', () => invoke('addPlaylist')); }
-    button(element, '多选', () => { multi = true; paint(); row.focus({ preventScroll: true }); });
+    button(element, '多选', () => { multi = true; paint(); focusRow(row); });
     button(element, '全选', () => { multi = true; rows().forEach(item=>selected.add(key(item))); paint(); });
     button(element, '全不选', () => { multi = true; selected.clear(); paint(); });
     divider(element);
@@ -205,9 +208,9 @@
     element.append(ratings);
     for (let value = 0; value <= 5; value++) button(ratings, value === 0 ? '清除评分' : value + ' 星', () => invoke('rating', { value }));
     divider(element);
-    button(element, '标签编辑', () => window.CelesteTags.open(items.map(row => row.dataset.trackId)));
+    button(element, '标签编辑', () => window.CelesteTags.open(snapshot.trackIds || snapshot.entries.map(entry => entry.trackId)));
     button(element, '复制歌名与艺术家', () => invoke('copy'));
-    button(element, '在文件夹中显示', () => invoke('reveal'), items.length !== 1);
+    button(element, '在文件夹中显示', () => invoke('reveal'), (snapshot.trackIds?.length || items.length) !== 1);
     button(element, '定位到专辑', () => window.CelesteAlbums.openForTrack(snapshot.trackIds?.[0] || snapshot.entries?.[0].trackId), items.length !== 1);
     divider(element);
     button(element, caps.canDelete ? '从磁盘删除（回收站）' : '从磁盘删除（不可用）', () => invoke('delete'), !caps.canDelete);
@@ -250,8 +253,22 @@
   document.addEventListener('celeste:navigate', reset);
   document.addEventListener('celeste:library', reset);
 
+  for (const [id, target, host] of [
+    ['albums-multiselect', 'albums-grid', '#albums-browser .album-sort-actions'],
+    ['artist-albums-multiselect', 'artist-albums', '#artist-detail .detail-sort-actions']
+  ]) {
+    const toggle = document.createElement('button');
+    toggle.id = id; toggle.className = 'sort-direction'; toggle.textContent = '多选';
+    toggle.onclick = () => { reset(); scope = document.getElementById(target); multi = true; paint(); };
+    document.querySelector(host)?.prepend(toggle);
+    if (target === 'artist-albums') {
+      const grid = document.getElementById(target);
+      const update = () => { toggle.hidden = grid.hidden; if (grid.hidden && scope === grid) reset(); };
+      new MutationObserver(update).observe(grid, { attributes: true, attributeFilter: ['hidden'] }); update();
+    }
+  }
   window.CelesteTrackMenu = Object.freeze({
-    open: openTracks,
+    open: openTracks, reset, refresh: paint,
     folder: (event, item, action) => {
       close();
       returnFocus = event.target.closest('[role=treeitem]');

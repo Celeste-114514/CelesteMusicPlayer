@@ -143,6 +143,7 @@
   // ---- 鼠标侧键：XButton1 = 后退，XButton2 = 前进（2026-10-31 接上）----
   // 后退优先走面包屑父级（和左上角返回键一致：详情页先退回列表），没有父级再弹页面栈。
   function goBack() {
+    if (window.CelesteMusicRoom?.isOpen()) { window.CelesteMusicRoom.back(); return true; }
     // 只有「详情页」才走面包屑父级（此时面包屑已到 3 级：主页/分类/条目），
     // 和左上角返回键一致；普通分类页（2 级）走浏览器式页面栈，否则后退永远回主页。
     if (pathActions.length >= 3) {
@@ -157,6 +158,7 @@
   }
 
   function goForward() {
+    if (window.CelesteMusicRoom?.isOpen()) { window.CelesteMusicRoom.forward(); return true; }
     if (!fwdStack.length) return false;
     const next = fwdStack.pop();
     backStack.push(currentPage);
@@ -501,7 +503,7 @@
 
   document.addEventListener('keydown', event => {
     // 内层已经处理过的（比如 EQ 曲线图里的方向键）让给它自己
-    if (event.defaultPrevented || event.isComposing) return;
+    if (event.defaultPrevented || event.isComposing || document.documentElement.classList.contains('rr-open')) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
     if (isTypingTarget(event.target)) return;
     if (anyPopupOpen()) return;
@@ -519,6 +521,7 @@
   });
 
   document.addEventListener('wheel', event => {
+    if (document.documentElement.classList.contains('rr-open')) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;   // 缩放与系统手势不抢
     if (isTypingTarget(event.target)) return;
     if (anyPopupOpen()) return;
