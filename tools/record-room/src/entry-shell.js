@@ -1,5 +1,5 @@
 // 网页壳入口：把唱片室做成覆盖整个客户区的一层，按需创建、可关闭。
-import { startRoom } from './main.js';
+import { startRoom } from './rhine-room.js';
 import { buildRoomData } from './shell-data.js';
 
 let active = null;
@@ -25,7 +25,9 @@ function open() {
     },
     onControl(command, album) {
       const state = shell.getState();
-      if (command === 'togglePlay' && !album.trackIds.includes(state.trackId)) shell.playTracks(album.trackIds);
+      if (command === 'togglePlay' && !album.trackIds.some(id => String(id) === String(state.trackId))) {
+        if (album.trackIds.length) shell.playTracks(album.trackIds);
+      }
       else shell.send(command);
     },
     onClose: () => close(),

@@ -42,6 +42,7 @@ export function buildRoomData(shell) {
       tracks: al.trackCount || tracks.length,
       dur: al.duration || 0,
       list: tracks.slice(0, 12).map(t => ({
+        id: t.id,
         t: t.title || '—',
         s: Math.round(t.duration || t.durationSeconds || 0),
       })),
