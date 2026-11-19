@@ -4,6 +4,7 @@ import {ink,mat,type} from './rhine-materials.js';
 
 // All dimensions within a study are local. Root scales convert to glTF metres.
 const half=Math.PI/2;
+export const ARTISTS_PER_FACE = 6;
 const num=i=>String(i).padStart(2,'0');
 const ivory=mat('Satin ivory ceramic','#cfc7b9',.55,.07);
 const rim=mat('Polished opal bevel','#eae3d7',.30,.11);
@@ -17,7 +18,7 @@ const papers=['#dad5c8','#c1c1ba','#e7dfd1','#b5b6b0','#d5d1c8'].map(c=>mat('Arc
 const tau=Math.PI*2;
 function label(name,w,h,draw){
   const printed=ink(name,w,h,draw);
-  const m=new T.MeshBasicMaterial({map:printed.map,alphaTest:.32});m.name=name;return m;
+  const m=new T.MeshBasicMaterial({map:printed.map,transparent:true,depthWrite:false,toneMapped:false});m.name=name;return m;
 }
 function mark(g,name,m,x,y,z,w,h,side){
   const o=face(g,name,m,x,y,z,w,h,side);o.renderOrder=4;return o;
@@ -27,11 +28,9 @@ function pin(g,x,y,z,r=.021,axis='z'){
   const offset=axis==='z'?[0,0,.008]:[0,.008,0];
   tube(g,'Flush fixing',nickel,x+offset[0],y+offset[1],z+offset[2],r,.008,axis,24);
 }
-function badge(name,number){
-  return label(name+' index lettering',600,132,(c)=>{
-    type(c,'ARCHIVE   /   '+num(number),11,37,22,'#54554f',500,'monospace');
-    type(c,name,8,110,63,'#222620',600,'Arial');
-  });
+function badge(){
+  const printed=ink('Archive label stock',1024,256,()=>{});
+  return new T.MeshBasicMaterial({map:printed.map,toneMapped:false});
 }
 export function printCover(g,album,artist,w,h){
     g.fillStyle='#e8e1d3';g.fillRect(0,0,w,h);
@@ -84,7 +83,7 @@ export function cabinet(root){
   for(let f=0;f<4;f++){
     const wall=group(cabinet,'Face_'+num(f+1));wall.rotation.y=f*half;
     box(wall,'Interior shadow plane',insert,0,1.804,1.354,2.68,2.99,.038,.01);
-    for(let j=0;j<6;j++){
+    for(let j=0;j<ARTISTS_PER_FACE;j++){
       const base=3.043-j*.492,d=group(wall,'Tray_'+f+'_'+j,0,base,1.556);
       box(d,'Front bottom rim',rim,0,-.207,.016,3.075,.034,.148,.012);
       box(d,'Top front rim',rim,0,.207,.016,3.075,.038,.148,.012);
@@ -95,28 +94,35 @@ export function cabinet(root){
       }
       box(d,'Recessed spine well',papers[1],.744,-.002,-.403,1.56,.382,.034,.009);
       const spines=Array.from({length:12},(_,k)=>box(d,'Edition spine',papers[(j+k)%5],0,.010,-.147,.100,.363,.442,.007));
-      box(d,'Slip behind name card',ivory,-.829,0,.025,1.277,.373,.066,.011);
-      box(d,'Smoked forepane',frost,0,0,.102,3.04,.405,.025,.012);
-      const legend=mark(d,'Screen printed name',badge('',j+1),-.867,-.003,.126,1.18,.268);
+      const panel=box(d,'Smoked forepane',frost,0,0,.102,3.04,.405,.025,.012);
+      box(d,'Name plate mount',ivory,-.775,0,.118,1.46,.354,.026,.013,2);
+      const legend=face(d,'Printed artist card',badge(),-.775,0,.134,1.43,.331);
       const tab=box(d,'Selected file tab',brass,-1.54,.031,.102,.064,.204,.059,.007);
-      trays.push({body:d,spines,legend,tab});
+      trays.push({body:d,spines,legend,tab,panel});
     }
   }
   return {cabinet,trays};
 }
+export const EDITIONS_PER_ROW = 6;
 export function editions(root){
-  const rack=group(root,'Expansion_drawer');
-  const base=group(rack,'Sliding_archive_bed');
+  const rows=[group(root,'Lower_archive_bed'),group(root,'Upper_archive_bed',0,1.34,-.94)];
+  const buildBed = base => {
   box(base,'Satin bed',ivory,0,.073,0,4.99,.083,1.42,.026,2);
   for(const z of [-.70,.70]){
     box(base,'Translucent raised lip',frost,0,.164,z,4.99,.210,.058,.017,2);
     box(base,'Polished upper arris',rim,0,.265,z,5.0,.023,.062,.009);
   }
   for(const x of [-2.471,2.471])box(base,'Tray return',frost,x,.158,0,.06,.213,1.41,.018);
-  const legend=mark(base,'Tray identification',badge('',1),-1.875,.159,.737,.80,.158);
-  box(base,'Aimer tab',brass,-2.47,.154,.731,.047,.154,.029,.004);
-  const cases=Array.from({length:6},(_,i)=>jacket(rack,'Sleeve_'+num(i+1)));
-  return {legend,cases};
+  box(base,'Tray tab',brass,-2.47,.154,.731,.047,.154,.029,.004);
+  };
+  rows.forEach(buildBed);
+  for(const x of [-2.29,2.29]) {
+    box(rows[1],'Upper tier support',ivory,x,-.636,-.31,.14,1.35,.69,.032,2);
+    box(rows[1],'Upper tier foot',rim,x,-1.29,-.31,.30,.09,.91,.028,2);
+  }
+  const legend=face(rows[0],'Tray identification',badge(),-1.875,.159,.737,.80,.168);
+  const cases=rows.flatMap((bed,row)=>Array.from({length:EDITIONS_PER_ROW},(_,i)=>jacket(bed,'Sleeve_'+num(row*EDITIONS_PER_ROW+i+1))));
+  return {legend,cases,upper:rows[1]};
 }
 
 function ring(g,name,m,x,y,z,inside,outside){

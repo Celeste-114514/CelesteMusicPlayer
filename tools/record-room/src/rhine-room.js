@@ -1,4 +1,4 @@
-import { createScene } from './rhine-scene.js';
+import { albumWindow, ARTISTS_PER_FACE, createScene } from './rhine-scene.js';
 
 const sameTrack = (a, b) => a != null && b != null && String(a) === String(b);
 const clamp = (n, limit) => Math.max(0, Math.min(n, limit - 1));
@@ -65,6 +65,7 @@ export function startRoom(data, options) {
   let loading = false;
   let scene;
   let shownList = '';
+  let gesture = null;
   const selectedArtist = () => artists[state.artist];
   const selectedAlbum = () => selectedArtist().albums[state.album];
   const playing = () => playback.playing && selectedAlbum().trackIds.some(id => sameTrack(id, playback.trackId));
@@ -90,7 +91,8 @@ export function startRoom(data, options) {
     key.disabled = loading;
     action('togglePlay').textContent = label;
     for (const button of transport.querySelectorAll('button')) button.disabled = loading;
-    $('.rr-status').textContent = state.layer === 3 ? (loading ? '正在装载光盘' : active ? '正在播放' : '光盘已就位') : '';
+    $('.rr-status').textContent = state.layer === 3 ? (loading ? '正在装载光盘' : active ? '正在播放' : '光盘已就位')
+      : state.layer === 1 && scene ? '横向拖动转柜，单击抽屉选中' : '';
     scene?.setPlaying(active);
     if (state.layer === 3) {
       Array.from(list.children).forEach((row, i) => { row.classList.toggle('current', sameTrack(selectedAlbum().list[i]?.id ?? selectedAlbum().trackIds[i], playback.trackId)); });
@@ -104,10 +106,10 @@ export function startRoom(data, options) {
     if (signature === shownList) return;
     shownList = signature;
     const fragment = document.createDocumentFragment();
-    const first = state.layer === 1 ? Math.floor(state.artist / 6) * 6
-      : Math.max(0, Math.min(state.album - 2, a.albums.length - 6));
-    const items = state.layer === 1 ? artists.slice(first, first + 6)
-      : state.layer === 2 ? a.albums.slice(first, first + 6) : album.list;
+    const editions = albumWindow(state.album, a.albums.length);
+    const first = state.layer === 1 ? Math.floor(state.artist / ARTISTS_PER_FACE) * ARTISTS_PER_FACE : editions.start;
+    const items = state.layer === 1 ? artists.slice(first, first + ARTISTS_PER_FACE)
+      : state.layer === 2 ? a.albums.slice(first, editions.end) : album.list;
     items.forEach((entry, i) => {
       const row = document.createElement('li');
       const idx = first + i;
@@ -159,6 +161,8 @@ export function startRoom(data, options) {
   }
 
   function apply(next, animate, play) {
+    gesture = null;
+    stage.classList.remove('rr-dragging');
     Object.assign(state, next);
     loading = !!scene && state.layer === 3 && play;
     const album = selectedAlbum();
@@ -197,7 +201,7 @@ export function startRoom(data, options) {
   }
   function pick(index) {
     if (state.layer === 1) {
-      go({ layer: 2, artist: index, album: 0 });
+      go({ layer: 1, artist: index, album: index === state.artist ? state.album : 0 });
     } else if (state.layer === 2) {
       if (index === state.album) openSelection();
       else go({ ...state, album: index });
@@ -228,8 +232,36 @@ export function startRoom(data, options) {
   listen(action('nextTrack'), 'click', () => control('next'));
   listen(action('togglePlay'), 'click', () => control('togglePlay'));
   listen(key, 'click', () => control('togglePlay'));
+  listen(stage, 'pointerdown', event => {
+    if (state.layer !== 1 || !scene || event.button !== 0 || gesture) return;
+    gesture = { pointer: event.pointerId, x: event.clientX, y: event.clientY, angle: scene.cabinetAngle(), dragged: false };
+    stage.setPointerCapture(event.pointerId);
+  });
+  listen(stage, 'pointermove', event => {
+    if (gesture?.pointer !== event.pointerId) return;
+    const dx = event.clientX - gesture.x;
+    if (!gesture.dragged && Math.abs(dx) < 5) return;
+    gesture.dragged = true;
+    stage.classList.add('rr-dragging');
+    const quarterWidth = Math.max(105, Math.min(225, stage.clientWidth * .31));
+    scene.dragCabinet(gesture.angle, dx / quarterWidth);
+  });
+  function endGesture(event, cancelled) {
+    if (gesture?.pointer !== event.pointerId) return;
+    const { dragged, x, y } = gesture;
+    gesture = null;
+    stage.classList.remove('rr-dragging');
+    if (dragged) pick(scene.releaseCabinet());
+    else if (!cancelled && Math.hypot(event.clientX - x, event.clientY - y) < 5) {
+      const index = scene.pick(event);
+      if (index !== undefined) pick(index);
+    }
+  }
+  listen(stage, 'pointerup', event => endGesture(event, false));
+  listen(stage, 'pointercancel', event => endGesture(event, true));
+  listen(stage, 'lostpointercapture', event => endGesture(event, true));
   listen(stage, 'click', event => {
-    if (event.target === key) return;
+    if (state.layer !== 2) return;
     const index = scene?.pick(event);
     if (index !== undefined) pick(index);
   });

@@ -64,6 +64,8 @@ html.rr-open { overflow: hidden; }
 .rr-rhine .rr-archive-stage { position: relative; min-height: 0; overflow: hidden; }
 .rr-rhine .rr-archive-stage canvas { width: 100%; height: 100%; display: block; }
 .rr-rhine[data-layer="1"] .rr-archive-stage canvas, .rr-rhine[data-layer="2"] .rr-archive-stage canvas { cursor: pointer; }
+.rr-rhine[data-layer="1"] .rr-archive-stage canvas { cursor: grab; touch-action: pan-y; }
+.rr-rhine[data-layer="1"] .rr-archive-stage.rr-dragging canvas { cursor: grabbing; }
 .rr-rhine .rr-render-state { position: absolute; inset: 50% 0 auto; text-align: center; }
 .rr-rhine .rr-key-hit {
   position: absolute;

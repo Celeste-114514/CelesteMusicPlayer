@@ -1,29 +1,57 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { cabinet, editions, transport, printCover } from './rhine-models.js';
+import { cabinet, editions, transport, printCover, ARTISTS_PER_FACE, EDITIONS_PER_ROW } from './rhine-models.js';
 
 const HALF_TURN = Math.PI / 2;
+export { ARTISTS_PER_FACE };
+const mod = (n, m) => ((n % m) + m) % m;
 const smooth = t => t * t * (3 - 2 * t);
 const range = (t, a, b) => smooth(THREE.MathUtils.clamp((t - a) / (b - a), 0, 1));
 
-function writeLabel(mesh, name, detail) {
+export function albumWindow(album, total) {
+  const capacity = EDITIONS_PER_ROW * 2;
+  const start = Math.max(0, Math.min(album - Math.floor(capacity / 2), total - capacity));
+  return { start, end: Math.min(total, start + capacity) };
+}
+
+function writeLabel(mesh, name, detail, portrait, artistCard = false) {
   const map = mesh.material.map;
   const canvas = map.image;
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#4b4b44';
-  ctx.font = '24px monospace';
-  ctx.fillText(detail, 11, 34, 574);
-  ctx.fillStyle = '#252722';
-  ctx.font = '600 58px "Segoe UI","Microsoft YaHei",sans-serif';
-  ctx.fillText(name, 10, 108, 574);
+  ctx.fillStyle = '#ede9df';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let textX = 32;
+  if (artistCard) {
+    const size = 184, x = 36, y = 36;
+    ctx.fillStyle = '#d6cfc2';
+    ctx.fillRect(x, y, size, size);
+    if (portrait) {
+      const w = portrait.naturalWidth, h = portrait.naturalHeight;
+      const crop = Math.min(w, h);
+      ctx.drawImage(portrait, (w - crop) / 2, (h - crop) / 2, crop, crop, x, y, size, size);
+    } else {
+      ctx.fillStyle = '#61584d';
+      ctx.font = '600 82px "Segoe UI","Microsoft YaHei",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(Array.from(name.trim())[0] || '', x + size / 2, 156, size - 24);
+      ctx.textAlign = 'left';
+    }
+    textX = 255;
+  }
+  const textWidth = canvas.width - textX - 32;
+  ctx.fillStyle = '#525248';
+  ctx.font = '500 42px "Segoe UI","Microsoft YaHei",sans-serif';
+  ctx.fillText(detail, textX, 89, textWidth);
+  ctx.fillStyle = '#232420';
+  ctx.font = '600 82px "Segoe UI","Microsoft YaHei",sans-serif';
+  ctx.fillText(name, textX, 193, textWidth);
   map.needsUpdate = true;
 }
 
 export function createScene(stage, artists, onFrame) {
   const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
   renderer.setClearColor(0, 0);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = .88;
   renderer.shadowMap.enabled = true;
@@ -64,10 +92,11 @@ export function createScene(stage, artists, onFrame) {
   scene.add(...roots);
   for (const root of roots) root.traverse(mesh => {
     if (!mesh.isMesh) return;
-    mesh.castShadow = !mesh.material.transparent && !mesh.material.alphaTest;
+    mesh.castShadow = !mesh.material.transparent && mesh.material.toneMapped !== false;
     mesh.receiveShadow = mesh.castShadow;
   });
   const maps = new Map();
+  const portraits = new Map();
   const loader = new THREE.TextureLoader();
   const printSurfaces = [...fan.cases, deck.sleeve].map(sleeve => sleeve.userData.cover);
   printSurfaces.push(deck.discFace);
@@ -82,8 +111,9 @@ export function createScene(stage, artists, onFrame) {
   let turn = null;
   let intro = 0;
   let pressed = 0;
-  let groupOfArtists = -1;
-  let faceNumber = 0;
+  const lastFace = Math.ceil(artists.length / ARTISTS_PER_FACE) - 1;
+  const assignedFaces = Array(4).fill(null);
+  let dragging = false;
   let fanStart = -1;
   let fanArtist = -1;
   const camera = new THREE.PerspectiveCamera(24, 1, .08, 100);
@@ -131,16 +161,44 @@ export function createScene(stage, artists, onFrame) {
     }
   }
 
-  function fillCabinet(groupNumber) {
-    archive.trays.forEach(({ body, spines, legend, tab }, i) => {
-      const index = groupNumber * 24 + i;
+  function portraitFor(entry) {
+    if (portraits.has(entry)) return portraits.get(entry);
+    const loadImage = url => new Promise(resolve => {
+      if (!url) { resolve(null); return; }
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => resolve(image);
+      image.onerror = () => resolve(null);
+      image.src = url;
+    });
+    const pending = loadImage(entry.avatar).then(photo => photo || (disposed ? null : loadImage(entry.albums.find(album => album.cover)?.cover)));
+    if (portraits.size >= 48) portraits.delete(portraits.keys().next().value);
+    portraits.set(entry, pending);
+    return pending;
+  }
+
+  function fillFace(face) {
+    const section = mod(face, 4);
+    if (assignedFaces[section] === face) return;
+    assignedFaces[section] = face;
+    const offset = section * ARTISTS_PER_FACE;
+    archive.trays.slice(offset, offset + ARTISTS_PER_FACE).forEach(({ body, spines, legend, tab, panel }, i) => {
+      const index = face * ARTISTS_PER_FACE + i;
       const entry = artists[index];
-      body.userData.artist = entry ? index : undefined;
+      panel.userData.artist = entry ? index : undefined;
       tab.visible = false;
       body.position.z = 1.556;
       legend.visible = !!entry;
       const count = Math.min(spines.length, entry?.albums.length ?? 0);
-      if (entry) writeLabel(legend, entry.name, `${index + 1}   /   ${entry.albums.length} 张专辑`);
+      if (entry) {
+        const detail = `${entry.albums.length} 张专辑`;
+        writeLabel(legend, entry.name, detail, null, true);
+        portraitFor(entry).then(photo => {
+          if (!photo || disposed || panel.userData.artist !== index) return;
+          writeLabel(legend, entry.name, detail, photo, true);
+          requestFrame();
+        });
+      }
       const width = 1.47 / Math.max(8, count);
       spines.forEach((spine, n) => {
         spine.visible = n < count;
@@ -150,34 +208,49 @@ export function createScene(stage, artists, onFrame) {
     });
   }
 
+  function setCabinetAngle(angle) {
+    archive.cabinet.rotation.y = angle;
+    // Reassign only the face around the back as the cabinet turns.
+    const front = Math.round(-angle / HALF_TURN);
+    for (let face = front - 1; face <= front + 2; face++) fillFace(face);
+  }
+
   function selectArtist(index, animate) {
-    const nextGroup = Math.floor(index / 24);
-    const nextFace = Math.floor(index / 6) % 4;
-    const changeGroup = nextGroup !== groupOfArtists;
-    const difference = (nextFace - faceNumber + 6) % 4 - 2;
-    const step = changeGroup && difference === 0 ? (nextGroup > groupOfArtists ? 4 : -4) : difference;
-    const target = animate ? archive.cabinet.rotation.y - step * HALF_TURN : -nextFace * HALF_TURN;
-    if (changeGroup) fillCabinet(nextGroup);
-    turn = animate ? { angle: archive.cabinet.rotation.y, target, started: performance.now() } : null;
-    if (!turn) archive.cabinet.rotation.y = target;
-    groupOfArtists = nextGroup;
-    faceNumber = nextFace;
+    dragging = false;
+    const angle = archive.cabinet.rotation.y;
+    const target = -Math.floor(index / ARTISTS_PER_FACE) * HALF_TURN;
+    turn = animate && Math.abs(angle - target) > .002 ? { angle, target, started: performance.now() } : null;
+    if (!turn) setCabinetAngle(target);
+  }
+
+  function dragCabinet(startAngle, turns) {
+    turn = null;
+    dragging = true;
+    const limit = .45 * HALF_TURN;
+    setCabinetAngle(THREE.MathUtils.clamp(startAngle + turns * HALF_TURN, -lastFace * HALF_TURN - limit, limit));
+    requestFrame();
+  }
+
+  function releaseCabinet() {
+    const face = THREE.MathUtils.clamp(Math.round(-archive.cabinet.rotation.y / HALF_TURN), 0, lastFace);
+    return Math.floor(artist / ARTISTS_PER_FACE) === face ? artist : face * ARTISTS_PER_FACE;
   }
 
   function showEditions(reopen) {
     const list = artists[artist].albums;
-    const start = Math.max(0, Math.min(album - 2, list.length - 6));
+    const { start, end } = albumWindow(album, list.length);
+    fan.upper.visible = end - start > EDITIONS_PER_ROW;
     if (artist !== fanArtist) writeLabel(fan.legend, artists[artist].name, `${list.length} 张专辑`);
     if (reopen) intro = performance.now();
     fan.cases.forEach((sleeve, i) => {
       const idx = start + i;
-      sleeve.visible = idx < list.length;
+      sleeve.visible = idx < end;
       if (!sleeve.visible) return;
       sleeve.userData.album = idx;
       sleeve.userData.tab.visible = idx === album;
       assign(sleeve.userData.cover, list[idx], artists[artist].name);
       if (reopen || start !== fanStart || artist !== fanArtist) {
-        sleeve.position.set((i - 2.5) * (reopen ? .206 : .79), .801, .032);
+        sleeve.position.set((i % EDITIONS_PER_ROW - 2.5) * (reopen ? .206 : .79), .801, .032);
         sleeve.rotation.y = reopen ? HALF_TURN : .995;
       }
     });
@@ -199,7 +272,7 @@ export function createScene(stage, artists, onFrame) {
   function frameCamera() {
     const shot = [
       { at: [0, 1.76, .07], eye: [2.1, 1.45, 8.75], span: [5.4, 4.62] },
-      { at: [0, .86, .10], eye: [1.10, 2.12, 8.75], span: [5.75, 2.95] },
+      { at: [0, fan.upper.visible ? 1.42 : .86, -.15], eye: [1.10, 2.12, 8.75], span: [5.96, fan.upper.visible ? 3.75 : 2.95] },
       { at: [-.19, loading ? 1.09 : .65, .05], eye: [1.50, 4.15, 8.75], span: [4.65, loading ? 3.15 : 2.5] }
     ][layer - 1];
     const target = new THREE.Vector3(...shot.at);
@@ -241,12 +314,12 @@ export function createScene(stage, artists, onFrame) {
     if (layer === 1) {
       if (turn) {
         const amount = range(now - turn.started, 0, 620);
-        archive.cabinet.rotation.y = THREE.MathUtils.lerp(turn.angle, turn.target, amount);
+        setCabinetAngle(THREE.MathUtils.lerp(turn.angle, turn.target, amount));
         if (amount === 1) turn = null;
         else moving = true;
       }
       for (const tray of archive.trays) {
-        const selected = tray.body.userData.artist === artist && !turn;
+        const selected = tray.panel.userData.artist === artist && !turn && !dragging;
         tray.tab.visible = selected;
         const end = selected ? 2.05 : 1.556;
         tray.body.position.z = THREE.MathUtils.damp(tray.body.position.z, end, 13, dt);
@@ -255,17 +328,19 @@ export function createScene(stage, artists, onFrame) {
     }
     if (layer === 2) {
       const age = intro ? (now - intro) / 1000 : 2;
-      let lastX = -Infinity;
       for (const [i, sleeve] of fan.cases.entries()) {
         if (!sleeve.visible) continue;
+        const column = i % EDITIONS_PER_ROW;
+        const rowStart = i - column;
+        const rowSize = Math.min(EDITIONS_PER_ROW, artists[artist].albums.length - fanStart - rowStart);
+        const centered = column - (rowSize - 1) / 2;
         const focus = sleeve.userData.album === album;
-        const spread = range(age, .05 + Math.abs(i - 2.5) * .025, .8);
+        const spread = range(age, .05 + Math.abs(centered) * .025, .8);
         const lift = range(age, .58, 1.12);
-        const afterFocus = sleeve.userData.album > album;
-        const x = (i - (Math.min(6, artists[artist].albums.length) - 1) / 2) * .77 + (afterFocus ? .24 : 0);
-        const desired = THREE.MathUtils.lerp((i - 2.5) * .206, x, spread);
-        sleeve.position.x = Math.max(lastX + .204, desired);
-        lastX = sleeve.position.x;
+        const focusInRow = album >= fanStart + rowStart && album < fanStart + rowStart + rowSize;
+        const gap = focusInRow ? Math.sign(sleeve.userData.album - album) * .26 : 0;
+        const x = centered * .77 + gap;
+        sleeve.position.x = THREE.MathUtils.lerp(centered * .206, x, spread);
         const y = .801 + (focus ? .27 * lift : 0);
         const z = .032 + (focus ? .91 * lift : 0);
         const angle = THREE.MathUtils.lerp(HALF_TURN, focus ? .14 : .995, range(age, focus ? .98 : .56, 1.42));
@@ -300,12 +375,22 @@ export function createScene(stage, artists, onFrame) {
   }
 
   const ray = new THREE.Raycaster();
+  const panelNormal = new THREE.Vector3();
+  const panelOrientation = new THREE.Quaternion();
   function pick(event) {
     const rect = stage.getBoundingClientRect();
     ray.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, 1 - (event.clientY - rect.top) / rect.height * 2), camera);
-    const targets = layer === 1 ? archive.trays.slice(faceNumber * 6, faceNumber * 6 + 6).map(tray => tray.body) : fan.cases;
-    const field = layer === 1 ? 'artist' : 'album';
-    if (layer === 3 || (layer === 1 && turn)) return undefined;
+    if (layer === 1) {
+      archive.cabinet.updateWorldMatrix(true, true);
+      const panels = archive.trays.map(tray => tray.panel).filter(panel => {
+        panel.getWorldQuaternion(panelOrientation);
+        return panelNormal.set(0, 0, 1).applyQuaternion(panelOrientation).dot(ray.ray.direction) < -.02;
+      });
+      return ray.intersectObjects(panels, false)[0]?.object.userData.artist;
+    }
+    if (layer === 3) return undefined;
+    const targets = fan.cases;
+    const field = 'album';
     let object = ray.intersectObjects(targets.filter(target => target.visible), true)[0]?.object;
     while (object && object.userData[field] === undefined) object = object.parent;
     return object?.userData[field];
@@ -316,7 +401,8 @@ export function createScene(stage, artists, onFrame) {
   renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); cancelAnimationFrame(frameId); frameId = 0; });
   renderer.domElement.addEventListener('webglcontextrestored', requestFrame);
   return {
-    show, pick,
+    show, pick, dragCabinet, releaseCabinet,
+    cabinetAngle() { return archive.cabinet.rotation.y; },
     press() { pressed = performance.now(); requestFrame(); },
     setPlaying(value) {
       playing = value;
@@ -328,6 +414,7 @@ export function createScene(stage, artists, onFrame) {
       cancelAnimationFrame(frameId);
       observer.disconnect();
       for (const art of maps.values()) { art.fallback.dispose(); art.cover?.dispose(); }
+      portraits.clear();
       const resources = new Set([deck.play, deck.pause, deck.play.map, deck.pause.map]);
       scene.traverse(mesh => {
         if (!mesh.isMesh) return;
