@@ -3,6 +3,7 @@ import { albumWindow, ARTISTS_PER_FACE, createScene } from './rhine-scene.js';
 const sameTrack = (a, b) => a != null && b != null && String(a) === String(b);
 const clamp = (n, limit) => Math.max(0, Math.min(n, limit - 1));
 const number = n => String(n).padStart(2, '0');
+const icon = name => `<svg class="rr-icon" aria-hidden="true" focusable="false"><use href="#i-${name}"></use></svg>`;
 function makeButton(text, attributes = {}) {
   const button = document.createElement('button');
   button.type = 'button';
@@ -22,7 +23,7 @@ export function startRoom(data, options) {
     <header class="rr-archive-head">
       <div><strong>CELESTE</strong><span>唱片室</span></div>
       <nav aria-label="唱片室层级"></nav>
-      <button type="button" data-act="exit">退出唱片室</button>
+      <button type="button" class="rr-exit" data-act="exit">${icon('close')}<span>退出唱片室</span></button>
     </header>
     <main class="rr-archive-main">
       <aside class="rr-archive-info">
@@ -36,17 +37,17 @@ export function startRoom(data, options) {
     </main>
     <footer class="rr-archive-foot">
       <div class="rr-page">
-        <button type="button" data-act="prev">上一个</button>
-        <span class="rr-counter"></span>
-        <button type="button" data-act="next">下一个</button>
+        <button type="button" class="rr-round" data-act="prev" aria-label="上一个" title="上一个">${icon('chevron')}</button>
+        <span class="rr-counter"><strong></strong><span></span></span>
+        <button type="button" class="rr-round" data-act="next" aria-label="下一个" title="下一个">${icon('chevron')}</button>
       </div>
       <p class="rr-status" role="status"></p>
-      <div class="rr-transport" hidden>
-        <button type="button" data-act="previous">上一首</button>
-        <button type="button" data-act="togglePlay">播放</button>
-        <button type="button" data-act="nextTrack">下一首</button>
+      <div class="rr-transport" role="group" aria-label="播放控制" hidden>
+        <button type="button" class="rr-round" data-act="previous" aria-label="上一首" title="上一首">${icon('next')}</button>
+        <button type="button" class="rr-round rr-play" data-act="togglePlay" aria-label="播放" title="播放">${icon('play')}</button>
+        <button type="button" class="rr-round" data-act="nextTrack" aria-label="下一首" title="下一首">${icon('next')}</button>
       </div>
-      <button type="button" data-act="open"></button>
+      <button type="button" class="rr-open-selection" data-act="open"><span></span>${icon('chevron')}</button>
     </footer>`;
   const backgrounds = [...document.body.children].filter(element => !element.inert && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName));
   for (const element of backgrounds) element.inert = true;
@@ -58,6 +59,8 @@ export function startRoom(data, options) {
   const key = $('.rr-key-hit');
   const list = $('.rr-browse');
   const transport = $('.rr-transport');
+  const playButton = action('togglePlay');
+  const playSymbol = playButton.querySelector('use');
   const state = { layer: 1, artist: 0, album: 0 };
   const past = [];
   const future = [];
@@ -89,10 +92,13 @@ export function startRoom(data, options) {
     key.setAttribute('aria-label', label);
     key.title = label;
     key.disabled = loading;
-    action('togglePlay').textContent = label;
+    playButton.setAttribute('aria-label', label);
+    playButton.title = label;
+    playSymbol.setAttribute('href', active ? '#i-pause' : '#i-play');
     for (const button of transport.querySelectorAll('button')) button.disabled = loading;
     $('.rr-status').textContent = state.layer === 3 ? (loading ? '正在装载光盘' : active ? '正在播放' : '光盘已就位')
       : state.layer === 1 && scene ? '横向拖动转柜，单击抽屉选中' : '';
+    root.classList.toggle('rr-playing', active);
     scene?.setPlaying(active);
     if (state.layer === 3) {
       Array.from(list.children).forEach((row, i) => { row.classList.toggle('current', sameTrack(selectedAlbum().list[i]?.id ?? selectedAlbum().trackIds[i], playback.trackId)); });
@@ -115,10 +121,16 @@ export function startRoom(data, options) {
       const idx = first + i;
       if (state.layer === 3) {
         const time = Math.max(0, entry.s || 0);
-        row.textContent = `${number(i + 1)}  ${entry.t}`;
+        const position = document.createElement('span');
+        position.className = 'rr-track-index';
+        position.textContent = number(i + 1);
+        const name = document.createElement('span');
+        name.className = 'rr-track-title';
+        name.textContent = entry.t;
         const duration = document.createElement('span');
+        duration.className = 'rr-track-duration';
         duration.textContent = `${Math.floor(time / 60)}:${number(time % 60)}`;
-        row.append(duration);
+        row.append(position, name, duration);
       } else {
         const selected = idx === (state.layer === 1 ? state.artist : state.album);
         const button = makeButton(entry.name || entry.title, { 'aria-pressed': String(selected) });
@@ -141,12 +153,13 @@ export function startRoom(data, options) {
     $('h1').textContent = state.layer === 1 ? a.name : album.title;
     $('.rr-archive-meta').textContent = state.layer === 1 ? `${a.albums.length} 张专辑`
       : [a.name, album.year, `${album.tracks} 首`].filter(Boolean).join(' · ');
-    $('.rr-counter').textContent = `${number(index + 1)} / ${number(total)}`;
+    $('.rr-counter strong').textContent = number(index + 1);
+    $('.rr-counter span').textContent = number(total);
     $('.rr-page').hidden = state.layer === 3;
     action('prev').disabled = index === 0;
     action('next').disabled = index + 1 >= total;
     action('open').hidden = state.layer === 3;
-    action('open').textContent = state.layer === 1 ? '打开抽屉' : '放入 CD 机';
+    action('open').querySelector('span').textContent = state.layer === 1 ? '打开抽屉' : '放入 CD 机';
     transport.hidden = state.layer !== 3;
     key.hidden = state.layer !== 3 || !scene;
     const titles = ['档案柜', '专辑架', 'CD 机'].slice(0, state.layer);
