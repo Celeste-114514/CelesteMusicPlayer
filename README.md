@@ -88,6 +88,10 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.11.3（2026-11-23）
+
+- 🛠️ 修复启动时把通用 COM / framework 异常误报成缺少 .NET 的问题；仅在异常明确指出 .NET 框架缺失时显示运行时安装提示。
+
 ### v26.11.2（2026-11-23）
 
 - 🎶 **唱片室升级**：采用莱茵风格的三层立体唱片柜，支持鼠标旋转、选择艺术家和浏览更多专辑；补充艺术家头像与清晰文字，并优化播放按钮和字体。

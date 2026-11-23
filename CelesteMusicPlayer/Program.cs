@@ -131,15 +131,22 @@ namespace CelesteMusicPlayer
 
         private static bool IsRuntimeMissingException(Exception ex)
         {
-            if (ex is COMException com && (uint)com.HResult == 0x8000FFFF)
+            // 只在异常明确点名 .NET 框架且说明它缺失时显示运行时安装提示。
+            // 任意 COM 错误（包括 E_UNEXPECTED）或包含 "framework" 的普通异常，
+            // 都不能证明机器缺少 .NET；否则像 WebView2 / WinRT 初始化错误会被误报。
+            string msg = ex.ToString();
+            bool missingFramework = msg.Contains("was not found", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("could not be found", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("is not installed", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("not installed", StringComparison.OrdinalIgnoreCase);
+
+            if (!missingFramework)
             {
-                return true;
+                return false;
             }
 
-            string msg = (ex.Message ?? string.Empty) + " " + (ex.GetType().FullName ?? string.Empty);
-            return msg.Contains("WindowsAppRuntime", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("Windows App SDK", StringComparison.OrdinalIgnoreCase)
-                || msg.Contains("framework", StringComparison.OrdinalIgnoreCase);
+            return msg.Contains("Microsoft.NETCore.App", StringComparison.OrdinalIgnoreCase)
+                || msg.Contains("Microsoft.WindowsDesktop.App", StringComparison.OrdinalIgnoreCase);
         }
 
         private static void ShowRuntimePrompt(string detail)
