@@ -88,6 +88,10 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.11.23.3（2026-11-23）
+
+- 🛠️ 修复框架依赖版覆盖自包含版后残留本地 `hostfxr.dll`，导致系统误报缺少 .NET 的问题。
+
 ### v26.11.23.2（2026-11-23）
 
 - 🛠️ 修复启动时把通用 COM / framework 异常误报成缺少 .NET 的问题；仅在异常明确指出 .NET 框架缺失时显示运行时安装提示。

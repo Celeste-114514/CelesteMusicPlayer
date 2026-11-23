@@ -85,6 +85,13 @@ Section "播放器主程序（必需）" SEC_APP
   ExecWait 'taskkill /F /IM CelesteMusicPlayer.exe'
   Sleep 1000
 
+  ; 从自包含版转为框架依赖版时，NSIS 的覆盖安装不会删除旧文件。
+  ; 残留的 app-local hostfxr.dll 会让 apphost 优先加载本地 hostfxr，
+  ; 而不是发现已安装的系统 .NET 运行时，最终误报「You must install or update .NET」。
+  !if "${VARIANT}" == "fd"
+    Delete "$INSTDIR\hostfxr.dll"
+  !endif
+
   SetOutPath "$INSTDIR"
   SetOverwrite on
   File /r "${PUBLISH_DIR}\*.*"

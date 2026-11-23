@@ -160,11 +160,15 @@ function Assert-PublishHealthy {
     }
 
     $coreclr = Test-Path -LiteralPath (Join-Path $Dir 'coreclr.dll')
+    $hostfxr = Test-Path -LiteralPath (Join-Path $Dir 'hostfxr.dll')
     if ($ExpectSelfContained -and -not $coreclr) {
         throw "$Variant 是自包含版，但产物里没有 coreclr.dll —— 多半漏了 -p:CelesteSelfContainedDistribute=true。拒绝打包。"
     }
-    if (-not $ExpectSelfContained -and $coreclr) {
-        throw "$Variant 是框架依赖版，但产物里带了 coreclr.dll（应该是自包含版编错了）。拒绝打包。"
+    if ($ExpectSelfContained -and -not $hostfxr) {
+        throw "$Variant 是自包含版，但产物里没有 hostfxr.dll。拒绝打包。"
+    }
+    if (-not $ExpectSelfContained -and ($coreclr -or $hostfxr)) {
+        throw "$Variant 是框架依赖版，但产物里带有 coreclr.dll 或 hostfxr.dll（应该是自包含版编错了）。拒绝打包。"
     }
 
     $exeLen = (Get-Item -LiteralPath $exe).Length
