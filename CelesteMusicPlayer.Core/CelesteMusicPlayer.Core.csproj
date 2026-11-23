@@ -35,6 +35,9 @@
     <Compile Include="../CelesteMusicPlayer/DsdDopPipeline.cs" Link="DsdDopPipeline.cs" />
     <Compile Include="../CelesteMusicPlayer/DsdPreloadService.cs" Link="DsdPreloadService.cs" />
     <Compile Include="../CelesteMusicPlayer/DsdProbe.cs" Link="DsdProbe.cs" />
+    <Compile Include="../CelesteMusicPlayer/DsdNativeReader.cs" Link="DsdNativeReader.cs" />
+    <Compile Include="../CelesteMusicPlayer/AsioNativeDsdOutput.cs" Link="AsioNativeDsdOutput.cs" />
+    <Compile Include="../CelesteMusicPlayer/DsdNativePlaybackSession.cs" Link="DsdNativePlaybackSession.cs" />
     <Compile Include="../CelesteMusicPlayer/DspCoreInterop.cs" Link="DspCoreInterop.cs" />
     <Compile Include="../CelesteMusicPlayer/DspApplyService.cs" Link="DspApplyService.cs" />
     <Compile Include="../CelesteMusicPlayer/DspRackState.cs" Link="DspRackState.cs" />
